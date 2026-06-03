@@ -90,3 +90,53 @@
   最終採用 **「相容性多型解包（Adaptive Unpacking）」**，優先偵測特定嵌套 Key 是否存在，若無則降級採取扁平化解包。此法能在不重啟、不修改後端代碼的情況下，同時完美吞下自動化盲測腳本與真實公網操作流量。
 * **實作成果**：
   成功實作虛擬資料庫字典的 CRUD 完整閉環。透過 `mock_vendor_db.pop()` 與 `mock_vendor_db.clear()` 確保多主機操作下的記憶體資料一致性，達到完全適配 Production 環境的模擬要求。
+
+  ## 📅 Log 07: PMS 狀態機防禦機制與飯店業領域知識（滾房租與接客時序限制）
+* **日期**：2026-06-02
+* **目標 Table**：`hfd_car_arrival_log` (住客行車抵達記錄表)
+* **底層攔截原理 (Domain Logic Analysis)**：
+  發現真實 PMS API 在 `200 OK` 的外殼下，內部封裝了嚴格的業務狀態機（State Machine）校驗。
+  資料要成功落地至 `hfd_car_arrival_log`，必須滿足雙重合約：
+  1. 廠商明細參數啟用（System Configuration Configured）。
+  2. 住客生命週期狀態必須滿足 `[System Date == Night Audit Date]` 且 `[Status == Expected Arrival (未入住)]`。
+* **架構重構思維**：
+  此規則證實了先前將 Mock Server 重構為「雙路由解耦（被動接收與主動相機模擬分離）」的遠見。
+  為了驗證此 Log 寫入，必須將測試戰術調整為「前置車辨通知模式」——在 PMS 訂單未辦理 check-in 前，主動由 Mock Server 路由 B 發動逆向通信轟炸，方可突破 PMS 內部狀態機的防禦閘門。
+
+## 📅 Log 08: 相機動態匯入與 Mock Server 資料庫「批次迴圈連發」架構重構
+* **日期**：2026-06-03
+* **重構核心**：
+  解決先前 `simulate_camera.py` 只能單筆盲發、以及與 `mock_server.py` 記憶體暫存資料庫無法關聯的痛點。
+  全面打破手工傳參的限制，將發砲機制重構成「全自動動態匯入與 Array 迭代連發」架構。
+* **程式碼重構點 (Code Refactoring Details)**：
+  1. **Mock Server 端點解鎖**：
+     於 `mock_server.py` 開闢 `/internal/debug/whitelist` 除錯路由，將本地 `mock_vendor_db` 字典以 JSON 格式完整外洩，供外部相機腳本提取。
+  2. **相機腳本邏輯重構 (解耦死資料)**：
+     拔除 `simulate_camera.py` 尾端硬編碼的 `guest_id`。改為先利用 `GET` 請求將 Mock Server 的暫存資料整包匯入。
+  3. **Array 遍歷與 For 迴圈機制引入**：
+     使用 `for index, target_guest in enumerate(db_data.values())` 迴圈機制，動態遍歷所有從真實 PMS 接收到的有效住客名單。
+  4. **合約欄位與時序動態對齊**：
+     迴圈內部每筆資料皆動態產生當前的 `arrival_time`，確保 `guest_id`, `car_number`, `guest_name`, `arrival_time` 標準 4 規格 Payload 毫無誤差，以 0.5 秒的頻率緩衝連續逆向推播，直奔真實 PMS 檢核最底層。
+* **重構效益**：
+  實現了「真實雲端 Webhook 灌水 ➔ 廠商後端自動收集 ➔ 相機迴圈批次連發轟炸」的全自動工業級測試閉環，在操作上達成一鍵自動對齊的雙效目標。
+
+  ## 📅 Log 09: 專案架構微服務化與職責分離 (SoC) 重構
+* **日期**：2026-06-03
+* **重構核心**：
+  為了解決多腳本並存（本地盲測、被動伺服器、主動硬體模擬）導致的專案膨脹與管理混亂，實施物理層級的「職責分離（Separation of Concerns）」。
+* **架構分流**：
+  1. `server/`：收納 `mock_server.py`，專職 Webhook 流量洗滌與狀態機控制。
+  2. `hardware/`：收納 `simulate_camera.py`，模擬邊緣相機硬體之批次迴圈行為。
+  3. `tests/`：封存早期離線測試資產，建立雙模測試矩陣（Live-Staging / Local-Sandbox）。
+* **技術效益**：
+  透過 `sys.path.append` 消除跨目錄引用之耦合性。重構後大幅降低認知負載，專案結構達到 Production 生產級水平，完美支援未來異質系統（如綜合櫃台、退房延長等端點）的模組化擴充。
+
+  ## 📅 Log 10: 包裝初始化機制 `__init__.py` 之角色職責與路徑優化
+* **日期**：2026-06-03
+* **核心思維**：
+  分析 Python 套件初始化機制 `__init__.py` 於模組化分流架構中的三種戰術定位（空白宣告、門面提升、環境預載）。
+* **架構優化手段**：
+  1. **優化引入路徑**：透過在 `server/__init__.py` 封裝 `from .mock_server import app`，實現高層級模組對核心微服務實例的直取（Direct Access），降低跨模組通信之語法複雜度。
+  2. **消除重複代碼**：利用 `hardware/__init__.py` 作為邊緣硬體設備套件的入口閘門，在套件加載首期注入 `sys.path.append` 全域根路徑防禦，徹底斬斷子模組腳本內部的路徑硬編碼依賴。
+* **效益**：
+  將專案從「多檔案拼湊」升級為標準的「Python SDK 套件模型」，為未來的跨館別多機聯調與自動化 CI/CD 架構鋪平道路。

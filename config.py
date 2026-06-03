@@ -14,7 +14,7 @@ USE_REAL_SERVER = True # = 本地 Flask 沙盒環境 (預設) | True = 真實 QA
 
 # 1. 這裡直接換成 ngrok 的公網網址
 # 💡 換上你剛剛熱騰騰出爐的 ngrok 完整公網網址
-NGROK_BASE_URL = "https://7913-118-163-122-183.ngrok-free.app"
+NGROK_BASE_URL = "https://e9b6-118-163-122-183.ngrok-free.app"
 
 # 重新定義端點路由
 LOCAL_URL_CHECKIN = f"{NGROK_BASE_URL}/pms-sync-data/check-in"

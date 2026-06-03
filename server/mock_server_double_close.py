@@ -63,7 +63,8 @@ def receive_guest_checkin():
     source = "真實 Athena 雲端 (ngrok)" if "guest_id" in data else "本地 Pytest 閉環模擬"
 
     print(f"\n📥 [外部廠商 Server] 成功接收 Check-in 同步！來源: 【{source}】")
-    print(f"🖥️ [當前廠商資料庫狀態]: {mock_vendor_db[guest_id]}")
+    print(f"🖥️ [當前廠商資料庫狀態]: {guest_record}") # 💡 修正：直接印局部變數，絕對不噴 KeyError！
+    # print(f"🖥️ [當前廠商資料庫狀態]: {mock_vendor_db[guest_id]}") 
     # ========================================================
     # 💡 嚴格按照官方要求的 4 個欄位名稱與結構落庫儲存
     # ========================================================
