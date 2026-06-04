@@ -1,5 +1,5 @@
 # server/parking/routes.py
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, app, request, jsonify
 from datetime import datetime
 import requests
 import config
@@ -19,76 +19,233 @@ else:
     vendor_strategy = VendorShinYeongStrategy()
 
 # ====================================================================
-# 🚀 1. 辦理入住 / 修改車牌 / 修改退房時間 端點 (大一統接收端)
+# 🚀 路由 IN：被動接收端點 (專門負責讓真實 PMS 雲端推播住客資料落庫)
+# ====================================================================
+# ====================================================================
+# 🚀 1. 日常入住端點 (CKI)
 # ====================================================================
 @parking_bp.route('/pms-sync-data/check-in', methods=['POST'])
-@parking_bp.route('/pms-sync-data/change-car-nos', methods=['POST'])
-@parking_bp.route('/pms-sync-data/change-checkout-datetime', methods=['POST'])
-def receive_pms_webhook():
+def receive_pms_checkin():
     if not request.is_json:
-        return jsonify({"error": "Unsupported Media Type"}), 415
+        return jsonify({"error": "JSON expected"}), 415
+    data = request.get_json()
+    
+    try:
+        clean = vendor_strategy.parse_pms_checkin(data)
+        guest_id = clean["guest_id"]
+        if not guest_id:
+            return jsonify({"error": "Missing identification"}), 400
+            
+        fallback_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        start_date = clean["start_date"] or fallback_time
+        end_date = clean["end_date"] or fallback_time
+        
+        mock_vendor_db[guest_id] = {
+            "guest_id": guest_id,
+            "car_number": clean["car_number"],
+            "guest_name": clean["guest_name"],
+            "start_date": start_date,
+            "end_date": end_date,
+            "enabled": clean["enabled"],
+            "arrival_time": fallback_time
+        }
+        
+        print(f"📥 [Webhook - CKI 入住] 新名單落庫 -> ID: {guest_id} | 車牌: {clean['car_number']} | 狀態: 【{clean['enabled']}】")
+        return jsonify({"status": "success", "message": "Check-in integrated successfully."}), 200
+    except Exception as e:
+        print(f"🚨 [CKI 異常]: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+# ====================================================================
+# 🚀 2. 修改/延長退房時間端點 (CHANGE_CKO_DATE_TIME)
+# ====================================================================
+@parking_bp.route('/pms-sync-data/change-checkout-datetime', methods=['POST'])
+def receive_pms_change_checkout():
+    if not request.is_json:
+        return jsonify({"error": "JSON expected"}), 415
+    data = request.get_json()
+    
+    try:
+        # 調用專屬的延長退房清洗策略
+        clean = vendor_strategy.parse_pms_change_checkout(data)
+        guest_id = clean["guest_id"]
+        if not guest_id:
+            return jsonify({"error": "Missing identification"}), 400
+            
+        fallback_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 🎯 核心增量異動：只更新退房時間與狀態，不破壞原本入住時錄入的姓名與起日
+        if guest_id in mock_vendor_db:
+            old_cko = mock_vendor_db[guest_id]["end_date"]
+            mock_vendor_db[guest_id]["end_date"] = clean["end_date"] or mock_vendor_db[guest_id]["end_date"]
+            mock_vendor_db[guest_id]["enabled"] = clean["enabled"]
+            if clean["car_number"]: # 若綜合櫃台有順便異動車牌則同步更新
+                mock_vendor_db[guest_id]["car_number"] = clean["car_number"]
+            
+            print(f"🔄 [Webhook - CKO 延長退房] 住客 [{mock_vendor_db[guest_id]['guest_name']}] 時間異動：{old_cko} ➔ {mock_vendor_db[guest_id]['end_date']}")
+        else:
+            # 防禦性落庫
+            mock_vendor_db[guest_id] = {
+                "guest_id": guest_id,
+                "car_number": clean["car_number"],
+                "guest_name": clean["guest_name"],
+                "start_date": fallback_time,
+                "end_date": clean["end_date"] or fallback_time,
+                "enabled": clean["enabled"],
+                "arrival_time": fallback_time
+            }
+            print(f"⚠️ [Webhook - CKO 延長退房] 收到未在白名單之 ID: {guest_id}，自動補登建立狀態。")
+            
+        return jsonify({"status": "success", "message": "Checkout extension timestamp updated."}), 200
+    except Exception as e:
+        print(f"🚨 [CKO 延長退房異常]: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+# ====================================================================
+# 🚀 3. 綜合櫃台車牌異動 (CHG_CAR_NOS - 支援新增/清除/更新三態)
+# ====================================================================
+@parking_bp.route('/pms-sync-data/change-car-nos', methods=['POST'])
+def receive_change_car_nos():
+    if not request.is_json:
+        return jsonify({"error": "JSON expected"}), 415
+    data = request.get_json()
+    
+    try:
+        clean = vendor_strategy.parse_pms_change_car_nos(data)
+        guest_id = clean["guest_id"]
+        if not guest_id:
+            return jsonify({"error": "Missing identifying key 'guest_id'"}), 400
+            
+        if guest_id in mock_vendor_db:
+            old_car = mock_vendor_db[guest_id]["car_number"]
+            
+            # 🎯 核心重構：直接信任策略層洗出來的車牌與狀態。
+            # 更新車牌時，舊車牌那一發會進來把對應車牌改為 False；新車牌那一發進來會把新車牌改為 True。
+            mock_vendor_db[guest_id]["car_number"] = clean["car_number"]
+            mock_vendor_db[guest_id]["enabled"] = clean["enabled"]
+            
+            status_log = "啟用" if clean["enabled"] else "停用"
+            print(f"🔄 [Webhook - CHG_CAR_NOS 三態變更]")
+            print(f"   👤 住客: [{mock_vendor_db[guest_id]['guest_name']}] | 車牌軌跡: {old_car} ➔ {clean['car_number']} | 憑證狀態: 【{status_log}】")
+        else:
+            fallback_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            mock_vendor_db[guest_id] = {
+                "guest_id": guest_id,
+                "car_number": clean["car_number"],
+                "guest_name": clean["guest_name"],
+                "start_date": fallback_time,
+                "end_date": fallback_time,
+                "enabled": clean["enabled"],
+                "arrival_time": ""
+            }
+            print(f"⚠️ [Webhook - CHG_CAR_NOS] 發現未登錄主檔之 ID: {guest_id}，已完成防禦性補登。")
+            
+        return jsonify({"status": "success", "message": "Car number status synchronised successfully."}), 200
+    except Exception as e:
+        print(f"🚨 [CHG_CAR_NOS 異常]: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+# ====================================================================
+# 🚀 4. 取消入住端點 (CIX - 完美保留車牌離廠版)
+# ====================================================================
+@parking_bp.route('/pms-sync-data/check-in-cancel', methods=['POST'])
+def receive_checkin_cancel():
+    if not request.is_json:
+        return jsonify({"error": "JSON expected"}), 415
+    data = request.get_json()
+    
+    try:
+        clean = vendor_strategy.parse_pms_cancel_checkin(data)
+        guest_id = clean["guest_id"]
+        if not guest_id:
+            return jsonify({"error": "Missing identifying key 'guest_id'"}), 400
+            
+        if guest_id in mock_vendor_db:
+            old_car = mock_vendor_db[guest_id]["car_number"]
+            old_end = mock_vendor_db[guest_id]["end_date"]
+            
+            # 🎯 核心重構：絕對不改為空值！如果 Webhook 有帶新車牌就更新，沒帶就沿用本地原本的車牌
+            if clean["car_number"]:
+                mock_vendor_db[guest_id]["car_number"] = clean["car_number"]
+                
+            mock_vendor_db[guest_id]["end_date"] = clean["end_date"]
+            mock_vendor_db[guest_id]["enabled"] = clean["enabled"]
+            
+            print(f"🗑️ [Webhook - CIX 取消入住逃生安全閘]")
+            print(f"   👤 住客: [{mock_vendor_db[guest_id]['guest_name']}] | 鎖定離廠車牌: 【{mock_vendor_db[guest_id]['car_number']}】")
+            print(f"   ⏳ 狀態維持啟用，退房截止線強制縮短至: {clean['end_date']}（逾時拒開）")
+        else:
+            # 防禦性補登：萬一原本本地沒有這筆單，也必須幫他把車牌註冊進去，確保他能順利開車離場
+            fallback_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            mock_vendor_db[guest_id] = {
+                "guest_id": guest_id,
+                "car_number": clean["car_number"],
+                "guest_name": clean["guest_name"],
+                "start_date": fallback_time,
+                "end_date": clean["end_date"],
+                "enabled": clean["enabled"],
+                "arrival_time": ""
+            }
+            print(f"⚠️ [Webhook - CIX] 收到未登錄主檔之 ID: {guest_id}，已完成車牌【{clean['car_number']}】之限時離場憑證補登。")
+            
+        return jsonify({"status": "success", "message": "Check-in canceled. Exit validation token retained."}), 200
+    except Exception as e:
+        print(f"🚨 [CIX 異常]: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+# ====================================================================
+# 🌙 5. 夜核端點 (NIGHT_AUDIT) 夜核過天通知 (維持純粹：清空昨日過期快取)
+# ====================================================================
+@parking_bp.route('/pms-sync-data/night-audit', methods=['POST'])
+def receive_night_audit():
+    # 💡 第一道防線：確保有收到 JSON，若無則優雅拋出錯誤，防禦 TraceLog
+    if not request.is_json:
+        print("🚨 [NIGHT_AUDIT 錯誤] 接收到非 JSON 格式的非法請求！")
+        return jsonify({"status": "error", "message": "Unsupported Media Type. JSON expected."}), 415
         
     data = request.get_json()
     
     try:
-        # 🎯 核心抽象：交給當前廠商策略去洗滌，出來的一定是標準乾淨格式
-        clean_data = vendor_strategy.parse_pms_checkin(data)
-        guest_id = clean_data["guest_id"]
+        # 1. 調用策略層進行真實 Payload 欄位清洗
+        clean_audit = vendor_strategy.parse_pms_night_audit(data)
+        guest_id = clean_audit["guest_id"]
         
+        # 💡 安全降級防禦：萬一德安突然傳了一筆空資料，不讓系統崩潰
         if not guest_id:
-            return jsonify({"error": "Bad Request", "message": "Missing key identifier"}), 400
-            
+            print("⚠️ [NIGHT_AUDIT 警告] 收到夜核請求，但未包含有效 guest_id 欄位，維持現有白名單狀態。")
+            return jsonify({"status": "success", "message": "Signal accepted but empty data payload ignored."}), 200
+
+        # 2. 🎯 核心翻轉：廢除 clear()！實施動態字典累加覆寫機制（Upsert）
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # 執行資料庫更新或寫入
-        if request.path == '/pms-sync-data/change-car-nos' and guest_id in mock_vendor_db:
-            old_car = mock_vendor_db[guest_id]["car_number"]
-            mock_vendor_db[guest_id]["car_number"] = clean_data["car_number"]
-            mock_vendor_db[guest_id]["arrival_time"] = current_time
-            print(f"✅ [車牌變更] {mock_vendor_db[guest_id]['guest_name']}: {old_car} ➔ {clean_data['car_number']}")
-        else:
-            mock_vendor_db[guest_id] = {
-                "guest_id": guest_id,
-                "car_number": clean_data["car_number"],
-                "guest_name": clean_data["guest_name"],
-                "arrival_time": current_time
-            }
-            print(f"📥 [名單落庫] ID: {guest_id} | 車牌: {clean_data['car_number']} | 姓名: {clean_data['guest_name']}")
-            
-        return jsonify({"status": "success", "message": "Synchronised successfully."}), 200
-    except Exception as e:
-        print(f"🚨 [接收異常]: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 400
-
-# ====================================================================
-# 🚀 2. 取消入住端點 (CIX)
-# ====================================================================
-@parking_bp.route('/pms-sync-data/check-in-cancel', methods=['POST'])
-def receive_checkin_cancel():
-    data = request.get_json() or {}
-    sync_data = data.get("parkingSyncData", {}) if "parkingSyncData" in data else data
-    guest_id = str(data.get("guest_id") or sync_data.get("ciSer") or "").strip()
-    
-    if not guest_id:
-        return jsonify({"error": "Bad Request", "message": "Missing guest_id"}), 400
+        mock_vendor_db[guest_id] = {
+            "guest_id": guest_id,
+            "car_number": clean_audit["car_number"],
+            "guest_name": clean_audit["guest_name"],
+            "start_date": clean_audit["start_date"],
+            "end_date": clean_audit["end_date"],
+            "enabled": clean_audit["enabled"],
+            "arrival_time": current_time
+        }
         
-    if guest_id in mock_vendor_db:
-        removed = mock_vendor_db.pop(guest_id)
-        print(f"🗑️ [撤銷白名單] 住客 [{removed['guest_name']}] 已成功移出。")
-        return jsonify({"status": "success", "message": "Removed from whitelist."}), 200
-    return jsonify({"status": "success", "message": "ID not found, accepted."}), 200
+        print(f"🌙 [NIGHT_AUDIT 增量落庫] 成功接收來自德安夜核名單！")
+        print(f" 💾 住客: {clean_audit['guest_name']} | 車牌: {clean_audit['car_number']} | 狀態: {clean_audit['enabled']}")
+        print(f" 🖥️ [當前廠商暫存資料庫累計數]: {len(mock_vendor_db)} 筆。")
+        
+        # 3. 🎯 消除 TraceLog 報錯的核心：回傳 200 OK 與明確的完成狀態語意
+        return jsonify({
+            "status": "success", 
+            "message": "Night audit data integrated successfully.",
+            "synchronized_id": guest_id
+        }), 200
+        
+    except Exception as e:
+        # 拋出明確的 400 錯誤，讓 PMS 的 TraceLog 能精準捕捉到是廠商端哪裡解析失敗
+        print(f"🚨 [NIGHT_AUDIT 異常]: {e}")
+        return jsonify({"status": "error", "message": f"Internal mapping failed: {str(e)}"}), 400
 
 # ====================================================================
-# 🌙 3. 夜審過天端點 (NIGHT_AUDIT)
-# ====================================================================
-@parking_bp.route('/pms-sync-data/night-audit', methods=['POST'])
-def receive_night_audit():
-    print(f"\n🌙 [NIGHT_AUDIT] 接收到德安夜審通知，清空昨日舊快取...")
-    mock_vendor_db.clear()
-    return jsonify({"status": "success", "message": "Cache flushed."}), 200
-
-# ====================================================================
-# 🚗 🚀 4. 住客行車抵達 (CAR_ARRIVAL) - 逆向回擊
+# 🚗 🚀 路由 OUT：主動相機模擬端點 (當白天客人開車進場，由此發動逆向車辨轟炸)
 # ====================================================================
 @parking_bp.route('/external/vendor-sync-data/car-arrival', methods=['POST'])
 def car_arrival():
@@ -127,7 +284,7 @@ def car_arrival():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ====================================================================
-# 🔓 5. 內部除錯對齊端點 (供相機腳本迴圈拉取)
+# 🔓 🚀 路由 CROSS：內部除錯對齊端點 (專門讓相機模擬腳本拿走完整的白名單字典)
 # ====================================================================
 @parking_bp.route('/internal/debug/whitelist', methods=['GET'])
 def get_internal_whitelist():
