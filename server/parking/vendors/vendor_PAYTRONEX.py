@@ -1,8 +1,8 @@
-# server/parking/vendors/vendor_a.py
+# server/parking/vendors/vendor_PAYTRONEX.py
 from .base import BaseParkingVendorStrategy
 from datetime import datetime
 
-class VendorAStrategy(BaseParkingVendorStrategy):
+class VendorPAYTRONEXStrategy(BaseParkingVendorStrategy):
     def parse_pms_checkin(self, data):
         # A 廠商的欄位解析邏輯
         sync_data = data.get("parkingSyncData", {})

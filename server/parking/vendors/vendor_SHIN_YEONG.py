@@ -1,4 +1,4 @@
-# server/parking/vendors/vendor_shin_yeong.py
+# server/parking/vendors/vendor_SHIN_YEONG.py
 from .base import BaseParkingVendorStrategy
 from datetime import datetime, timedelta
 
