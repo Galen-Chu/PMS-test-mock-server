@@ -1,12 +1,11 @@
-# hardware/simulate_camera.py (全自動批次迴圈連發版)
+# hardware/simulate_camera.py (大一統架構 - 狀態感知與極簡時間戳版)
 import sys
 import os
-# 💡 同步進行路徑防禦
+# 💡 透過 __init__.py 建立的環境，此處可直接完美引入全域設定檔 config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import requests
-import config  # 💡 完美引入全域設定檔
-from datetime import datetime
+import config
 import time
 
 # 統一經由 NGROK 或本地端點進行內部通訊
@@ -20,49 +19,55 @@ def batch_trigger_camera():
         "Content-Type": "application/json"
     }
     
-    # 🔄 1. 核心優化：直接從 mock_server.py 匯入暫存資料庫的全部資料
-    print("📡 [相機自動匯入] 正在向本地模擬 Server 撈取暫存資料庫...")
+    print("📡 [相機自動匯入] 正在向大一統沙盒 Server 撈取最新白名單資料庫...")
     try:
         res = requests.get(URL_GET_WHITELIST, timeout=5)
         db_data = res.json() if res.status_code == 200 else {}
         
         if not db_data:
             print("\n📭 [提示] 當前本地暫存資料庫內沒有任何住客資料！")
-            print("💡 請在真實 PMS 網頁上對今日訂單做日常修改，讓真實 Webhook 資料流進 Flask 後，再來執行我。")
             return
             
         total_records = len(db_data)
-        print(f"✅ [成功匯入] 共計撈出 {total_records} 筆住客白名單，開始迴圈車辨連發...\n")
+        print(f"✅ [成功匯入] 共計撈出 {total_records} 筆住客紀錄，開始狀態機感知校準...\n")
         print("============================================================================")
         
     except Exception as e:
         print(f"❌ 匯入暫存資料庫失敗: {e}")
         return
 
-    # 🎯 2. 核心重構：利用 for 迴圈將所有資料撈出來依序回傳
     success_count = 0
-    for index, target_guest in enumerate(db_data.values(), start=1):
-        guest_id = target_guest["guest_id"]
-        car_number = target_guest["car_number"]
-        guest_name = target_guest["guest_name"]
+    skipped_count = 0
+    
+    for index, (guest_id, target_guest) in enumerate(db_data.items(), start=1):
+        car_number = target_guest.get("car_number", "")
+        guest_name = target_guest.get("guest_name", "未帶姓名")
         
-        print(f"🚗 【批次車辨中 {index}/{total_records}】")
-        print(f" 📸 [相機感應] 逼逼！地感線圈觸發！")
-        print(f" 📷 辨識結果 ➔ 姓名: {guest_name} | ID: {guest_id} | 車牌: {car_number}")
+        # 🎯 核心優化點 1：配合狀態機進行邊緣端權限感知
+        is_enabled = target_guest.get("enabled", True)
         
-        # 🎯 毫無誤差，每一筆都封裝當前時間，確保對齊 4 規格 Payload
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🚗 【批次檢索中 {index}/{total_records}】-> 住客: {guest_name} | ID: {guest_id}")
+        
+        if not is_enabled:
+            # 💡 實施反向驗證攔截：若已被 PMS 停用（例如 CIX 或清除車牌），在地防禦不發砲
+            print(f" 🛑 [邊緣端隔離] 車牌 [{car_number}] 權限目前為【停用】狀態！")
+            print(f"   ℹ️ 根因分析: 該旅客可能已取消入住(CIX)或已被前台清除車牌，相機拒絕開閘，不推播至 PMS。")
+            skipped_count += 1
+            print("----------------------------------------------------------------------------")
+            continue
+
+        # 🎯 核心優化點 2：極簡物理流對齊
+        # 拔除不必要的靜態 arrival_time 封裝，相機回歸「純粹物理事件觸發者」職責，僅拋送 2 大核心變數
+        print(f" 📸 [相機感應] 逼逼！地感線圈觸發！車牌 [{car_number}] 狀態確認為【啟用】")
         payload = {
             "guest_id": guest_id,
-            "car_number": car_number,
-            "guest_name": guest_name,
-            "arrival_time": current_time
+            "car_number": car_number
         }
         
         try:
-            print(f" 📡 正在發送車辨結果至廠商 Server...")
+            print(f" 🚀 正在主動向 Server 發動逆向車辨轟炸...")
             response = requests.post(URL_CAR_ARRIVAL, json=payload, headers=headers, timeout=5)
-            print(f" 📥 [廠商 Server 回應狀態碼]: {response.status_code} | {response.text}")
+            print(f" 📥 [廠商 Server 回應]: 狀態碼 {response.status_code} | {response.text}")
             
             if response.status_code == 200:
                 success_count += 1
@@ -73,7 +78,10 @@ def batch_trigger_camera():
         print("----------------------------------------------------------------------------")
         time.sleep(0.5)  # 稍微停頓，保護 ngrok 隧道頻率
 
-    print(f"\n🎉 【批次連發結束】成功處理 {success_count} / {total_records} 筆車辨數據同步！")
+    print(f"\n🎉 【批次連發結束】")
+    print(f" ✅ 成功發砲通關: {success_count} 筆")
+    print(f" 🛑 邊緣安全防禦攔截: {skipped_count} 筆")
+    print(f" 📊 總計處理解耦資料: {total_records} 筆")
 
 if __name__ == "__main__":
     batch_trigger_camera()
