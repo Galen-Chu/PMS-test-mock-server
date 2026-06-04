@@ -140,3 +140,26 @@
   2. **消除重複代碼**：利用 `hardware/__init__.py` 作為邊緣硬體設備套件的入口閘門，在套件加載首期注入 `sys.path.append` 全域根路徑防禦，徹底斬斷子模組腳本內部的路徑硬編碼依賴。
 * **效益**：
   將專案從「多檔案拼湊」升級為標準的「Python SDK 套件模型」，為未來的跨館別多機聯調與自動化 CI/CD 架構鋪平道路。
+
+  ## 📅 Log 11: 專案完全體落地、生產級架構封裝與雲端同步
+* **日期**：2026-06-03
+* **新增資產**：
+  1. `server/mock_server.py` (全事件狀態機控制微服務)
+  2. `hardware/simulate_camera.py` (全自動動態匯入批次連發腳本)
+  3. `hardware/__init__.py` (全域套件環境與路徑防禦層)
+* **架構演進成果 (Final Evolution)**：
+  徹底解決初期開發時多腳本雜亂、手動複製參數的痛點。
+  透過「物理層職責分離（SoC）」，成功將外部被動 Webhook 監聽、邊緣硬體相機感應、本地單元盲測三者完全解耦。
+  在既有德安 PMS 的「夜審營業日時序限制」邊界內，提煉出最優雅的自動化批次對齊測試流，兼顧了測試的「高效率」與「高傳真效果」。
+* **專案狀態**：
+  已清除所有敏感私鑰字串，完成全模組化重構，程式碼與技術指引正式推播至遠端 GitHub Repository，初版 Staging 沙盒基礎設施完美宣告落成。
+
+  ## 📅 Log 12: Git 分散式版本控制——遠端進度分歧與衝突消解
+* **日期**：2026-06-03
+* **異常現象**：
+  執行 `git push` 時觸發 `Updates were rejected because the tip of your current branch is behind` 阻擋。
+* **底層原理 (Git Architecture Analysis)**：
+  這是分散式版本控制系統（DVCS）的保護機制。當遠端 Counterpart（GitHub）存在本地儲存庫未包含的 Commit 時，Git 會拒絕非快進式（Non-fast-forward）的推播，以防止盲目覆蓋他人代碼或引發歷史紀錄斷層。
+* **解法辯證 (Dialectical Workaround)**：
+  1. **方案 A (協作流)**：透過 `git pull` 進行遠端變更整合，透過三方合併（3-way merge）對齊時間軸，防禦性最高。
+  2. **方案 B (強攻流)**：在確認個人專案且本地具備「絕對正確真相來源（Source of Truth）」的前提下，使用 `git push -f` 實施強制線性歷史覆蓋。本專案因經歷大幅度 SoC 架構重構，採用強攻流能確保遠端目錄結構達到最純淨的重組狀態。
