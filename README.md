@@ -19,15 +19,24 @@ PMS-test-mock-server/
 ├── server/                   # 📦 【模擬後端核心模組】
 │   ├── __init__.py           # 套件宣告
 │   │
-│   └── parking/              # 🚗 【車辨停車功能整合模組】(由原 mock_server.py 切割重組)
-│       ├── __init__.py       # 初始化並宣告該功能之藍圖 (Blueprint)
-│       ├── routes.py         # 統一的外部通信路由 (不含廠商死邏輯，只調度 Strategy)
+│   ├── parking/              # 🚗 【車辨停車功能整合模組】(由原 mock_server.py 切割重組)
+│   │   ├── __init__.py       # 初始化並宣告 parking 藍圖 (Blueprint)
+│   │   ├── routes.py         # 統一的外部通信路由 (不含廠商死邏輯，只調度 Strategy)
+│   │   │
+│   │   └── vendors/                    # 🗃️ 規格策略庫 (Strategy Pattern)
+│   │       ├── __init__.py             # 策略套件入口
+│   │       ├── base.py                 # 定義所有車辨廠商必須遵循的標準接口合約 (Abstract Class)
+│   │       ├── vendor_SHIN_YEONG.py    # SHIN_YEONG 廠商規格實作檔 (對齊目前的現行 4 欄位官方規格)
+│   │       └── vendor_PAYTRONEX.py     # PAYTRONEX 廠商規格實作檔 (用來驗證未來欄位變更、微調的客製化規格)
+│   │
+│   └── amenity/              # 🦏 【房務備品系統整合模組】
+│       ├── __init__.py       # 初始化並宣告 amenity 藍圖 (Blueprint)
+│       ├── routes.py         # 統一的外部通信路由 (負責接 Webhook 與逆向同步)
 │       │
-│       └── vendors/          # 🗃️ 【車辨廠商專屬規格策略庫】
-│           ├── __init__.py   # 策略套件入口
-│           ├── base.py       # 定義所有車辨廠商必須遵循的標準接口合約 (Abstract Class)
-│           ├── vendor_a.py   # A 廠商規格實作檔 (對齊你目前的現行 4 欄位官方規格)
-│           └── vendor_b.py   # B 廠商規格實作檔 (用來驗證未來欄位變更、微調的客製化規格)
+│       └── vendors/                    # 🗃️ 規格策略庫 (Strategy Pattern)
+│           ├── __init__.py             # 策略套件入口
+│           ├── base.py                 # 定義音箱語音解析必須遵循的標準接口合約 (Abstract Class)
+│           └── vendor_BI_RSAI.py       # BI_RSAI 廠商規格實作檔 (JSON 規格序列化策略)
 │
 ├── hardware/                 # 📸 【模擬前端硬體】
 │   ├── __init__.py           # 全域環境初始化與自動路徑防禦注入 (免除子腳本重複 append 路徑)

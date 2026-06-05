@@ -1,6 +1,21 @@
 # 🪵 API 自動化測試整合除錯日誌 (Troubleshooting & Architecture Log)
+# 🚗 TroubleShooting_SHIN_YEONG.md —— 新詠 (SHIN_YEONG) 停車場與車辨自動化串接日誌
 
-本文件持續記錄在構建 PMS (物業管理系統) 與外部車牌辨識系統聯調自動化框架時，所遭遇的**環境配置、網路拓撲、資料結構（Schema）以及商業邏輯校驗**之核心挑戰與處理解法。
+本文件持續記錄德安 Athena PMS 系統與外部車牌辨識系統聯調自動化框架時，所遭遇的**環境配置、網路拓撲、資料結構（Schema）以及商業邏輯校驗**之核心挑戰與處理解法。
+
+---
+
+## 🛠️ 核心 API 路由合約矩陣
+
+| # | HTTP Method | API 路由端點 | 業務功能分類 | 觸發時機與物理現實 |
+|---|-------------|--------------------------------------------|--------------|-------------------|
+| 1 | `POST` | `/pms-sync-data/check-in` | 日常入住接收 | 當住客入住成功時，推播住客主檔與車牌資料將其實施增量落庫（Upsert），並將憑證初始化為 `enabled: True`，`arrival_time` 預設留空。 |
+| 2 | `POST` | `/pms-sync-data/change-checkout-datetime` | 退房延展接收 | 當住客要求延遲退房時觸發，精準覆寫該住客的授權落日截止線（`end_date`），其餘車牌與時間資產原封不動。 |
+| 3 | `POST` | `/pms-sync-data/change-car-nos` | 櫃檯車牌異動接收 | 適配前台「新增、清除、更新」車牌三態行為，更新車牌時會收到連續兩發 Webhook（舊車牌停用➔新車牌啟用）依此進行憑證開關切換。|
+| 4 | `POST` | `/pms-sync-data/check-in-cancel` | 取消入住接收 | 為防禦實體車輛卡在出口閘門引發客訴，沙盒維持 `enabled: True`，但將 `end_date` 強制縮短為「當下主機時間 + 逃生緩衝分鐘數」。 |
+| 5 | `POST` | `/pms-sync-data/night-audit` | 批次夜核名單接收 | 凌晨夜審排程執行時，批次推播隔日預進且有車號之住客原料，沙盒以 `guest_id` 為主鍵進行大量字典堆疊與 Upsert，不執行全盤清空。|
+| 6 | `POST` | `/external/vendor-sync-data/car-arrival` | 逆向行車抵達發砲 | 模擬地下室實體相機拍到車牌當下，即時抓取主機當前時間注入 `arrival_time`，逆向砸回真實 PMS 雲端寫入行車日誌。 |
+| 7 | `GET`  | `/internal/debug/whitelist` | 內部除錯名單拉取 | 沙盒專屬端點，供自動化相機腳本（`simulate_camera.py`）一鍵撈取全量記憶體資料庫，用以執行邊緣端的狀態感知過濾。 |
 
 ---
 
