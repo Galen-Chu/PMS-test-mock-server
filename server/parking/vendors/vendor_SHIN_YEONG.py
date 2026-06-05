@@ -3,7 +3,7 @@ from .base import BaseParkingVendorStrategy
 from datetime import datetime, timedelta
 
 class VendorShinYeongStrategy(BaseParkingVendorStrategy):
-    """現行對齊德安官方 4 欄位規格之 ShinYeong 廠商策略"""
+    """對齊 ShinYeong 廠商官方規格之序列化策略實作"""
     
     def _normalize_datetime(self, dt_str):
         """私有輔助函數：將 PMS 各式時間格式統一轉換為標準 YYYY-MM-DD HH:MM:SS"""
@@ -124,7 +124,7 @@ class VendorShinYeongStrategy(BaseParkingVendorStrategy):
         }
 
     def parse_pms_night_audit(self, data):
-        """適配真實夜審 166 bytes 封包大流量 (NIGHT_AUDIT)"""
+        """🎯 適配真實夜審 166 bytes 封包大流量 (NIGHT_AUDIT)"""
         guest_id = str(data.get("guest_id") or "").strip()
         car_number = str(data.get("car_number") or "").strip()
         guest_name = str(data.get("guest_name") or "未帶姓名").strip()

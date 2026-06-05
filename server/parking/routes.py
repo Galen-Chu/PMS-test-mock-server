@@ -8,15 +8,15 @@ from server.parking.vendors.vendor_SHIN_YEONG import VendorShinYeongStrategy
 # 建立停車功能獨立藍圖
 parking_bp = Blueprint('parking', __name__)
 
-# 💡 模擬外部廠商本地的「住客白名單資料庫」
-mock_vendor_db = {}
-
 # 💡 工廠機制：依據全域 config 動態載入當前配合的廠商策略實例
 if getattr(config, 'CURRENT_PARKING_VENDOR', 'VENDOR_SHIN_YEONG') == 'VENDOR_SHIN_YEONG':
     vendor_strategy = VendorShinYeongStrategy()
 else:
     # 未來若有 other VENDOR，直接在此擴充引入即可
     vendor_strategy = VendorShinYeongStrategy()
+
+# 💡 模擬外部廠商本地的「住客白名單資料庫」
+mock_vendor_db = {}
 
 # ====================================================================
 # 🚀 路由 IN：被動接收端點 (專門負責讓真實 PMS 雲端推播住客資料落庫)
