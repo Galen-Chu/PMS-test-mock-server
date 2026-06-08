@@ -89,31 +89,33 @@ def query_guest_by_room_nos():
         
     # 2. 👮‍♂️ 第二道防線：校準 URL Query 必填參數
     third_party = request.args.get('thirdParty')
-    keyword_room = request.args.get('keyword') # 房號
-    
+    keyword_room = request.args.get('keyword') # 房號 💡變更為可選參數
+
     if not third_party or not keyword_room:
         print("🚨 [小美犀 - 房號查詢錯誤] URL 參數遺失 thirdParty 或 keyword！")
         return jsonify({"code": "400", "message": "Bad Request. Missing query parameters."}), 400
 
-    room_key = str(keyword_room).strip()
-    print(f"\n🦏 [小美犀 Webhook] 收到房號查詢 -> 房號: 【{room_key}】| 廠商: {third_party}")
-
     # 3. 🔍 第三道防線：檢索虛擬資料庫
+    # 🎯 核心重構：若未傳送關鍵字房號，啟動「全量房號資料夾拉取」模擬機制
+    if not keyword_room:
+        print(f"\n🦏 [小美犀 Webhook] 觸發【全量房號名單同步】機制 -> 廠商: {third_party}")
+        all_guests = []
+        for room_list in mock_inhouse_db.values():
+            all_guests.extend(room_list)
+            
+        formatted_response = vendor_strategy.transform_room_nos_query_response(all_guests)
+        print(f" 🟢 [全量同步成功] 成功將沙盒記憶體內共 {len(formatted_response)} 筆在店房號資產全數匯出。")
+        return jsonify(formatted_response), 200
+
+    # 🟢 否則，維持原有的單一房號精準檢索
+    room_key = str(keyword_room).strip()
+    print(f"\n🦏 [小美犀 Webhook] 收到單一房號查詢 -> 房號: 【{room_key}】| 廠商: {third_party}")
+    
     if room_key in mock_inhouse_db and len(mock_inhouse_db[room_key]) > 0:
-        target_guests = mock_inhouse_db[room_key]
-        
-        # 調用小美犀專屬策略，洗滌出 Array 結構
-        formatted_response = vendor_strategy.transform_room_nos_query_response(target_guests)
-        
-        print(f" 🟢 [查詢成功] 房號 {room_key} 處於在店狀態，成功回傳住客清單共 {len(formatted_response)} 筆。")
+        formatted_response = vendor_strategy.transform_room_nos_query_response(mock_inhouse_db[room_key])
         return jsonify(formatted_response), 200
     else:
-        # 🎯 完美對齊官方合約：查無資料時，必須回傳 HTTP 417 與自訂 code/message
-        print(f" 🔴 [查詢失敗] 沙盒內無房號 【{room_key}】 之入住紀錄，發動 417 攔截防禦。")
-        return jsonify({
-            "code": "1001",
-            "message": "查無此房號"
-        }), 417
+        return jsonify({"code": "1001", "message": "查無此房號"}), 417
     
 # ====================================================================
 # 🦏 🚀 2. 房卡卡號查詢取得住客端點 (GET /room-pay/mifare-nos)
@@ -123,41 +125,44 @@ def query_guest_by_mifare_nos():
     # 1. 👮‍♂️ Header 必填參數校驗
     athena = request.headers.get('athena')
     hotel = request.headers.get('hotel')
+
     if not athena or not hotel:
         print("🚨 [小美犀 - 卡號查詢錯誤] Header 遺失 athena 或 hotel！")
         return jsonify({"code": "400", "message": "Bad Request. Missing identification headers."}), 400
         
     # 2. 👮‍♂️ URL Query 必填參數校驗
     third_party = request.args.get('thirdParty')
-    keyword_card = request.args.get('keyword') # 房卡卡號
+    keyword_card = request.args.get('keyword') # 房卡卡號 💡變更為可選參數
+
     if not third_party or not keyword_card:
         print("🚨 [小美犀 - 卡號查詢錯誤] URL 參數遺失 thirdParty 或 keyword！")
         return jsonify({"code": "400", "message": "Bad Request. Missing query parameters."}), 400
 
-    card_key = str(keyword_card).strip()
-    print(f"\n🦏 [小美犀 Webhook] 收到房卡卡號查詢 -> 卡號: 【{card_key}】| 廠商: {third_party}")
-
     # 3. 🔍 核心逆查機制：卡號 ➔ 房號 ➔ 住客主檔
+    # 🎯 核心重構：若未傳送卡號，啟動「全量房卡卡號逆查拉取」模擬機制
+    if not keyword_card:
+        print(f"\n🦏 [小美犀 Webhook] 觸發【全量房卡名單同步】機制 -> 廠商: {third_party}")
+        all_guests = []
+        # 遍歷對照表，撈出所有具有房卡對照的在店旅客
+        for card_no, room_no in mock_card_mapping_db.items():
+            if room_no in mock_inhouse_db:
+                all_guests.extend(mock_inhouse_db[room_no])
+                
+        formatted_response = vendor_strategy.transform_mifare_nos_query_response(all_guests)
+        print(f" 🟢 [全量同步成功] 成功將沙盒記憶體內共 {len(formatted_response)} 筆有綁卡之住客資產全數匯出。")
+        return jsonify(formatted_response), 200
+
+    # 🟢 否則，維持原有的單一卡號精準逆查
+    card_key = str(keyword_card).strip()
+    print(f"\n🦏 [小美犀 Webhook] 收到單一房卡卡號查詢 -> 卡號: 【{card_key}】| 廠商: {third_party}")
+    
     if card_key in mock_card_mapping_db:
         mapped_room = mock_card_mapping_db[card_key]
-        print(f" 🎯 [卡號逆查成功] 卡號 【{card_key}】 隸屬於房號: 【{mapped_room}】")
-        
-        # 向在店住客資料庫索取整包資料
         if mapped_room in mock_inhouse_db and len(mock_inhouse_db[mapped_room]) > 0:
-            target_guests = mock_inhouse_db[mapped_room]
-            
-            # 調用策略層洗滌輸出
-            formatted_response = vendor_strategy.transform_mifare_nos_query_response(target_guests)
-            
-            print(f" 🟢 [查詢成功] 卡號對齊成功，成功回傳住客清單共 {len(formatted_response)} 筆。")
+            formatted_response = vendor_strategy.transform_mifare_nos_query_response(mock_inhouse_db[mapped_room])
             return jsonify(formatted_response), 200
             
-    # 4. 🎯 失敗防禦：若卡號未登記，或該卡號綁定的房號已退房，外發 417
-    print(f" 🔴 [查詢失敗] 沙盒內無卡號 【{card_key}】 之有效發卡紀錄，發動 417 攔截。")
-    return jsonify({
-        "code": "1002",
-        "message": "查無此房卡卡號"
-    }), 417
+    return jsonify({"code": "1002", "message": "查無此房卡卡號"}), 417
 
 # ====================================================================
 # 🦏 🚀 3. 餐廳消費住掛入帳端點 (POST /room-pay)
@@ -167,6 +172,7 @@ def receive_room_pay_settlement():
     # 1. 👮‍♂️ Header 必填參數校驗
     athena = request.headers.get('athena')
     hotel = request.headers.get('hotel')
+
     if not athena or not hotel:
         print("🚨 [小美犀 - 住掛房帳錯誤] Header 遺失憑證 athena 或 hotel！")
         return jsonify({"code": "400", "message": "Missing identification headers."}), 400
@@ -234,6 +240,7 @@ def receive_room_pay_cancel():
     # 1. 👮‍♂️ Header 必填憑證校驗
     athena = request.headers.get('athena')
     hotel = request.headers.get('hotel')
+
     if not athena or not hotel:
         print("🚨 [小美犀 - 住掛取消錯誤] Header 遺失憑證 athena 或 hotel！")
         return jsonify({"code": "400", "message": "Missing identification headers."}), 400
@@ -315,6 +322,7 @@ def receive_room_billing_settlement():
     # 1. 👮‍♂️ Header 必填參數憑證校驗
     athena = request.headers.get('athena')
     hotel = request.headers.get('hotel')
+    
     if not athena or not hotel:
         print("🚨 [小美犀 - 房務入帳錯誤] Header 遺失憑證 athena 或 hotel！")
         return jsonify({"code": "400", "message": "Missing identification headers."}), 400

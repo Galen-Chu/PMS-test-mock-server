@@ -1,4 +1,4 @@
-# server/amenity/vendors/vendor_BI_RSAI.py
+# server/amenity/vendors/vendor_BR_AIELLO.py
 from .base import BaseAmenityVendorStrategy
 
 class VendorBRAielloStrategy(BaseAmenityVendorStrategy):

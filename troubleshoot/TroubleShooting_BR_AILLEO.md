@@ -144,3 +144,27 @@
   理清了自動化測試腳本與實體生產環境資料庫之間的動態依賴關係，為後續多場景、大流量的實打實帳務對撞清除了最後一哩路。
 
 ---
+
+## 📅 Log 38: 德安雲端環境異常排查——Swagger 側測試 room-nos 噴發 500 錯誤根因剖析
+* **日期**：2026-06-08
+* **異常現象 (Issue Description)**：
+  於真實德安 Athena QA 雲端環境之 Swagger UI 實施 `/room-pay/room-nos` (GET) 接口測試時，伺服器未按規格書預期外發 417 查無此房訊息，而是由 Spring Boot 核心直接退化並噴發 `HTTP 500 Internal Server Error`，並附帶 Nginx 轉發標頭。
+* **技術根因研判 (Root Cause Hypothesis)**：
+  1. **廠商代碼權限真空**：傳入之 `thirdParty` 欄位（如範例之 ABCDEFG）在德安 QA 雲端之參數設定表（Setup Table）中不具備合法物理映射，導致後端程式查驗權限時觸發 `NullPointerException` 空值指標崩潰。
+  2. **實體測資未就緒**：輸入之 `keyword`（房號）在德安當前營業日中不處於有效的「在店住客（In-House）」生命週期內，底層 SQL 執行多表 `JOIN` 帳項Folio時發生未捕獲之異常（Unhandled Exception）。
+* **防禦性對策**：
+  全面對齊測資。Header 憑證與 URL 參數必須 100% 採用德安環境現存之合法靜態資產（如指定 `thirdParty="BR"`），並配合前台實質辦妥入住之動態房號進行破冰聯調。
+
+---
+
+## 📅 Log 39: 接口過濾合約優化——解鎖 GET 查詢之「全量名單同步（Optional Filtering）」模擬機制
+* **日期**：2026-06-08
+* **實戰發現與規格微調 (API Parameter Flexibility)**：
+  透過 Swagger 真實環境對撞測試，確認德安原生 GET 端點（`/room-nos` 與 `/mifare-nos`）之 `keyword` 參數於底層為非必填項。當第三方廠商（小美犀/機器人）僅發送 `thirdParty` 權限主鍵而留空 `keyword` 時，德安後端將退化為「全量在店住客白名單拉取」以供廠商進行地端快取（Cache）批次同步。
+* **重構工程手段**：
+  1. **移除強校驗防禦**：解除路由層對 `keyword` 的 `400 Bad Request` 攔截，改採可選式（Optional）判定。
+  2. **實作遍歷堆疊**：當關鍵字為空時，自動啟動全量字典遍歷（`mock_inhouse_db.values()`），調用 `VendorBRStrategy` 批量封裝為大一統的 JSON Array 結構回傳。
+* **技術效益**：
+  沙盒完全體功能再次完成邊界覆蓋。完美還原了智慧飯店物聯網中「定時批量全量快取同步」與「即時單一房號臨檢」兩種完全相異的數據流向。
+
+---
