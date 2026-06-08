@@ -9,8 +9,10 @@ import config
 import time
 
 # 統一經由 NGROK 或本地端點進行內部通訊
-URL_GET_WHITELIST = f"{config.NGROK_BASE_URL}/internal/debug/whitelist"
-URL_CAR_ARRIVAL = f"{config.NGROK_BASE_URL}/external/vendor-sync-data/car-arrival"
+# 依據 config 戰略開關，決定進攻真實德安雲端還是本地沙盒
+USE_REAL = config.USE_REAL_SERVER
+URL_GET_WHITELIST = config.LOCAL_GET_WHITELIST
+URL_CAR_ARRIVAL = config.REAL_URL_CAR_ARRIVAL
 LOCAL_TOKEN = config.LOCAL_TOKEN
 
 def batch_trigger_camera():

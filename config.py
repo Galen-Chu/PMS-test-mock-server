@@ -25,6 +25,7 @@ PMS_BASE_URL_EXTERNAL = f"{PMS_BASE_URL}/external/vendor-sync-data"
 # 🚗 模組一：新詠停車場車辨系統 (thirdparty=SHIN_YEONG) 
 # ====================================================================
 # 1. 遠端雲端與本地端點對齊
+LOCAL_GET_WHITELIST = f"{NGROK_BASE_URL}/internal/debug/whitelist"
 LOCAL_URL_CAR_ARRIVAL = f"{NGROK_BASE_URL}/external/vendor-sync-data/car-arrival"
 REAL_URL_CAR_ARRIVAL = f"{PMS_BASE_URL_EXTERNAL}/car-arrival"
 
@@ -55,7 +56,7 @@ REAL_URL_BR_BILLING    = f"{REAL_URL_AMENITY}/room-billing"
 REAL_PARAMS_AMENITY = {
     "hotel": "01",
     "athena": "16",
-    "thirdParty": "BR"  # 💡 完美對齊小美犀廠商代碼，確保帳務能精準落入 PMS 傳輸日誌
+    "thirdParty": "AIELLO"  # 💡 完美對齊小美犀廠商代碼，確保帳務能精準落入 PMS 傳輸日誌 (BR | AIELLO)
 }
 
 # ====================================================================

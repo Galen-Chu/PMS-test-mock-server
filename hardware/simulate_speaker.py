@@ -9,18 +9,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 import requests
 
-# 🎯 依據 config 戰略開關，決定進攻真實德安雲端還是本地沙盒
+# 依據 config 戰略開關，決定進攻真實德安雲端還是本地沙盒
 USE_REAL = config.USE_REAL_SERVER
-BASE_URL = config.REAL_BASE_URL_AMENITY if USE_REAL else config.NGROK_BASE_URL
-TOKEN = config.REAL_TOKEN if USE_REAL else config.LOCAL_TOKEN
+URL_AMENITY = config.REAL_URL_AMENITY
+LOCAL_TOKEN = config.LOCAL_TOKEN
 
 # 🚀 根據廠商代碼與飯店規範封裝大一統的 Parameters 查詢參數
 # 真實德安雲端需要 hotel="01", athena="16", thirdParty="BR"
-PARAMS_BASE = {
-    "hotel": "01",
-    "athena": "16",
-    "thirdParty": "BR"
-}
+USE_PARAMS = config.CURRENT_PARAMS_AMENITY if USE_REAL else {}
 
 def print_banner(title):
     print("\n" + "="*70)
@@ -29,15 +25,15 @@ def print_banner(title):
 
 def send_request(method, url_suffix, custom_params=None, json_body=None):
     """大一統通信發射引擎"""
-    url = f"{BASE_URL}{url_suffix}"
+    url = f"{URL_AMENITY}{url_suffix}"
     
     # 組合基本參數與客製化 URL 參數 (如 keyword, orderNos)
-    final_params = {**PARAMS_BASE}
+    final_params = {**USE_PARAMS}  # 基於 config 的核心參數
     if custom_params:
         final_params.update(custom_params)
         
     headers = {
-        "Authorization": f"Bearer {TOKEN}" if USE_REAL else TOKEN,
+        "Authorization": f"Bearer {LOCAL_TOKEN}" if USE_REAL else LOCAL_TOKEN,
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
@@ -63,10 +59,10 @@ def send_request(method, url_suffix, custom_params=None, json_body=None):
 def run_smart_hotel_scenario():
     print_banner("智慧飯店語音備品與機器人派送全鏈路 Staging 測試開始")
     print(f" 📡 當前戰略進攻環境: 【{'真實德安 QA 雲端' if USE_REAL else '本地 Flask 沙盒'}】")
-    print(f" 🔗 目標基底網址: {BASE_URL}")
+    print(f" 🔗 目標基底網址: {URL_AMENITY}")
     
     # 預設測試資產 (完美對齊前台規格)
-    test_room = "2403"       # 德安房務測試房
+    test_room = "101"       # 德安房務測試房
     test_mifare = "123456789" # 測試房卡卡號
     unique_order = f"BR-ORD-{datetime.now().strftime('%m%d%H%M%S')}" # 唯一單號资產
     

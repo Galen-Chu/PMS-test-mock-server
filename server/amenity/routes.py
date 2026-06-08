@@ -2,12 +2,12 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 import config
-from .vendors.vendor_BI_RSAI import VendorBRStrategy
+from .vendors.vendor_BR_AIELLO import VendorBRAielloStrategy
 
 amenity_bp = Blueprint('amenity', __name__)
 
 # 策略工廠動態載入
-vendor_strategy = VendorBRStrategy()
+vendor_strategy = VendorBRAielloStrategy()
 
 # 💡 模擬飯店內部的「在店住客資料庫 (In-House Guest Database)」
 # 預先初始化測試房號：1001

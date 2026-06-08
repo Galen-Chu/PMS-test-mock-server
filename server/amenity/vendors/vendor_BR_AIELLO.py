@@ -1,8 +1,8 @@
 # server/amenity/vendors/vendor_BI_RSAI.py
 from .base import BaseAmenityVendorStrategy
 
-class VendorBRStrategy(BaseAmenityVendorStrategy):
-    """對齊小美犀 (BR) 廠商官方規格之序列化策略實作"""
+class VendorBRAielloStrategy(BaseAmenityVendorStrategy):
+    """對齊小美犀 (BR | AIELLO) 廠商官方規格之序列化策略實作"""
     
     def transform_room_nos_query_response(self, sandbox_guest_list):
         """🎯 核心對齊：將沙盒格式洗滌並包裝成小美犀要求的 JSON Array 結構"""
