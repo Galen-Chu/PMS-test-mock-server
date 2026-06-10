@@ -178,3 +178,16 @@
   2. **房務線連動**：於德安客房雜項/房務過帳模組，針對有效客房錄入【付費備品編號與數量】，點擊過帳存檔，藉此強制觸發 `POST /room-billing` 流量。
 * **效益**：
   建立了完整的測試原料製造手冊，確保 Mock Server 能在真實物理事件觸發下進行動態狀態機驗證。
+
+---
+
+## 📅 Log 41: 全域資產配置大優化——實施參數解耦與基底 URL 拼接校準
+* **日期**：2026-06-10
+* **除錯戰果 (Path & Parameter Realization)**：
+  透過分析最新上傳之原始碼與 Swagger Curl 成功封包，定位並清除了 2 大關鍵斷層：
+  1. **網址多贅路徑**：發現原 `REAL_URL_AMENITY` 內多嵌套了 `/room-pay` 尾巴，導致拼接後網址錯位，現已全面修正為純淨基底。
+  2. **大一統標頭抽離**：將 `bacchus-athenaid` 與 `bacchus-hotelcod` 統一升級封裝至 `config.py` 之 `REAL_HEADERS_BACCHUS` 字典中。
+* **技術手段**：
+  不修改 `config.py` 網址本體的前提下，於 `simulate_speaker.py` 調用運行期動態變數，利用 Requests 庫將 `params=BASE_PARAMS` 與 `headers=HEADERS` 進行拆分注入。
+* **效益**：
+  達成了「牽一髮而動全身」的極高維護彈性，徹底對齊了德安雲端網關大樓的吃單規格。
