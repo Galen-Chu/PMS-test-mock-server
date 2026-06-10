@@ -1,46 +1,49 @@
-# 📸 PMS 停車辨識廠商自動化整合 Staging 沙盒框架
+# 🏨 德安 Athena PMS 全物聯網整合測試大一統 Staging 沙盒平台
 
-本專案（`PMS-test-mock-server`）為一套專門針對德安 Athena PMS 系統開發的**高傳真（High-Fidelity）生產級外部廠商模擬沙盒**。透過將架構進行「職責分離（SoC）」重構，完美還原實體車辨相機與廠商後端伺服器的物理通信邊界，並具備全自動批次迴圈連發功能，用以高效驗證住客行車紀錄之落地。
+本專案（`PMS-test-mock-server`）是一個高度解耦、採用**策略模式（Strategy Pattern）**與**藍圖架構（Flask Blueprints）**建構的**高傳真（High-Fidelity）**整合測試沙盒。透過將架構進行「職責分離（SoC）」重構，完美還原實體行動代號的資料流與第三方廠商後端伺服器的物理通信邊界，並具備全自動批次迴圈連發功能，用以高效驗證串接整合測試。
+旨在切斷飯店實體硬體與環境的依賴，一鍵還原並模擬異質物聯網廠商與德安 PMS 系統之間的雙向數據對撞鏈路。
 
 ---
 
-## 📂 專案目錄結構 (Architecture)
-
-本專案採用微服務化模組架構，將被動監聽、邊緣硬體主動發砲、以及離線盲測完全解耦：
+## 📂 專案大一統架構圖 (Project Directory Tree)
 
 ```text
 PMS-test-mock-server/
 │
-├── config.py                 # 全域核心設定檔 (集中管理所有外部雲端與本地 Token)
-├── main.py                   # ⚡ 專案唯一啟動入口 (負責註冊所有廠商藍圖並掛載 Port 5000)
-├── GUIDE.md                  # 技術框架與維運操作指引說明文件
-├── .gitignore                # 排除環境變數快取
+├── config.py                 # 全域設定檔 (動態切換本地沙盒/真實德安 QA 雲端)
+├── main.py                   # ⚡ 專案唯一入口 (大一統註冊三個平行領域藍圖)
 │
-├── server/                   # 📦 【模擬後端核心模組】
-│   ├── __init__.py           # 套件宣告
-│   │
-│   ├── parking/              # 🚗 【車辨停車功能整合模組】(由原 mock_server.py 切割重組)
-│   │   ├── __init__.py       # 初始化並宣告 parking 藍圖 (Blueprint)
-│   │   ├── routes.py         # 統一的外部通信路由 (不含廠商死邏輯，只調度 Strategy)
-│   │   │
-│   │   └── vendors/                    # 🗃️ 規格策略庫 (Strategy Pattern)
-│   │       ├── __init__.py             # 策略套件入口
-│   │       ├── base.py                 # 定義所有車辨廠商必須遵循的標準接口合約 (Abstract Class)
-│   │       ├── vendor_SHIN_YEONG.py    # SHIN_YEONG 廠商規格實作檔 (對齊目前的現行 4 欄位官方規格)
-│   │       └── vendor_PAYTRONEX.py     # PAYTRONEX 廠商規格實作檔 (用來驗證未來欄位變更、微調的客製化規格)
-│   │
-│   └── amenity/              # 🦏 【房務備品系統整合模組】
-│       ├── __init__.py       # 初始化並宣告 amenity 藍圖 (Blueprint)
-│       ├── routes.py         # 統一的外部通信路由 (負責接 Webhook 與逆向同步)
-│       │
-│       └── vendors/                    # 🗃️ 規格策略庫 (Strategy Pattern)
-│           ├── __init__.py             # 策略套件入口
-│           ├── base.py                 # 定義音箱語音解析必須遵循的標準接口合約 (Abstract Class)
-│           └── vendor_BI_RSAI.py       # BI_RSAI 廠商規格實作檔 (JSON 規格序列化策略)
+├── TroubleShooting_SHIN_YEONG.md  # 🚗 模組一：新詠停車場維運與狀態機日誌
+├── TroubleShooting_BI_RSAI.md     # 🦏 模組二：小美犀房務備品與落帳維運日誌
+├── TroubleShooting_KEYCARD.md     # 🔑 模組三：華豫寧門禁製卡系統維運日誌
 │
-├── hardware/                 # 📸 【模擬前端硬體】
-│   ├── __init__.py           # 全域環境初始化與自動路徑防禦注入 (免除子腳本重複 append 路徑)
-│   └── simulate_camera.py    # 專職批次車辨發砲迴圈腳本 (不需修改，直接適配新路由)
+├── hardware/                 # 📡 邊緣端/廠商主動發砲模擬腳本庫
+│   ├── simulate_camera.py    # 🚗 模擬地下室車辨相機拍牌抵達腳本
+│   └── simulate_speaker.py   # 🦏 模擬小美犀音箱全生命週期故事線腳本
+│
+├── server/                   # 🏗️ 沙盒核心引擎
+│   ├── __init__.py
+│   │
+│   ├── parking/              # 🚗 【模組一：新詠停車辨識系統】
+│   │   ├── __init__.py       # 導出 parking_bp 藍圖
+│   │   ├── routes.py         # 接收 PMS 白名單異動與發動車輛抵達路由
+│   │   └── vendors/
+│   │       ├── base.py                 # 車辨策略基底類別
+│   │       └── vendor_shin_yeong.py    # 新詠資料洗滌與正規化策略實作
+│   │
+│   ├── amenity/              # 🦏 【模組二：小美犀房務備品與入帳系統】
+│   │   ├── __init__.py       # 導出 amenity_bp 藍圖
+│   │   ├── routes.py         # 內置在店住客庫，接收 2 支 GET 查詢與 3 支 POST 入帳
+│   │   └── vendors/
+│   │       ├── base.py                 # 房務策略基底類別
+│   │       └── vendor_br_aiello.py     # 小美犀 12 大核心欄位與特殊 JSON 語意洗滌
+│   │
+│   └── keycard/              # 🔑 【模組三：華豫寧門禁製卡鎖系統】
+│       ├── __init__.py       # 導出 keycard_bp 藍圖
+│       ├── routes.py         # 內置訂單/卡片庫，迎擊德安 6 支製卡/消卡/逆查指令
+│       └── vendors/
+│           ├── base.py                 # 門禁策略基底類別
+│           └── vendor_liveam.py        # 華豫寧 72小時 Token 簽發與訂單狀態機維護
 │
 └── tests/                    # 🧪 【本地閉環盲測】
     ├── __init__.py

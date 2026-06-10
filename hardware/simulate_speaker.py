@@ -12,7 +12,7 @@ import requests
 # 依據 config 戰略開關，決定進攻真實德安雲端還是本地沙盒
 USE_REAL = config.USE_REAL_SERVER
 URL_AMENITY = config.REAL_URL_AMENITY
-LOCAL_TOKEN = config.LOCAL_TOKEN
+# CURRENT_TOKEN = config.CURRENT_TOKEN
 
 # 🚀 根據廠商代碼與飯店規範封裝大一統的 Parameters 查詢參數
 # 真實德安雲端需要 hotel="01", athena="16", thirdParty="BR"
@@ -33,14 +33,13 @@ def send_request(method, url_suffix, custom_params=None, json_body=None):
         final_params.update(custom_params)
         
     headers = {
-        "Authorization": f"Bearer {LOCAL_TOKEN}" if USE_REAL else LOCAL_TOKEN,
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
     
     # 真實德安環境要求 athena 與 hotel 也要在 Header 內
-    headers["athena"] = "16" if USE_REAL else "1"
-    headers["hotel"] = "01" if USE_REAL else "HOTEL01"
+    headers["athena"] = "16"
+    headers["hotel"] = "01"
     
     try:
         if method.upper() == "GET":
