@@ -1,0 +1,843 @@
+[
+  {
+    "timestamp": "2026-06-11 11:36:28",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 11:43:52",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 11:49:52",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 13:24:03",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 13:27:25",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 13:30:41",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 13:41:59",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 14:48:11",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "LOCAL_SANDBOX",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 14:48:12",
+    "scenario": "Scenario_2_Room_Nos_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "LOCAL_SANDBOX",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "DYNAMIC-CI-101",
+        "roomNos": "101",
+        "orderNos": "ORDER-0611144809",
+        "rsptCode": "2FFO",
+        "payAmount": 450.0
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "精緻餐點",
+          "orderQuantity": 1,
+          "specialAmount": 450.0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 14:49:53",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "LOCAL_SANDBOX",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 14:49:54",
+    "scenario": "Scenario_2_Room_Nos_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "LOCAL_SANDBOX",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "DYNAMIC-CI-101",
+        "roomNos": "101",
+        "orderNos": "ORDER-0611144951",
+        "rsptCode": "2FFO",
+        "payAmount": 450.0
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "精緻餐點",
+          "orderQuantity": 1,
+          "specialAmount": 450.0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 14:51:01",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "LOCAL_SANDBOX",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 14:51:03",
+    "scenario": "Scenario_2_Room_Nos_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "LOCAL_SANDBOX",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "DYNAMIC-CI-101",
+        "roomNos": "101",
+        "orderNos": "ORDER-0611145059",
+        "rsptCode": "2FFO",
+        "payAmount": 450.0
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "精緻餐點",
+          "orderQuantity": 1,
+          "specialAmount": 450.0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 14:51:19",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:01:44",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:18:01",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:26:15",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:28:43",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:34:53",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:36:48",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:42:16",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:49:51",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:55:08",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:57:57",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 15:58:34",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:01:12",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:09:16",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:10:36",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:11:18",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:13:55",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:13:57",
+    "scenario": "Scenario_2_Room_Nos_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260605000001",
+        "roomNos": "101",
+        "orderNos": "123456789012345678901",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LUN",
+        "mTimeName": "午餐",
+        "deskNos": "SPK101",
+        "payAmount": 450.0,
+        "acuAmount": 0.0,
+        "precreditTotal": 0.0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "小美犀特製排餐",
+          "orderQuantity": 1,
+          "specialAmount": 450.0,
+          "precreditAmount": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:22:46",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:25:15",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:28:35",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:33:30",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:34:10",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:45:44",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:50:30",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:51:17",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:54:57",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 16:57:38",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 17:11:34",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 17:22:15",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 17:25:18",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 17:25:20",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260605000001",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0611172519",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 17:32:15",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 17:32:17",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260605000001",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0611173216",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-11 17:32:21",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "originalOrderNos": "BR-S3-0611173218",
+      "cancelResponse": {
+        "code": "2000",
+        "message": "2000",
+        "data": {
+          "resultCode": "0000",
+          "acctNos": "2026060701000FO  01"
+        },
+        "sessionId": "E1CB92319004A1C1B2434CB1BFF57F45",
+        "logTime": 1781170341224,
+        "logId": "019eb606-83a3-7cde-98c3-fc71b2ee2db5"
+      }
+    }
+  }
+]

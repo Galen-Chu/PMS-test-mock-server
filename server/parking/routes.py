@@ -273,8 +273,8 @@ def car_arrival():
         response = requests.post(
             config.REAL_URL_CAR_ARRIVAL, 
             json=pms_car_payload, 
-            headers={"Authorization": config.REAL_TOKEN, "Content-Type": "application/json"}, 
-            params=config.REAL_PARAMS,
+            headers={"Authorization": config.CURRENT_TOKEN, "Content-Type": "application/json"}, 
+            params=config.REAL_PARAMS_PARKING,
             timeout=5
         )
         print(f"📡 【真實雲端回應】狀態碼: {response.status_code} | 內容: {response.text}")

@@ -1,0 +1,25 @@
+{
+  "amenity_products": [ 
+    {
+      "productNos": "M001",
+      "productName": "客製化付費備品",
+      "status": "VERIFIED_SUCCESS", 
+      "lastTestDate": "2026-06-11",
+      "note": "德安真實雲端已實測成功通關，回傳 HTTP 204，PMS 前台錄入成功"
+    },
+    {
+      "productNos": "BUFFET",
+      "productName": "自助餐",
+      "status": "PREPARED",
+      "lastTestDate": "",
+      "note": "預備測試項目，用以驗證餐飲住掛相同情境"
+    }
+  ],
+  "aligned_test_scenarios": [
+    {
+      "scenarioNos": 1,
+      "roomNos": "101",
+      "description": "標準智慧語音點單與機器人派送財務落帳流水線"
+    }
+  ]
+}
