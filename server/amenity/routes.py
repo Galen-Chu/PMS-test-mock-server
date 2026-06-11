@@ -28,28 +28,36 @@ def query_guest_by_room_nos():
     if not third_party:
         return jsonify({"code": "400", "message": "Missing thirdParty parameter."}), 400
 
-    # 🎯 核心演進：模擬德安前台主動下發/廠商定期 Pull 全量名單
-    # 若德安未傳 keyword，或我們在進行端對端聯調，沙盒採取動態快取策略
-    print(f"\n🦏 [小美犀 Webhook] 📥 接收德安 PMS 查詢號令 ➔ 房號關鍵字: 【{keyword_room if keyword_room else '全量同步'}】")
+    print(f"\n🦏 [小美犀 Webhook] 📥 接收 PMS 查詢號令 ➔ 房號關鍵字: 【{keyword_room if keyword_room else '全量同步'}】")
 
-    # 模擬從德安資料庫撈出的最新動態數據 (此處會在階段一由腳本/真實流量觸發時進行覆寫)
-    # 為了展示完整 E2E，若記憶體真空，我們預載德安 Swagger 現存的真實黃金測資
-    if not mock_inhouse_db:
-        print("   💾 [資料庫初始化] 偵測到暫存真空，動態 Upsert 德安實時在店白名單...")
-        preset_guests = [
-            {"guest_id": "20260605000001", "room_nos": "101", "room_serial": "1", "guest_name": "壹梯環境", "group_nos": "壹梯環境"},
-            {"guest_id": "20260603000003", "room_nos": "102", "room_serial": "1", "guest_name": "Galen Galen_777", "group_nos": "Galen"},
-            {"guest_id": "20260605044", "room_nos": "2403", "room_serial": "002", "guest_name": "林大華", "group_nos": ""}
-        ]
-        for g in preset_guests:
-            mock_inhouse_db[g["room_nos"]] = [{
-                "guest_id": g["guest_id"], "room_nos": g["room_nos"], "room_serial": g["room_serial"],
-                "guest_name": g["guest_name"], "order_remark": "沙盒動態快取資產", "checkout_remark": "",
-                "sum_item_total": 0.00, "sum_advc_total": 0.00, "pre_credit_amount": 0.00,
-                "group_nos": g["group_nos"], "enabled": True
+    # 🎯 核心設計演進：動態覆寫與測資預熱機制
+    # 當腳本或真實 PMS 戳這支 GET 介面時，我們為指定房號動態建立/更新基礎暫存，確保資料流絕對對齊！
+    if keyword_room:
+        room_key = str(keyword_room).strip()
+        
+        # 💡 如果沙盒記憶體目前沒有這筆房號資產，實時執行 Upsert 覆寫，對齊業務情境！
+        if room_key not in mock_inhouse_db:
+            print(f"   💾 [資料流動態覆寫] 偵測到房號 【{room_key}】 首次進場，實時建立 Staging 暫存主檔...")
+            
+            # 依據查詢房號動態生成對齊的真實帳務外鍵 (ciSerial)
+            simulated_ci_serial = f"20260610{room_key}001"
+            simulated_guest_name = f"Galen 客戶情境房_{room_key}"
+            
+            mock_inhouse_db[room_key] = [{
+                "guest_id": simulated_ci_serial,
+                "room_nos": room_key,
+                "room_serial": "1",
+                "guest_name": simulated_guest_name,
+                "order_remark": "經由 GET 流量動態快取覆寫生成",
+                "checkout_remark": "",
+                "sum_item_total": 0.00,  # 初始帳務欄位
+                "sum_advc_total": 0.00,
+                "pre_credit_amount": 0.00,
+                "group_nos": "Galen_Group",
+                "enabled": True          # 啟用住掛權限
             }]
 
-    # 分流回傳
+    # 🧼 呼叫策略層清洗並包裝成小美犀要求格式，分流回傳
     if not keyword_room or str(keyword_room).strip() == "":
         all_guests = []
         for room_list in mock_inhouse_db.values():
@@ -115,16 +123,25 @@ def receive_room_billing_settlement():
     try:
         clean_billing = vendor_strategy.parse_pms_room_billing(data)
         room_nos = clean_billing["room_nos"]
+        items = clean_billing["items"]
         
         print(f"\n🦏 [小美犀 Webhook] 📥 接收房務備品入帳 ➔ 房號: 【{room_nos}】")
 
-        if room_nos in mock_inhouse_db:
-            guest = mock_inhouse_db[room_nos][0]
-            for item in clean_billing["items"]:
-                simulated_price = 150.00 * item["quantity"]
-                guest["sum_item_total"] += simulated_price
-                print(f"   📦 [備品累加成功] 料號: {item['product_nos']} ➔ 累計帳務: ${simulated_price}")
-            print(f"   🟢 [財務更新完畢] 房間 {room_nos} 當前總帳餘額: ${guest['sum_item_total']}")
+        # 🎯 核心防禦與資料流繼承檢驗
+        # 如果前面的 GET 階段一有成功覆寫，此處的 room_nos 必然 100% 存在於記憶體中！
+        if room_nos not in mock_inhouse_db:
+            print(f" 🔴 [財務防禦攔截] 沙盒記憶體查無房號 【{room_nos}】 的暫存主檔，發動 417 阻斷壞帳。")
+            return jsonify({"code": "1001", "message": "此房間無住客"}), 417
+
+        # 🧠 實時作業欄位更新至帳務相關欄位
+        guest = mock_inhouse_db[room_nos][0]
+        for item in items:
+            # 模擬付費備品單價，執行記帳更新
+            simulated_price = 150.00 * item["quantity"]
+            guest["sum_item_total"] += simulated_price
+            print(f"   📦 [帳務更新] 備品品項: {item['product_nos']} * {item['quantity']} ➔ 沙盒 Folio 總帳更新為: ${guest['sum_item_total']}")
+
+        print(f" 🟢 [情境演練成功] 房號 【{room_nos}】 財務資料異動完成。即將原封不動準備後續 POST 給德安 PMS。")
         return jsonify({}), 200
     except Exception as e:
         return jsonify({"code": "500", "message": str(e)}), 500

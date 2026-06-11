@@ -17,6 +17,11 @@ PMS-test-mock-server/
 ├── TroubleShooting_BI_RSAI.md     # 🦏 模組二：小美犀房務備品與落帳維運日誌
 ├── TroubleShooting_KEYCARD.md     # 🔑 模組三：華豫寧門禁製卡系統維運日誌
 │
+├── tests_data_pool/          # 🏗️ 大一統測試資產數據池 (與業務程式碼完全平級)
+│   ├── liveam_action_fixtures.json  # 🔑 門禁 9 大 Action_cod 測資清單
+│   ├── aiello_product_fixtures.json # 🦏 小美犀備品料號與財務科目清單
+│   └── shin_yeong_car_fixtures.json # 🚗 車辨常用白名單車牌清單
+│
 ├── hardware/                 # 📡 邊緣端/廠商主動發砲模擬腳本庫
 │   ├── simulate_camera.py    # 🚗 模擬地下室車辨相機拍牌抵達腳本
 │   └── simulate_speaker.py   # 🦏 模擬小美犀音箱全生命週期故事線腳本

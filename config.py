@@ -7,7 +7,7 @@ USE_REAL_SERVER = True  # True = 真實 Athena QA 雲端 | False = 本地 Flask 
 # ====================================================================
 # 📡 基礎設施：網址基底配置 (校準修正：徹底移除路徑多黏尾巴的隱患)
 # ====================================================================
-NGROK_BASE_URL = "https://e9b6-118-163-122-183.ngrok-free.app"
+NGROK_BASE_URL = "https://2e5a-118-163-122-183.ngrok-free.app"
 PMS_BASE_URL = "https://qa-cloud.athena.com.tw/pms/api/v3.0/pms"
 
 # 🎯 大一統網關通信路徑 (純淨基底)

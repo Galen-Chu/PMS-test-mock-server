@@ -8,84 +8,84 @@ import requests
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
+# 🎯 全量引用 config 模組化變數作為核心維護機制
 USE_REAL = config.USE_REAL_SERVER
-HEADERS = config.CURRENT_HEADERS_BACCHUS
-BASE_PARAMS = config.CURRENT_PARAMS_AMENITY
+HEADERS = config.CURRENT_HEADERS_BACCHUS    # 💡 完美對齊全域大一統標頭
+BASE_PARAMS = config.CURRENT_PARAMS_AMENITY # 💡 完美對齊全域大一統小美犀參數
 
 def print_banner(title):
     print("\n" + "="*70)
-    print(f" 🦏 [小美犀物聯網模擬器] >>> {title}")
+    print(f" 🦏 [小美犀 BR 物聯網模擬器] >>> {title}")
     print("="*70)
 
-# ====================================================================
-# 🎬 情境一：標準智慧音箱下單 ➔ 派送機器人送達財務落帳生命週期
-# ====================================================================
-def run_scenario_one_robot_delivery(target_room=""):
-    print_banner(f"【情境一】 智慧音箱語音點餐 ➔ 機器人實體送餐入帳流 (目標房號: {target_room})")
+def run_smart_hotel_scenario():
+    print_banner("大一統參數拆分注入模式 ➔ 小美犀實戰開跑")
     
-    # --- 階段一：GET 房號身分與權限查驗 (動態提取測資) ---
-    print(f"\n[Phase 1] 🤖 機器人出車前，向沙盒發動 GET 認證房號 【{target_room}】...")
+    # 🎯 業務資料流對齊核心：使用唯一情境房號變數橫向貫穿兩大階段
+    test_room = "101"       
+    unique_order = f"BR-ORD-{datetime.now().strftime('%m%d%H%M%S')}" 
+    
+    # ----------------------------------------------------------------
+    # 🎯 階段一：小美犀智慧音箱「語音房號身分查驗」 (GET)
+    # ----------------------------------------------------------------
+    print(f"\n[Phase 1] 🚀 模擬音箱發動 GET 房號身分查驗... (目標房號: {test_room})")
+    
     get_url = config.REAL_URL_BR_ROOM_NOS if USE_REAL else f"{config.NGROK_BASE_URL}/external/vendor-sync-data/room-pay/room-nos"
-    get_params = {**BASE_PARAMS, "keyword": target_room}
+    get_params = {**BASE_PARAMS, "keyword": test_room} # 🎯 自動解耦拼接成 ?thirdParty=BR&keyword=101
+    
+    print(f" 📡 目標網址: {get_url}")
+    print(f" 📋 注入 Params: {get_params}")
     
     try:
         res1 = requests.get(get_url, params=get_params, headers=HEADERS, timeout=8)
-        if res1.status_code != 200:
-            print(f" 🛑 [認證終止] 沙盒或德安拒絕該房號。原因: {res1.text}")
+        print(f" 📥 [德安回應碼]: HTTP {res1.status_code}")
+        if res1.status_code == 200:
+            print(" 🟢 [驗證成功] 真實雲端認證通過！")
+            print(res1.text[:300])
+        else:
+            print(f" 🛑 [驗證失敗]: {res1.text}")
             return
-            
-        # 🎯 核心突破：動態資產繼承！直接從回傳的 JSON 陣列中剝離出真實的住客序號
-        guest_data_list = res1.json()
-        dynamic_ci_serial = guest_data_list[0].get("checkInSerial")
-        dynamic_guest_name = guest_data_list[0].get("altName")
-        
-        print(f" 🟢 [認證通過] 成功攔截並繼承動態測資！")
-        print(f"   👤 住客姓名: {dynamic_guest_name} | 🔑 真實住客序號(ciSerial): 【{dynamic_ci_serial}】")
-        
     except Exception as e:
         print(f" 🚨 [網路層崩潰]: {e}")
         return
 
-    time.sleep(1.5)
+    time.sleep(1.5) # 給予 Staging/沙盒環境充足的緩衝物理時間
 
-    # --- 階段二：POST 餐廳消費住掛房間帳 (使用剛剛繼承的測資) ---
-    print(f"\n[Phase 2] 🤖 機器人抵達房間，住客簽收！發動 POST 實時入帳...")
-    post_url = config.REAL_URL_BR_ROOM_PAY if USE_REAL else f"{config.NGROK_BASE_URL}/external/vendor-sync-data/room-pay"
-    unique_order_nos = f"BR-ORD-{datetime.now().strftime('%m%d%H%M%S')}"
+    # ----------------------------------------------------------------
+    # 🎯 階段二：房務部衍生入帳「獨立房務備品入帳」 (POST)
+    # ----------------------------------------------------------------
+    print(f"\n[Phase 2] 🚀 模擬機器人送達，發動 POST 房務備品入帳... (對齊情境房號: {test_room})")
     
-    # 🌟 完美將第一階段動態撈到的房號與住客序號，無縫灌入 Payload！
-    room_pay_payload = {
-        "roomPayMain": {
-            "ciSerial": dynamic_ci_serial, # 💡 動態繼承
-            "roomNos": target_room,         # 💡 動態繼承
-            "orderNos": unique_order_nos,
-            "needTransfer": "N",
-            "rsptCode": "BUFFET",
-            "rsptName": "自助餐",
-            "mTimeCode": "LUNCH",
-            "mTimeName": "午餐",
-            "deskNos": "ROBOT-101",
-            "payAmount": 680.00, # 情境一模擬送一客豪華簡餐
-            "custType": "ADULT",
-            "acuAmount": 0.00,
-            "precreditTotal": 0.00
-        },
-        "roomPayDetail": [
-            {"sequenceNos": 1, "productName": "機器人派送頂級牛排", "orderQuantity": 1, "specialAmount": 680.00, "precreditAmount": 0.00}
+    post_url = config.REAL_URL_BR_BILLING if USE_REAL else f"{config.NGROK_BASE_URL}/external/vendor-sync-data/room-billing"
+    
+    # 💡 數據流對齊：徹底拔除不相關的 2403 房號，自動繼承 Phase 1 的 test_room
+    billing_payload = {
+        "roomNos": str(test_room),  # 🎯 完美對齊同一個業務情境
+        "items": [
+            {
+                "seqNos": 1,
+                "productNos": "M001",
+                "orderQuantity": 1
+            }
         ]
     }
     
-    print(f" 🚀 正在發射過帳 Payload，憑證單號: {unique_order_nos}...")
+    print(f" 📡 目標網址: {post_url}")
+    print(f" 📋 注入 Params: {BASE_PARAMS}")
+    print(f" 📦 砸入 Body: {billing_payload}")
+    
     try:
-        res2 = requests.post(post_url, params=BASE_PARAMS, json=room_pay_payload, headers=HEADERS, timeout=8)
-        print(f" 📥 [Server 回應碼]: HTTP {res2.status_code}")
-        if res2.status_code == 200:
-            print(f" 🟢 [情境一通關成功] 德安會計傳票單號: 【{res2.json().get('acctNos')}】")
+        res2 = requests.post(post_url, params=BASE_PARAMS, json=billing_payload, headers=HEADERS, timeout=8)
+        print(f" 📥 [德安回應碼]: HTTP {res2.status_code}")
+        
+        # 🎯 核心傳輸優化點：相容德安的 200 (有回執) 與 204 (無內容但落帳成功) 雙軌旗標
+        if res2.status_code in [200, 204]:
+            print(f" 🟢 [房務入帳驗證成功] 實時扣款完美通關！")
+            print(f"   ℹ️ 財務稽核狀態: HTTP {res2.status_code} 代表德安已成功受理、拆帳並過帳至房號 【{test_room}】。")
         else:
-            print(f" 🛑 [落帳失敗]: {res2.text}")
+            print(f" 🛑 [房務入帳失敗]: {res2.text if res2.text else '德安回絕，且未提供錯誤內文'}")
     except Exception as e:
-        print(f" 🚨 [過帳網路崩潰]: {e}")
+        print(f" 🚨 [網路層崩潰]: {e}")
 
 if __name__ == "__main__":
-    # ⚡ 執行測試：拿你在 Swagger 跑通的 101 真實房號開砲，體驗 100% 動態繼承的流暢感
-    run_scenario_one_robot_delivery(target_room="104")
+    run_smart_hotel_scenario()
