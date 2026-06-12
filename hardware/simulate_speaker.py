@@ -120,13 +120,32 @@ def run_all_expanded_scenarios():
     res = execute_request("GET", URL_ROOM_NOS, params={**BASE_PARAMS, "keyword": roomNos})
     if res and res.status_code == 200:
         logger.info(f"   Phase 1 (GET /room-nos) 通關。")
+        
+        response_json = res.json()
+        # 🎯 同步優化：精準雙層扒皮，直擊真實雲端深處的憑證，確保全腳本邏輯大一統
+        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        
+        logger.info(f"   🔑 [真實雲端資料對齊] 成功提取並儲存過帳憑證 (ciSerial): 【{real_ci_serial}】")
         time.sleep(0.5)
         
-        payload = {"roomNos": roomNos, "items": [{"seqNos": 1, "productNos": productCode, "orderQuantity": 1}]}
+        # 💡 備品過帳 Payload (完美對齊德安 room-billing 規格書)
+        payload = {
+            "roomNos": str(roomNos), 
+            "items": [
+                {
+                    "seqNos": 1, 
+                    "productNos": str(productCode),  # 從數據池抽取的 M001
+                    "orderQuantity": 1
+                }
+            ]
+        }
+        
         res_post = execute_request("POST", URL_ROOM_BILLING, params=BASE_PARAMS, json_body=payload)
         if res_post and res_post.status_code in [200, 204]:
             logger.info(f"   🟢 Phase 2 (POST /room-billing) 成功通關！德安回應碼: {res_post.status_code}")
             dump_success_payload_to_json("Scenario_1_Room_Nos_To_Billing", "/room-billing", payload)
+        else:
+            logger.error(f"   🛑 Phase 2 房務備品過帳遭到德安回絕。回應碼: {res_post.status_code if res_post else '無'}")
 
     # ----------------------------------------------------------------
     # 🎯 情境 2: GET room-nos --> POST room-pay (房號查驗 ➔ 餐廳消費住掛)
@@ -137,50 +156,37 @@ def run_all_expanded_scenarios():
         logger.info(f"   Phase 1 (GET /room-nos) 通關。")
         
         response_json = res.json()
-        
-        # 🎯 標準路徑提取：因為兩端結構 100% 仿照文件對齊，直接獲取 data[0] 的 checkInSerial
-        # 🎯 安全路徑提取：兼容 List、Dict 異常回傳結構，並加上安全防禦
-        raw_data = response_json.get("data", [])
-        real_ci_serial = "20260605000001"  # 預設保底憑證
-
-        if isinstance(raw_data, list) and len(raw_data) > 0:
-            first_node = raw_data[0]
-            if isinstance(first_node, dict):
-                real_ci_serial = first_node.get("checkInSerial", real_ci_serial)
-        elif isinstance(raw_data, dict):
-            # 防禦機制：萬一後端直接把大物件塞在 data 欄位而不是 Array
-            real_ci_serial = raw_data.get("checkInSerial", real_ci_serial)
-        else:
-            logger.warning(f"   ⚠️ [結構異常] 收到未預期的 data 型態: {type(raw_data)}, 原始內容: {response_json}")
+        # 🎯 核心能力展現：精準雙層扒皮，直接直擊真實雲端深處的憑證！
+        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
             
+        logger.info(f"   🔑 [真實雲端資料對齊] 成功提取並繼承過帳憑證 (ciSerial): 【{real_ci_serial}】")
         time.sleep(0.5)
         
         order_nos = f"BR-S2-{datetime.now().strftime('%m%d%H%M%S')}"
         
-        # 🌟 構造 100% 仿照最新補足規格書、編碼限制與碼數限制的 Payload 結構
         payload = {
             "roomPayMain": {
-                "ciSerial": str(real_ci_serial),       # 💡 精準填入 GET 拿到的真實凭證
-                "roomNos": str(roomNos),               # String(6) 房號
-                "orderNos": str(order_nos),            # String(21) 唯一單號
-                "needTransfer": "N",                   # String(1) 固定填 N
-                "rsptCode": str(rsptCode),             # String(4) 銷售點代號 (限 4 碼：BUFF)
-                "rsptName": str(rsptName),             # String(10) 自助餐
-                "mTimeCode": "LCH",                    # String(4) 餐廳代號 (限 4 碼：LCH)
-                "mTimeName": "午餐",                   # String(10)
-                "deskNos": "A01",                      # String(10) 桌號
-                "payAmount": 500,                      # Number 住掛總金額
-                "acuAmount": 0,                        # Number 可積點金額
-                "precreditTotal": 0,                   # Number 內含代支總額
-                "custType": "5"                        # String(1) 規格書強制要求填 "5"
+                "ciSerial": str(real_ci_serial),       # 💡 實時注入真實憑證: 20260607000010
+                "roomNos": str(roomNos),               
+                "orderNos": str(order_nos),            
+                "needTransfer": "N",                   
+                "rsptCode": str(rsptCode),             
+                "rsptName": str(rsptName),             
+                "mTimeCode": "LCH",                    
+                "mTimeName": "午餐",                   
+                "deskNos": "A01",                      
+                "payAmount": 500,                      
+                "acuAmount": 0,                        
+                "precreditTotal": 0,                   
+                "custType": "5"                        
             },
             "roomPayDetail": [
                 {
-                    "sequenceNos": 1,                  # Integer 從 1 開始
-                    "productName": "牛排",              # String(30)
-                    "orderQuantity": 1,                # Integer 數量
-                    "specialAmount": 500,              # Number 金額小計
-                    "precreditAmount": 0               # Number 代支金額
+                    "sequenceNos": 1,                  
+                    "productName": "牛排",              
+                    "orderQuantity": 1,                
+                    "specialAmount": 500,              
+                    "precreditAmount": 0               
                 }
             ]
         }
@@ -189,8 +195,6 @@ def run_all_expanded_scenarios():
         if res_post and res_post.status_code in [200, 204]:
             logger.info(f"   🟢 Phase 2 (POST /room-pay) 成功通關！德安回應碼: {res_post.status_code}")
             dump_success_payload_to_json("Scenario_2_Room_Nos_To_Pay", "/room-pay", payload)
-        else:
-            logger.error(f"   🛑 Phase 2 遭到德安回絕。回應碼: {res_post.status_code if res_post else '無'}")
 
     # ----------------------------------------------------------------
     # 🎯 情境 3: GET room-nos --> POST room-pay --> POST room-pay-cancel (消費 ➔ 立即沖正作廢)
@@ -201,31 +205,21 @@ def run_all_expanded_scenarios():
         logger.info(f"   Phase 1 (GET /room-nos) 通關。")
         
         response_json = res.json()
-        
-        # 🎯 安全憑證提取（沿用情境 2 成功的防禦邏輯）
-        raw_data = response_json.get("data", [])
-        real_ci_serial = "20260605000001"
-        if isinstance(raw_data, list) and len(raw_data) > 0:
-            first_node = raw_data[0]
-            if isinstance(first_node, dict):
-                real_ci_serial = first_node.get("checkInSerial", real_ci_serial)
-        elif isinstance(raw_data, dict):
-            real_ci_serial = raw_data.get("checkInSerial", real_ci_serial)
+        # 🎯 精準雙層扒皮
+        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
             
-        logger.info(f"   🔑 [憑證繼承] 成功取得過帳憑證 (ciSerial): {real_ci_serial}")
+        logger.info(f"   🔑 [真實雲端資料對齊] 成功提取並繼承過帳憑證 (ciSerial): 【{real_ci_serial}】")
         time.sleep(0.5)
         
-        # 動態生成這次測試的唯一單號
         order_nos = f"BR-S3-{datetime.now().strftime('%m%d%H%M%S')}"
         
-        # 1. 發動正向掛帳 POST /room-pay
         payload_pay = {
             "roomPayMain": {
-                "ciSerial": str(real_ci_serial),
-                "roomNos": str(roomNos),
-                "orderNos": str(order_nos),
+                "ciSerial": str(real_ci_serial),       
+                "roomNos": str(roomNos), 
+                "orderNos": str(order_nos), 
                 "needTransfer": "N",
-                "rsptCode": str(rsptCode),
+                "rsptCode": str(rsptCode), 
                 "rsptName": str(rsptName),
                 "mTimeCode": "LCH",
                 "mTimeName": "午餐",
@@ -236,138 +230,256 @@ def run_all_expanded_scenarios():
                 "custType": "5"
             },
             "roomPayDetail": [
-                {
-                    "sequenceNos": 1,
-                    "productName": "特製飲品",
-                    "orderQuantity": 1,
-                    "specialAmount": 120,
-                    "precreditAmount": 0
-                }
+                {"sequenceNos": 1, "productName": "特製飲品", "orderQuantity": 1, "specialAmount": 120, "precreditAmount": 0}
             ]
         }
-        
         res_pay = execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_pay)
         
         if res_pay and res_pay.status_code in [200, 204]:
-            logger.info(f"   🟢 Phase 2 (POST /room-pay) 掛帳完成。德安回應: {res_pay.json() if res_pay.status_code==200 else '204'}")
-            logger.info(f"   ⏳ 模擬現場客訴/點錯單，緊接著發動紅字反向平衡...")
-            time.sleep(1) # 停留 1 秒模擬真實體感
+            logger.info(f"   Phase 2 (POST /room-pay) 掛帳完成。緊接著發動紅字反向平衡...")
+            time.sleep(1)
             
-            # 2. 發動反向沖正 POST /room-pay-cancel (注意：這支 API 規格通常是透過 Query String 帶入 orderNos)
             res_cancel = execute_request("POST", URL_ROOM_PAY_CANCEL, params={**BASE_PARAMS, "orderNos": order_nos})
-            
             if res_cancel and res_cancel.status_code in [200, 204]:
                 logger.info(f"   🟢 Phase 3 (POST /room-pay-cancel) 成功通關！交易已完全作廢。")
-                
-                # 自動錄入 JSON 戰績表，格式完全收容
-                dump_success_payload_to_json(
-                    "Scenario_3_Room_Nos_Pay_And_Cancel", 
-                    "/room-pay-cancel", 
-                    {
-                        "originalOrderNos": order_nos,
-                        "cancelResponse": res_cancel.json() if res_cancel.status_code == 200 else "204"
-                    }
-                )
-            else:
-                logger.error(f"   🛑 Phase 3 沖正失敗。回應碼: {res_cancel.status_code if res_cancel else '無'}")
-        else:
-            logger.error(f"   🛑 Phase 2 正向掛帳即遭回絕，無法執行 Phase 3。")
+                dump_success_payload_to_json("Scenario_3_Room_Nos_Pay_And_Cancel", "/room-pay-cancel", {"cancelledOrderNos": order_nos})
 
-    # # ----------------------------------------------------------------
-    # # 🎯 情境 4: GET room-nos --> POST room-pay --> POST room-pay-cancel --> POST room-pay (扣款 ➔ 作廢 ➔ 重新下單)
-    # # ----------------------------------------------------------------
-    # logger.info("\n【情境 4】語音房號查驗 ➔ 餐廳住掛 ➔ 沖正作廢 ➔ 重新更正下單複利交易流")
-    # res = execute_request("GET", URL_ROOM_NOS, params={**BASE_PARAMS, "keyword": room_101})
-    # if res and res.status_code == 200:
-    #     logger.info(f"   Phase 1 通關。")
-    #     order_nos_old = f"BR-S4X-{datetime.now().strftime('%m%d%H%M%S')}"
-    #     order_nos_new = f"BR-S4NEW-{datetime.now().strftime('%m%d%H%M%S')}"
+    # ----------------------------------------------------------------
+    # 🎯 情境 4: GET room-nos --> POST room-pay --> POST room-pay-cancel --> POST room-pay (扣款 ➔ 作廢 ➔ 重新下單)
+    # ----------------------------------------------------------------
+    logger.info("\n【情境 4】語音房號查驗 ➔ 餐廳住掛 ➔ 沖正作廢 ➔ 重新更正下單複利交易流")
+    res = execute_request("GET", URL_ROOM_NOS, params={**BASE_PARAMS, "keyword": roomNos})
+    if res and res.status_code == 200:
+        logger.info(f"   Phase 1 (GET /room-nos) 通關。")
         
-    #     # 扣款
-    #     payload_1 = {"roomPayMain": {"ciSerial": f"DYNAMIC-CI-{room_101}", "roomNos": room_101, "orderNos": order_nos_old, "rsptCode": product_buffet, "payAmount": 200.00}, "roomPayDetail": []}
-    #     execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_1)
-    #     # 作廢
-    #     execute_request("POST", URL_ROOM_PAY_CANCEL, params={**BASE_PARAMS, "orderNos": order_nos_old})
-    #     # 重新扣款
-    #     payload_2 = {"roomPayMain": {"ciSerial": f"DYNAMIC-CI-{room_101}", "roomNos": room_101, "orderNos": order_nos_new, "rsptCode": product_buffet, "payAmount": 250.00}, "roomPayDetail": [{"sequenceNos": 1, "productName": "更正品項", "specialAmount": 250.00}]}
-    #     res_final = execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_2)
-    #     if res_final and res_final.status_code in [200, 204]:
-    #         logger.info(f"   🟢 Phase 4 (POST /room-pay 重製單) 成功通關！新單號: {order_nos_new}")
-    #         dump_success_payload_to_json("Scenario_4_ReOrder_Lifecycle", "/room-pay-reorder", payload_2)
+        response_json = res.json()
+        # 🎯 精準雙層扒皮
+        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+            
+        logger.info(f"   🔑 [真實雲端資料對齊] 成功提取並繼承過帳憑證 (ciSerial): 【{real_ci_serial}】")
+        
+        order_nos_old = f"BR-S4X-{datetime.now().strftime('%m%d%H%M%S')}"
+        order_nos_new = f"BR-S4NEW-{datetime.now().strftime('%m%d%H%M%S')}"
+        
+        # 扣款
+        payload_1 = {
+            "roomPayMain": {
+                "ciSerial": str(real_ci_serial),       
+                "roomNos": str(roomNos), 
+                "orderNos": str(order_nos_old), 
+                "needTransfer": "N",
+                "rsptCode": str(rsptCode), 
+                "payAmount": 200,
+                "custType": "5"
+            }, 
+            "roomPayDetail": []
+        }
+        execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_1)
+        time.sleep(0.5)
+        
+        # 作廢
+        execute_request("POST", URL_ROOM_PAY_CANCEL, params={**BASE_PARAMS, "orderNos": order_nos_old})
+        time.sleep(0.5)
+        
+        # 重新扣款
+        payload_2 = {
+            "roomPayMain": {
+                "ciSerial": str(real_ci_serial),       
+                "roomNos": str(roomNos), 
+                "orderNos": str(order_nos_new), 
+                "needTransfer": "N",
+                "rsptCode": str(rsptCode), 
+                "rsptName": str(rsptName),
+                "mTimeCode": "LCH",
+                "mTimeName": "午餐",
+                "deskNos": "A04",
+                "payAmount": 250,
+                "acuAmount": 0,
+                "precreditTotal": 0,
+                "custType": "5"
+            }, 
+            "roomPayDetail": [
+                {"sequenceNos": 1, "productName": "更正品項", "orderQuantity": 1, "specialAmount": 250, "precreditAmount": 0}
+            ]
+        }
+        res_final = execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_2)
+        if res_final and res_final.status_code in [200, 204]:
+            logger.info(f"   🟢 Phase 4 (POST /room-pay 重製單) 成功通關！新單號: {order_nos_new}")
+            dump_success_payload_to_json("Scenario_4_ReOrder_Lifecycle", "/room-pay-reorder", payload_2)
 
-    # # ----------------------------------------------------------------
-    # # 🎯 情境 5: GET mifare-nos --> POST room-billing (實體前台刷卡 ➔ 房務備品扣款)
-    # # ----------------------------------------------------------------
-    # logger.info("\n【情境 5】實體前台房卡卡號逆查 ➔ 房務付費備品獨立過帳流水線")
-    # res = execute_request("GET", URL_MIFARE_NOS, params={**BASE_PARAMS, "keyword": card_123})
-    # if res and res.status_code == 200:
-    #     logger.info(f"   Phase 1 (GET /mifare-nos 逆查) 通關。")
-    #     time.sleep(0.5)
-        
-    #     payload = {"roomNos": room_101, "items": [{"seqNos": 1, "productNos": product_m001, "orderQuantity": 2}]}
-    #     res_post = execute_request("POST", URL_ROOM_BILLING, params=BASE_PARAMS, json_body=payload)
-    #     if res_post and res_post.status_code in [200, 204]:
-    #         logger.info(f"   🟢 Phase 2 (POST /room-billing 經卡號) 成功通關！")
-    #         dump_success_payload_to_json("Scenario_5_Mifare_To_Billing", "/room-billing", payload)
+    # 💳 房卡逆查流流水線大一統 (情境 5 ~ 8)
+    # 🌟 規範對齊：動態生成符合德安最新規格的 6 碼大寫英數隨機房卡號 (E.g., "A1B2C3D4")
+    import secrets
+    import string
+    alphabet = string.ascii_uppercase + string.digits
+    dynamic_card_nos = ''.join(secrets.choice(alphabet) for _ in range(6))
+    
+    logger.info(f"\n⚡ ===================================================")
+    logger.info(f"⚡  進入房卡逆查流戰場 ➔ 模擬現場感應卡號: 【{dynamic_card_nos}】")
+    logger.info(f"⚡ ===================================================")
 
-    # # ----------------------------------------------------------------
-    # # 🎯 情境 6: GET mifare-nos --> POST room-pay (房卡逆查 ➔ 餐廳住掛)
-    # # ----------------------------------------------------------------
-    # logger.info("\n【情境 6】實體前台房卡卡號逆查 ➔ 餐廳點餐消費住掛房間帳流水線")
-    # res = execute_request("GET", URL_MIFARE_NOS, params={**BASE_PARAMS, "keyword": card_123})
-    # if res and res.status_code == 200:
-    #     logger.info(f"   Phase 1 (GET /mifare-nos 逆查) 通關。")
-    #     time.sleep(0.5)
+    # ----------------------------------------------------------------
+    # 🎯 情境 5: GET mifare-nos --> POST room-billing (實體前台刷卡 ➔ 房務備品扣款)
+    # ----------------------------------------------------------------
+    logger.info("\n【情境 5】實體前台房卡卡號逆查 ➔ 房務付費備品獨立過帳流水線")
+    res = execute_request("GET", URL_MIFARE_NOS, params={**BASE_PARAMS, "keyword": dynamic_card_nos})
+    if res and res.status_code == 200:
+        logger.info(f"   Phase 1 (GET /mifare-nos 逆查) 通關。")
         
-    #     order_nos = f"BR-S6-{datetime.now().strftime('%m%d%H%M%S')}"
-    #     payload = {
-    #         "roomPayMain": {"ciSerial": f"DYNAMIC-CI-{room_101}", "roomNos": room_101, "orderNos": order_nos, "rsptCode": product_buffet, "payAmount": 990.00},
-    #         "roomPayDetail": [{"sequenceNos": 1, "productName": "豪華雙人套餐", "orderQuantity": 1, "specialAmount": 990.00}]
-    #     }
-    #     res_post = execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload)
-    #     if res_post and res_post.status_code in [200, 204]:
-    #         logger.info(f"   🟢 Phase 2 (POST /room-pay 經卡號) 成功通關！")
-    #         dump_success_payload_to_json("Scenario_6_Mifare_To_Room_Pay", "/room-pay", payload)
+        response_json = res.json()
+        # 🎯 核心能力：相容德安真實雲端雙層外殼，精準逆查提取卡片歸屬房號
+        target_room_nos = response_json["data"]["data"][0]["roomNos"]
+        
+        logger.info(f"   🔑 [真實雲端資料對齊] 房卡成功識別 ➔ 歸屬房號: 【{target_room_nos}】")
+        time.sleep(0.5)
+        
+        payload_billing = {
+            "roomNos": str(target_room_nos), 
+            "items": [{"seqNos": 1, "productNos": str(productCode), "orderQuantity": 2}]
+        }
+        res_post = execute_request("POST", URL_ROOM_BILLING, params=BASE_PARAMS, json_body=payload_billing)
+        if res_post and res_post.status_code in [200, 204]:
+            logger.info(f"   🟢 Phase 2 (POST /room-billing 經卡號) 成功過帳！")
+            dump_success_payload_to_json("Scenario_5_Mifare_To_Billing", "/room-billing", payload_billing)
 
-    # # ----------------------------------------------------------------
-    # # 🎯 情境 7: GET mifare-nos --> POST room-pay --> POST room-pay-cancel
-    # # ----------------------------------------------------------------
-    # logger.info("\n【情境 7】房卡卡號逆查 ➔ 餐廳住掛 ➔ 現場臨時退點紅字作廢流水線")
-    # res = execute_request("GET", URL_MIFARE_NOS, params={**BASE_PARAMS, "keyword": card_123})
-    # if res and res.status_code == 200:
-    #     logger.info(f"   Phase 1 通關。")
-    #     order_nos = f"BR-S7-{datetime.now().strftime('%m%d%H%M%S')}"
-    #     payload_pay = {"roomPayMain": {"ciSerial": f"DYNAMIC-CI-{room_101}", "roomNos": room_101, "orderNos": order_nos, "rsptCode": product_buffet, "payAmount": 300.00}, "roomPayDetail": []}
+    # ----------------------------------------------------------------
+    # 🎯 情境 6: GET mifare-nos --> POST room-pay (房卡逆查 ➔ 餐廳住掛)
+    # ----------------------------------------------------------------
+    logger.info("\n【情境 6】實體前台房卡卡號逆查 ➔ 餐廳點餐消費住掛房間帳流水線")
+    res = execute_request("GET", URL_MIFARE_NOS, params={**BASE_PARAMS, "keyword": dynamic_card_nos})
+    if res and res.status_code == 200:
+        logger.info(f"   Phase 1 (GET /mifare-nos 逆查) 通關。")
         
-    #     if execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_pay).status_code in [200, 204]:
-    #         time.sleep(0.5)
-    #         res_cancel = execute_request("POST", URL_ROOM_PAY_CANCEL, params={**BASE_PARAMS, "orderNos": order_nos})
-    #         if res_cancel and res_cancel.status_code in [200, 204]:
-    #             logger.info(f"   🟢 Phase 3 (POST /room-pay-cancel 經卡號) 成功作廢！")
-    #             dump_success_payload_to_json("Scenario_7_Mifare_Pay_And_Cancel", "/room-pay-cancel", {"cancelledOrderNos": order_nos})
+        response_json = res.json()
+        # 🎯 雙層扒皮：同時繼承房號與餐廳掛帳不可或缺的 ciSerial 憑證！
+        target_room_nos = response_json["data"]["data"][0]["roomNos"]
+        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        
+        logger.info(f"   🔑 [真實雲端資料對齊] 成功繼承 ➔ 房號: 【{target_room_nos}】 | 憑證(ciSerial): 【{real_ci_serial}】")
+        time.sleep(0.5)
+        
+        order_nos = f"BR-S6-{datetime.now().strftime('%m%d%H%M%S')}"
+        payload = {
+            "roomPayMain": {
+                "ciSerial": str(real_ci_serial), 
+                "roomNos": str(target_room_nos), 
+                "orderNos": str(order_nos), 
+                "needTransfer": "N", 
+                "rsptCode": str(rsptCode), 
+                "rsptName": str(rsptName), 
+                "mTimeCode": "LCH", 
+                "mTimeName": "午餐", 
+                "deskNos": "A03", 
+                "payAmount": 990, 
+                "acuAmount": 0, 
+                "precreditTotal": 0, 
+                "custType": "5"
+            },
+            "roomPayDetail": [
+                {"sequenceNos": 1, "productName": "豪華雙人套餐", "orderQuantity": 1, "specialAmount": 990, "precreditAmount": 0}
+            ]
+        }
+        res_post = execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload)
+        if res_post and res_post.status_code in [200, 204]:
+            logger.info(f"   🟢 Phase 2 (POST /room-pay 經卡號) 成功過帳！")
+            dump_success_payload_to_json("Scenario_6_Mifare_To_Room_Pay", "/room-pay", payload)
 
-    # # ----------------------------------------------------------------
-    # # 🎯 情境 8: GET mifare-nos --> POST room-pay --> POST room-pay-cancel --> POST room-pay
-    # # ----------------------------------------------------------------
-    # logger.info("\nblock 【情境 8】房卡卡號逆查 ➔ 餐廳住掛 ➔ 現場退點作廢 ➔ 重新櫃檯更正下單完整生命週期流")
-    # res = execute_request("GET", URL_MIFARE_NOS, params={**BASE_PARAMS, "keyword": card_123})
-    # if res and res.status_code == 200:
-    #     logger.info(f"   Phase 1 通關。")
-    #     order_nos_old = f"BR-S8X-{datetime.now().strftime('%m%d%H%M%S')}"
-    #     order_nos_new = f"BR-S8NEW-{datetime.now().strftime('%m%d%H%M%S')}"
+    # ----------------------------------------------------------------
+    # 🎯 情境 7: GET mifare-nos --> POST room-pay --> POST room-pay-cancel (房卡逆查 ➔ 餐廳住掛 ➔ 現場臨時退點紅字作廢)
+    # ----------------------------------------------------------------
+    logger.info("\n【情境 7】房卡卡號逆查 ➔ 餐廳住掛 ➔ 現場臨時退點紅字作廢流水線")
+    res = execute_request("GET", URL_MIFARE_NOS, params={**BASE_PARAMS, "keyword": dynamic_card_nos})
+    if res and res.status_code == 200:
+        logger.info(f"   Phase 1 (GET /mifare-nos 逆查) 通關。")
         
-    #     execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body={"roomPayMain": {"ciSerial": f"DYNAMIC-CI-{room_101}", "roomNos": room_101, "orderNos": order_nos_old, "rsptCode": product_buffet, "payAmount": 50.00}, "roomPayDetail": []})
-    #     execute_request("POST", URL_ROOM_PAY_CANCEL, params={**BASE_PARAMS, "orderNos": order_nos_old})
+        response_json = res.json()
+        target_room_nos = response_json["data"]["data"][0]["roomNos"]
+        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
         
-    #     payload_final = {"roomPayMain": {"ciSerial": f"DYNAMIC-CI-{room_101}", "roomNos": room_101, "orderNos": order_nos_new, "rsptCode": product_buffet, "payAmount": 55.00}, "roomPayDetail": [{"sequenceNos": 1, "productName": "修正差額品項", "specialAmount": 55.00}]}
-    #     res_final = execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_final)
-    #     if res_final and res_final.status_code in [200, 204]:
-    #         logger.info(f"   🟢 Phase 4 (POST /room-pay 終極更正單) 成功通關！")
-    #         dump_success_payload_to_json("Scenario_8_Mifare_Full_Lifecycle", "/room-pay", payload_final)
+        logger.info(f"   🔑 [真實雲端資料對齊] 成功繼承 ➔ 房號: 【{target_room_nos}】 | 憑證(ciSerial): 【{real_ci_serial}】")
+        time.sleep(0.5)
+        
+        order_nos = f"BR-S7-{datetime.now().strftime('%m%d%H%M%S')}"
+        payload_pay = {
+            "roomPayMain": {
+                "ciSerial": str(real_ci_serial), 
+                "roomNos": str(target_room_nos), 
+                "orderNos": str(order_nos), 
+                "needTransfer": "N",
+                "rsptCode": str(rsptCode), 
+                "payAmount": 300, 
+                "custType": "5"
+            }, 
+            "roomPayDetail": []
+        }
+        
+        if execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_pay).status_code in [200, 204]:
+            logger.info(f"   Phase 2 正向掛帳完成。緊接著發動現場紅字反向平衡作廢...")
+            time.sleep(0.5)
+            
+            res_cancel = execute_request("POST", URL_ROOM_PAY_CANCEL, params={**BASE_PARAMS, "orderNos": order_nos})
+            if res_cancel and res_cancel.status_code in [200, 204]:
+                logger.info(f"   🟢 Phase 3 (POST /room-pay-cancel 經卡號) 成功反向作廢！交易已完全抹平。")
+                dump_success_payload_to_json("Scenario_7_Mifare_Pay_And_Cancel", "/room-pay-cancel", {"cancelledOrderNos": order_nos})
 
-    # logger.info("\n🏁 ===================================================")
-    # logger.info("🏁  8 大擴充回歸情境流水線全數連發完賽！請至 tests_data_pool 查收成功 Payload 戰績。")
-    # logger.info("🏁 ===================================================")
+    # ----------------------------------------------------------------
+    # 🎯 情境 8: GET mifare-nos --> POST room-pay --> POST room-pay-cancel --> POST room-pay (房卡逆查全生命週期更正流)
+    # ----------------------------------------------------------------
+    logger.info("\n【情境 8】房卡卡號逆查 ➔ 餐廳住掛 ➔ 現場退點作廢 ➔ 重新櫃檯更正下單完整生命週期流")
+    res = execute_request("GET", URL_MIFARE_NOS, params={**BASE_PARAMS, "keyword": dynamic_card_nos})
+    if res and res.status_code == 200:
+        logger.info(f"   Phase 1 (GET /mifare-nos 逆查) 通關。")
+        
+        response_json = res.json()
+        target_room_nos = response_json["data"]["data"][0]["roomNos"]
+        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        
+        logger.info(f"   🔑 [真實雲端資料對齊] 成功繼承 ➔ 房號: 【{target_room_nos}】 | 憑證(ciSerial): 【{real_ci_serial}】")
+        
+        order_nos_old = f"BR-S8X-{datetime.now().strftime('%m%d%H%M%S')}"
+        order_nos_new = f"BR-S8NEW-{datetime.now().strftime('%m%d%H%M%S')}"
+        
+        # 1. 錯誤下單
+        payload_old = {
+            "roomPayMain": {"ciSerial": str(real_ci_serial), "roomNos": str(target_room_nos), "orderNos": str(order_nos_old), "rsptCode": str(rsptCode), "payAmount": 50, "custType": "5"}, 
+            "roomPayDetail": []
+        }
+        execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_old)
+        time.sleep(0.5)
+        
+        # 2. 立即沖正
+        execute_request("POST", URL_ROOM_PAY_CANCEL, params={**BASE_PARAMS, "orderNos": order_nos_old})
+        time.sleep(0.5)
+        
+        # 3. 重新建立正確金額單據
+        payload_final = {
+            "roomPayMain": {
+                "ciSerial": str(real_ci_serial), 
+                "roomNos": str(target_room_nos), 
+                "orderNos": str(order_nos_new), 
+                "needTransfer": "N",
+                "rsptCode": str(rsptCode), 
+                "rsptName": str(rsptName), 
+                "mTimeCode": "LCH", 
+                "mTimeName": "午餐", 
+                "deskNos": "A01", 
+                "payAmount": 55, 
+                "acuAmount": 0, 
+                "precreditTotal": 0, 
+                "custType": "5"
+            }, 
+            "roomPayDetail": [
+                {"sequenceNos": 1, "productName": "修正差額品項", "orderQuantity": 1, "specialAmount": 55, "precreditAmount": 0}
+            ]
+        }
+        res_final = execute_request("POST", URL_ROOM_PAY, params=BASE_PARAMS, json_body=payload_final)
+        if res_final and res_final.status_code in [200, 204]:
+            logger.info(f"   🟢 Phase 4 (POST /room-pay 終極更正單) 成功通關！新單號: {order_nos_new}")
+            dump_success_payload_to_json("Scenario_8_Mifare_Full_Lifecycle", "/room-pay", payload_final)
+
+    logger.info("\n🏁 ===================================================")
+    logger.info("🏁  小美犀 8 大核心擴充回歸情境流水線全數連發完賽！")
+    logger.info("🏁 ===================================================")
 
 if __name__ == "__main__":
     run_all_expanded_scenarios()

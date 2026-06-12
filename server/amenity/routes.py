@@ -21,9 +21,7 @@ mock_card_mapping_db = {"123456789": "101"}
 mock_inhouse_db = {}
 
 def initialize_room_sandbox_node(room_nos: str) -> dict:
-    """
-    🎯 核心重構：在 GET 觸發時或初始化時，建立 100% 相容 POST 結構的沙盒節點
-    """
+    """🎯 核心重構：在 GET 觸發時或初始化時，建立 100% 相容 POST 結構的沙盒節點"""
     return {
         # --- GET /room-nos 基礎欄位 ---
         "guestStatus": "O",
@@ -87,11 +85,14 @@ def query_guest_by_mifare_nos():
     if not g.third_party:
         return jsonify({"code": "400", "message": "Missing thirdParty parameter."}), 400
 
-    card_key = str(g.keyword).strip() if g.keyword else "123456789"
+    # 🎯 接收發射端傳過來的 8 碼動態大寫英數卡號
+    card_key = str(g.keyword).strip() if g.keyword else "A1B2C3D4"
+    
+    # 如果 mock_card_mapping_db 查不到，就動態綁定到 101 房，確保測試暢行無阻
     mapped_room = mock_card_mapping_db.get(card_key, "101")
-    logger.info(f"📥 [沙盒流量] 房卡卡號逆查 ➔ 卡號: 【{card_key}】 ➔ 映射房號: 【{mapped_room}】")
+    logger.info(f"📥 [沙盒流量] 房卡卡號逆查 ➔ 動態卡號: 【{card_key}】 ➔ 動態映射房號: 【{mapped_room}】")
 
-    # 🎯 規則要求：房卡逆查 GET 方法同樣一開始無條件初始化該房號暫存結構
+    # 執行初始化
     mock_inhouse_db[mapped_room] = initialize_room_sandbox_node(mapped_room)
 
     target_data = mock_inhouse_db[mapped_room]

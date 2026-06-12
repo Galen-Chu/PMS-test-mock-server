@@ -2,10 +2,7 @@
 from .base import BaseAmenityVendorStrategy
 
 class VendorBRAielloStrategy(BaseAmenityVendorStrategy):
-    """
-    小美犀策略層：全面仿照德安官方 API 規格。
-    實現單一情境（即用即拋）的傳輸資料處理，取消無謂的欄位轉換。
-    """
+    """小美犀策略層：全面仿照德安官方 API 規格。實現單一情境（即用即拋）的傳輸資料處理，取消無謂的欄位轉換。"""
     
     def transform_room_nos_query_response(self, sandbox_guest_dict):
         """🎯 單筆應對單筆：直接收取仿照 API 規格的內部 Dict，包裝 resultCode 外殼吐回"""
