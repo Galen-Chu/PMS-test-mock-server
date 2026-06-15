@@ -1,4 +1,4 @@
-# tests_localFullStackClose/test_waferlock_pipeline.py
+# tests_localFullStackClose/test_waferlock_liveam_pipeline.py
 import sys
 import os
 import secrets
@@ -19,6 +19,19 @@ if config.USE_REAL_SERVER:
     print("⚠️ 平行模擬測試應聚焦於本地沙盒，現已強制洗滌網址至 NGROK 沙盒環境...")
 
 BASE_URL = config.NGROK_BASE_URL
+
+def simulate_front_desk_issue_card():
+    url = f"{BASE_URL}/key-card-management/liveam/create-card"
+    payload = {
+        "ikey": "AUTO-ORD-1781247867",
+        "ikeySeqNos": 1,
+        "guestName": "Galen Galen_Amen",
+        "roomNos": "101",
+        "pmrId": "801F12A3D8CA"
+    }
+    res = requests.post(url, json=payload)
+    if res.status_code == 200:
+        print("🟢 CLI 模擬前台呼叫華豫寧客製製卡成功！資料已注入小美犀 Mapping DB。")
 
 def run_waferlock_test_pipeline():
     print("======================================================================")
