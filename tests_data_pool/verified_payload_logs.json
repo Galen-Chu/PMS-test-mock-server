@@ -1611,5 +1611,2524 @@
         }
       ]
     }
+  },
+  {
+    "timestamp": "2026-06-12 16:06:32",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:07:48",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:07:50",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612160749",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:07:53",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612160751"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:07:56",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612160753",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:11:11",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:11:12",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612161112",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:11:15",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612161113"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:11:18",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612161116",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:14:13",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:14:15",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612161414",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:14:19",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612161416"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:14:23",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612161419",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:18:45",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:18:47",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612161846",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:18:52",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612161850"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:18:58",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612161852",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:21:04",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:21:06",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612162105",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:21:11",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612162109"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:21:17",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612162111",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:22:27",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:22:28",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612162228",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:22:34",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612162231"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:22:37",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612162234",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:25:52",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:25:54",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612162553",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:25:59",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612162557"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:27:58",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:27:59",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612162759",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:28:04",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612162802"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:29:45",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:29:47",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612162946",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:29:52",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612162949"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:30:17",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612163017",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:30:23",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612163020"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:33:11",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:33:13",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612163312",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:33:18",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612163316"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:36:03",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:36:04",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612163604",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:36:10",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612163608"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:38:16",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:38:17",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612163817",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:38:22",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612163820"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:39:54",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:39:55",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612163955",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:40:00",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612163958"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:41:20",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:41:22",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612164121",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:41:27",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612164125"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 16:41:38",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612164133",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:01:52",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:01:53",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-0612170153",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:01:57",
+    "scenario": "Scenario_8_Mifare_Full_Lifecycle",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S8NEW-0612170155",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 55,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "修正差額品項",
+          "orderQuantity": 1,
+          "specialAmount": 55,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:04:36",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:04:38",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-0612170437",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:04:42",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-0612170441"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:04:48",
+    "scenario": "Scenario_8_Mifare_Full_Lifecycle",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S8NEW-0612170445",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 55,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "修正差額品項",
+          "orderQuantity": 1,
+          "specialAmount": 55,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:11:24",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:11:29",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-06121711-H6BB",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:11:37",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-06121711-1XP1"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:13:24",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:13:29",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-06121713-HFW6",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:13:37",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-06121713-FMJF"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:20:41",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:20:46",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-06121720-R28P",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:20:54",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-06121720-FDYY"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:22:57",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:22:58",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612172258",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:23:04",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612172302"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:23:15",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612172310",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:23:17",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:23:22",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-06121723-2NA3",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:23:30",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-06121723-FIGB"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:29:07",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:29:09",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612172908",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:29:15",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612172912"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:29:26",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612172921",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:29:28",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:29:32",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-06121729-18WN",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:29:41",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-06121729-UQZT"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:30:42",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:30:45",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612173044",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:30:50",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612173048"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:31:01",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612173056",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:31:03",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:31:07",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-06121731-SERO",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:31:15",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-06121731-PA5I"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:40:58",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:41:00",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612174059",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:41:05",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612174103"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:41:17",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612174111",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:41:19",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:41:23",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-06121741-GU5W",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:41:31",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-06121741-ADFY"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:44:09",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:44:10",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612174410",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:44:16",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612174414"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:44:28",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612174422",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:44:30",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:44:35",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-06121744-JEDS",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:44:43",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-06121744-GSQD"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:47:06",
+    "scenario": "Scenario_1_Room_Nos_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 1
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:47:07",
+    "scenario": "Scenario_2_Room_Nos_To_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S2-0612174707",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A01",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "牛排",
+          "orderQuantity": 1,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:47:12",
+    "scenario": "Scenario_3_Room_Nos_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S3-0612174710"
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:47:24",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0612174718",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:47:25",
+    "scenario": "Scenario_5_Mifare_To_Billing",
+    "endpoint": "/room-billing",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomNos": "101",
+      "items": [
+        {
+          "seqNos": 1,
+          "productNos": "M001",
+          "orderQuantity": 2
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:47:30",
+    "scenario": "Scenario_6_Mifare_To_Room_Pay",
+    "endpoint": "/room-pay",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S6-06121747-FKQ5",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A03",
+        "payAmount": 990,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "豪華雙人套餐",
+          "orderQuantity": 1,
+          "specialAmount": 990,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-12 17:47:37",
+    "scenario": "Scenario_7_Mifare_Pay_And_Cancel",
+    "endpoint": "/room-pay-cancel",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "cancelledOrderNos": "BR-S7-06121747-B3ZU"
+    }
+  },
+  {
+    "timestamp": "2026-06-15 08:41:19",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0615084113",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-15 08:43:51",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0615084342",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-15 08:45:07",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0615084458",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-15 09:04:10",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0615090400",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-15 09:06:42",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0615090633",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-15 09:22:38",
+    "scenario": "Scenario_4_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S4NEW-0615092229",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A04",
+        "payAmount": 250,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 1,
+          "specialAmount": 250,
+          "precreditAmount": 0
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-15 09:22:48",
+    "scenario": "Scenario_8_ReOrder_Lifecycle",
+    "endpoint": "/room-pay-reorder",
+    "environment": "REAL_ATHENA_CLOUD",
+    "payload": {
+      "roomPayMain": {
+        "ciSerial": "20260607000010",
+        "roomNos": "101",
+        "orderNos": "BR-S8NEW-06150922",
+        "needTransfer": "N",
+        "rsptCode": "2FFO",
+        "rsptName": "2F櫃台",
+        "mTimeCode": "LCH",
+        "mTimeName": "午餐",
+        "deskNos": "A05",
+        "payAmount": 500,
+        "acuAmount": 0,
+        "precreditTotal": 0,
+        "custType": "5"
+      },
+      "roomPayDetail": [
+        {
+          "sequenceNos": 1,
+          "productName": "更正品項",
+          "orderQuantity": 2,
+          "specialAmount": 500,
+          "precreditAmount": 0
+        }
+      ]
+    }
   }
 ]
