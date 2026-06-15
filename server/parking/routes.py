@@ -3,21 +3,28 @@ from flask import Blueprint, app, request, jsonify
 from datetime import datetime
 import requests
 import config
+import logging
 from server.parking.vendors.vendor_SHIN_YEONG import VendorShinYeongStrategy
+from server.parking.vendors.vendor_PAYTRONEX import VendorPaytronexStrategy
 
 # 建立停車功能獨立藍圖
 parking_bp = Blueprint('parking', __name__)
 
 # 💡 工廠機制：依據全域 config 動態載入當前配合的廠商策略實例
-if getattr(config, 'CURRENT_PARKING_VENDOR', 'VENDOR_SHIN_YEONG') == 'VENDOR_SHIN_YEONG':
-    vendor_strategy = VendorShinYeongStrategy()
-else:
-    # 未來若有 other VENDOR，直接在此擴充引入即可
-    vendor_strategy = VendorShinYeongStrategy()
+# ====================================================================
+# 🎛️ 架構優化：孿生並存機制 (Parallel Multi-Instantiation)
+# 🛑 拒絕排他性 if-else，強行同時拉起兩家廠商的策略實例，確保全路由大一統暢通
+# ====================================================================
+shin_yeong_strategy = VendorShinYeongStrategy()
+paytronex_strategy = VendorPaytronexStrategy()
 
+logger = logging.getLogger("ParkingSandbox")
 # 💡 模擬外部廠商本地的「住客白名單資料庫」
 mock_vendor_db = {}
 
+# ====================================================================
+# 🚗 廠商 1：新詠停車場 (SHIN_YEONG) 專屬分流區
+# ====================================================================
 # ====================================================================
 # 🚀 路由 IN：被動接收端點 (專門負責讓真實 PMS 雲端推播住客資料落庫)
 # ====================================================================
@@ -31,7 +38,7 @@ def receive_pms_checkin():
     data = request.get_json()
     
     try:
-        clean = vendor_strategy.parse_pms_checkin(data)
+        clean = shin_yeong_strategy.parse_pms_checkin(data)
         guest_id = clean["guest_id"]
         if not guest_id:
             return jsonify({"error": "Missing identification"}), 400
@@ -67,7 +74,7 @@ def receive_pms_change_checkout():
     
     try:
         # 調用專屬的延長退房清洗策略
-        clean = vendor_strategy.parse_pms_change_checkout(data)
+        clean = shin_yeong_strategy.parse_pms_change_checkout(data)
         guest_id = clean["guest_id"]
         if not guest_id:
             return jsonify({"error": "Missing identification"}), 400
@@ -111,7 +118,7 @@ def receive_change_car_nos():
     data = request.get_json()
     
     try:
-        clean = vendor_strategy.parse_pms_change_car_nos(data)
+        clean = shin_yeong_strategy.parse_pms_change_car_nos(data)
         guest_id = clean["guest_id"]
         if not guest_id:
             return jsonify({"error": "Missing identifying key 'guest_id'"}), 400
@@ -155,7 +162,7 @@ def receive_checkin_cancel():
     data = request.get_json()
     
     try:
-        clean = vendor_strategy.parse_pms_cancel_checkin(data)
+        clean = shin_yeong_strategy.parse_pms_cancel_checkin(data)
         guest_id = clean["guest_id"]
         if not guest_id:
             return jsonify({"error": "Missing identifying key 'guest_id'"}), 400
@@ -207,7 +214,7 @@ def receive_night_audit():
     
     try:
         # 1. 調用策略層進行真實 Payload 欄位清洗
-        clean_audit = vendor_strategy.parse_pms_night_audit(data)
+        clean_audit = shin_yeong_strategy.parse_pms_night_audit(data)
         guest_id = clean_audit["guest_id"]
         
         # 💡 安全降級防禦：萬一德安突然傳了一筆空資料，不讓系統崩潰
@@ -266,7 +273,7 @@ def car_arrival():
     mock_vendor_db[guest_id]["arrival_time"] = current_time
     
     # 🎯 核心調度：利用 Strategy 生成對齊該廠商規格的逆向 Payload
-    pms_car_payload = vendor_strategy.transform_car_arrival_payload(mock_vendor_db[guest_id], current_time)
+    pms_car_payload = shin_yeong_strategy.transform_car_arrival_payload(mock_vendor_db[guest_id], current_time)
     
     print(f"\n📸 [相機感應] 車牌 [{car_number}] 抵達，準備推播回真實德安雲端...")
     try:
@@ -289,3 +296,39 @@ def car_arrival():
 @parking_bp.route('/internal/debug/whitelist', methods=['GET'])
 def get_internal_whitelist():
     return jsonify(mock_vendor_db), 200
+
+# ====================================================================
+# 🚗 廠商 2：博辰車辨 (PAYTRONEX) 官方標準分流區
+# ====================================================================
+# 🎯 情境 A：入住 CKI / 綜合櫃台新增車號 ➔ 新增房客預約資料
+@parking_bp.route('/parktron/hpms/services/roomer/add', methods=['POST'])
+def paytronex_add_roomer():
+    body_data = request.get_json() or {}
+    room_number = body_data.get("Roomer", {}).get("RoomNumber", "未知")
+    logger.info(f"🚗 [博辰車辨 ➔ 大門路由] 收到新增房客預約請求 (房號: 【{room_number}】)")
+    
+    # 精準分流給博辰策略物件處理
+    response_payload, status_code = paytronex_strategy.add_roomer(body_data)
+    return jsonify(response_payload), status_code
+
+# 🎯 情境 B：取消入住 CIX / 變更或清除車號 ➔ 依車牌查詢房客租約 (取 RentId)
+@parking_bp.route('/parktron/hpms/services/roomer/findByLicensePlate', methods=['POST'])
+def paytronex_find_by_plate():
+    body_data = request.get_json() or {}
+    search_plate = body_data.get("LicensePlate", "未知")
+    logger.info(f"🔍 [博辰車辨 ➔ 大門路由] 收到依車牌逆查租約請求 (車牌: 【{search_plate}】)")
+    
+    # 精準分流給博辰策略物件處理
+    response_payload, status_code = paytronex_strategy.find_by_license_plate(body_data)
+    return jsonify(response_payload), status_code
+
+# 🎯 情境 C：拿著 RentId 傳送更新 / 變更退房日期 / 註銷清空車牌
+@parking_bp.route('/parktron/hpms/services/roomer/update', methods=['POST'])
+def paytronex_update_roomer():
+    body_data = request.get_json() or {}
+    rent_id = body_data.get("Roomer", {}).get("RentId", "未知")
+    logger.info(f"🔄 [博辰車辨 ➔ 大門路由] 收到更新/註銷房客預約請求 (RentId: 【{rent_id}】)")
+    
+    # 精準分流給博辰策略物件處理
+    response_payload, status_code = paytronex_strategy.update_roomer(body_data)
+    return jsonify(response_payload), status_code
