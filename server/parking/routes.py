@@ -269,20 +269,46 @@ def car_arrival():
         print(f"🚨 [車辨失敗] 未知 Guest ID: {guest_id}，本地無名單，拒開！")
         return jsonify({"status": "error", "message": "Guest ID not found."}), 404
 
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # ====================================================================
+    # 🎯 SA 終極對齊優化：動態時間洗滌引擎 (Business Date Alignment)
+    # 🛑 廢除 datetime.now()！直接繼承該住客在德安合法的 start_date 
+    # ====================================================================
+    local_guest = mock_vendor_db[guest_id]
+    
+    # 🎯 修正點 1：對齊德安 Swagger 格式，時間字串必須為 YYYY/MM/DD HH:mm:ss (斜線)
+    # 優先嘗試將原本帶橫線的 start_date 轉換成斜線格式
+    matched_arrival_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+
     mock_vendor_db[guest_id]["car_number"] = car_number
-    mock_vendor_db[guest_id]["arrival_time"] = current_time
+    mock_vendor_db[guest_id]["arrival_time"] = matched_arrival_time
     
-    # 🎯 核心調度：利用 Strategy 生成對齊該廠商規格的逆向 Payload
-    pms_car_payload = shin_yeong_strategy.transform_car_arrival_payload(mock_vendor_db[guest_id], current_time)
+    # 🎯 修正點 2：直接建立與 Swagger 100% 相同的大一統實體 Payload，防止 Strategy 層漏欄位
+    pms_car_payload = {
+        "guest_id": local_guest.get("guest_id"),
+        "car_number": car_number,
+        "guest_name": local_guest.get("guest_name"),
+        "arrival_time": matched_arrival_time
+    }
     
-    print(f"\n📸 [相機感應] 車牌 [{car_number}] 抵達，準備推播回真實德安雲端...")
+    print(f"📸 [相機感應] 車牌 [{car_number}] 抵達，準備推播回真實德安雲端...")
+    print(f"📦 抵達時間: {matched_arrival_time}")
+    print(f"📦 [Payload 對齊驗證]: {pms_car_payload}")
+
+    # 🎯 修正點 3：依據 Swagger 成功範例，移除 Authorization Header
+    api_headers = {
+        "accept": "*/*",
+        "bacchus-athenaid": str(config.active_cfg["ATHENA_ID"]),
+        "bacchus-hotelcod": str(config.active_cfg["HOTEL_COD"]),
+        "Content-Type": "application/json",
+    }
+
+    target_url = f"{config.REAL_URL_CAR_ARRIVAL}?thirdParty=SHIN_YEONG"
+    
     try:
         response = requests.post(
-            config.REAL_URL_CAR_ARRIVAL, 
+            target_url, 
             json=pms_car_payload, 
-            headers={"Authorization": config.CURRENT_TOKEN, "Content-Type": "application/json"}, 
-            params=config.REAL_PARAMS_PARKING,
+            headers=api_headers, 
             timeout=5
         )
         print(f"📡 【真實雲端回應】狀態碼: {response.status_code} | 內容: {response.text}")

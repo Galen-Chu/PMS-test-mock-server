@@ -51,30 +51,56 @@ def batch_trigger_camera():
         car_number = target_guest.get("car_number", "")
         guest_name = target_guest.get("guest_name", "未帶姓名")
         
-        # 🎯 核心優化點 1：配合狀態機進行邊緣端權限感知
+        # 🎯 配合狀態機進行邊緣端權限感知
         is_enabled = target_guest.get("enabled", True)
         
         print(f"🚗 【批次檢索中 {index}/{total_records}】-> 住客: {guest_name} | ID: {guest_id}")
         
         if not is_enabled:
-            # 💡 實施反向驗證攔截：若已被 PMS 停用（例如 CIX 或清除車牌），在地防禦不發砲
+            # 💡 實施反向驗證攔截：若已被 PMS 停用，在地防禦不發砲
             print(f" 🛑 [邊緣端隔離] 車牌 [{car_number}] 權限目前為【停用】狀態！")
             print(f"   ℹ️ 根因分析: 該旅客可能已取消入住(CIX)或已被前台清除車牌，相機拒絕開閘，不推播至 PMS。")
             skipped_count += 1
             print("----------------------------------------------------------------------------")
             continue
 
-        # 🎯 核心優化點 2：極簡物理流對齊
-        # 拔除不必要的靜態 arrival_time 封裝，相機回歸「純粹物理事件觸發者」職責，僅拋送 2 大核心變數
         print(f" 📸 [相機感應] 逼逼！地感線圈觸發！車牌 [{car_number}] 狀態確認為【啟用】")
-        payload = {
-            "guest_id": guest_id,
-            "car_number": car_number
+        
+        # 🎯 修正點 1：在相機觸發當下，動態生成真實德安要的標準橫線時間戳 (YYYY-MM-DD HH:mm:ss)
+        from datetime import datetime
+        current_arrival_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 🎯 修正點 2：將變數來源從錯誤的 local_guest 改為合法的 target_guest，確保資料不為空
+        pms_car_payload = {
+            "guest_id": str(guest_id),
+            "car_number": str(car_number),
+            "guest_name": str(guest_name),
+            "arrival_time": current_arrival_time
         }
         
+        api_headers = {
+            "accept": "*/*",
+            "bacchus-athenaid": str(config.active_cfg["ATHENA_ID"]),
+            "bacchus-hotelcod": str(config.active_cfg["HOTEL_COD"]),
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://bacug.athena.com.tw/pms/swagger-ui/index.html",
+            "Origin": "https://bacug.athena.com.tw"
+        }
+
+        # 🎯 修正點 3：直接確保路由後面有掛好廠商識別參數
+        target_url = f"{config.REAL_URL_CAR_ARRIVAL}?thirdParty=SHIN_YEONG"
+
         try:
             print(f" 🚀 正在主動向 Server 發動逆向車辨轟炸...")
-            response = requests.post(URL_CAR_ARRIVAL, json=payload, headers=headers, timeout=5)
+            print(f" 📦 [發送 Payload 核對]: {pms_car_payload}")
+
+            response = requests.post(
+                target_url, 
+                json=pms_car_payload, 
+                headers=api_headers, 
+                timeout=5
+            )
             print(f" 📥 [廠商 Server 回應]: 狀態碼 {response.status_code} | {response.text}")
             
             if response.status_code == 200:

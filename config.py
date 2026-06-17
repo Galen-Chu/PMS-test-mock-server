@@ -67,10 +67,11 @@ _base_ext = active_cfg["BASE_URL_EXTERNAL"]
 # 1. 🚗 模組一：新詠/博辰車辨辨識系統 URLs 封裝
 REAL_URL_CAR_ARRIVAL = f"{_base_ext}/car-arrival"
 REAL_PARAMS_PARKING = {
-    "hotel": active_cfg["HOTEL_COD"],
-    "athena": active_cfg["ATHENA_ID"],
-    "thirdParty": "SHIN_YEONG"
+    "bacchus-hotelcod": active_cfg["HOTEL_COD"],
+    "bacchus-athenaid": active_cfg["ATHENA_ID"],
+    "thirdParty": "SHIN_YEONG" # "PAYTRONEX"
 }
+
 CURRENT_PARAMS_PARKING = REAL_PARAMS_PARKING if USE_REAL_SERVER else {}
 
 # 2. 🦏 模組二：小美犀房務備品與物聯網入帳系統 URLs 封裝
@@ -81,8 +82,8 @@ REAL_URL_ROOM_PAY_CANCEL = f"{_base_ext}/room-pay-cancel"
 REAL_URL_ROOM_BILLING    = f"{_base_ext}/room-billing"
 
 REAL_PARAMS_AMENITY = {
-    "hotel": active_cfg["HOTEL_COD"],
-    "athena": active_cfg["ATHENA_ID"],
+    "bacchus-hotelcod": active_cfg["HOTEL_COD"],
+    "bacchus-athenaid": active_cfg["ATHENA_ID"],
     "thirdParty": "BR"
 }
 CURRENT_PARAMS_AMENITY = REAL_PARAMS_AMENITY if USE_REAL_SERVER else {}
