@@ -15,7 +15,7 @@ logger.setLevel(logging.INFO)
 # 💾 沙盒記憶體資料庫 (結構化重構：完全對齊德安 POST 帳單規格)
 # ====================================================================
 # 房卡與房號對應表
-mock_card_mapping_db = {"123456789": "101"}
+mock_card_mapping_db = {"1A2B3C": "11101"}
 
 # 統一主資料庫：兼具住客檢索 (GET) 與餐廳過帳紀錄槽 (POST)
 mock_inhouse_db = {}
@@ -27,14 +27,14 @@ def initialize_room_sandbox_node(room_nos: str) -> dict:
         "guestStatus": "O",
         "roomNos": room_nos,
         "roomSerial": "1",
-        "altName": "壹梯環境",
-        "checkInSerial": "20260605000001",
+        "altName": "Galen",
+        "checkInSerial": "20250430000014",
         "orderRemark": None,
         "checkOutRemark": "",
-        "sumItemTotal": 18071,
+        "sumItemTotal": 0,
         "sumAdvcTotal": 0,
         "preCreditAmount": 0,
-        "groupNos": "壹梯環境",
+        "groupNos": "Galen",
         "chargeInfo": "",
         
         # --- 預留儲存空間：依據 POST /room-pay Request Body 結構微整型 ---

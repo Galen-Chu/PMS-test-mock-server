@@ -19,8 +19,9 @@ shin_yeong_strategy = VendorShinYeongStrategy()
 paytronex_strategy = VendorPaytronexStrategy()
 
 logger = logging.getLogger("ParkingSandbox")
-# 💡 模擬外部廠商本地的「住客白名單資料庫」
-mock_vendor_db = {}
+# 💡 安全防禦：確保全域字典只會被初始化一次。如果模組被重載，保底不被清空
+if 'mock_vendor_db' not in globals():
+    mock_vendor_db = {}
 
 # ====================================================================
 # 🚗 廠商 1：新詠停車場 (SHIN_YEONG) 專屬分流區
@@ -293,7 +294,7 @@ def car_arrival():
 # ====================================================================
 # 🔓 🚀 路由 CROSS：內部除錯對齊端點 (專門讓相機模擬腳本拿走完整的白名單字典)
 # ====================================================================
-@parking_bp.route('/internal/debug/whitelist', methods=['GET'])
+@parking_bp.route('/parking/internal/whitelist', methods=['GET'])
 def get_internal_whitelist():
     return jsonify(mock_vendor_db), 200
 

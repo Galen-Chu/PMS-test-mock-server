@@ -24,7 +24,13 @@ def batch_trigger_camera():
     print("📡 [相機自動匯入] 正在向大一統沙盒 Server 撈取最新白名單資料庫...")
     try:
         res = requests.get(URL_GET_WHITELIST, timeout=5)
-        db_data = res.json() if res.status_code == 200 else {}
+
+        # 💡 增強防禦：如果不是 200，直接印出真實狀態碼（例如 404 或 500）
+        if res.status_code != 200:
+            print(f"🛑 [通訊攔截] 撈取失敗！Server 回應狀態碼: {res.status_code}，請檢查 URL: {URL_GET_WHITELIST}")
+            return
+        
+        db_data = res.json()
         
         if not db_data:
             print("\n📭 [提示] 當前本地暫存資料庫內沒有任何住客資料！")

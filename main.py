@@ -21,4 +21,5 @@ if __name__ == '__main__':
     print("   1. [停車車辨系統 (Parking Blueprint)] -> ⚡已在線，支援全生命週期邏輯 Upsert")
     print("   2. [房務備品系統 (Amenity Blueprint)] -> ⚡已在線，支援全生命週期邏輯 Upsert")
     print("   3. [門禁卡鎖系統 (Keycard Blueprint)] -> ⚡已在線，支援全生命週期邏輯 Upsert")
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    # 💡 保持 debug 模式看報錯，但明確關閉會背刺記憶體的 reloader
+    app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)
