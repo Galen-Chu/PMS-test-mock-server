@@ -8,6 +8,15 @@ from server.parking.routes import parking_bp
 from server.amenity.routes import amenity_bp 
 from server.keycard.routes import keycard_bp
 
+import logging
+
+# 🎯 宣告全域大閘門：讓所有 logger 的 INFO 以上級別全數通關並導向 Terminal
+logging.basicConfig(
+    level=logging.INFO,
+    format='📋 [%(asctime)s] %(levelname)s [%(name)s]: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
 app = Flask(__name__)
 
 # 🎯 核心調度：一條 ngrok 通道，橫著走兩個完全不同的第三方整合系統

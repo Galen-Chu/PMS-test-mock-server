@@ -4,6 +4,7 @@ from datetime import datetime
 import requests
 import config
 import logging
+import json
 from server.parking.vendors.vendor_SHIN_YEONG import VendorShinYeongStrategy
 from server.parking.vendors.vendor_PAYTRONEX import VendorPaytronexStrategy
 
@@ -19,6 +20,7 @@ shin_yeong_strategy = VendorShinYeongStrategy()
 paytronex_strategy = VendorPaytronexStrategy()
 
 logger = logging.getLogger("ParkingSandbox")
+
 # 💡 安全防禦：確保全域字典只會被初始化一次。如果模組被重載，保底不被清空
 if 'mock_vendor_db' not in globals():
     mock_vendor_db = {}
@@ -327,35 +329,49 @@ def get_internal_whitelist():
 # ====================================================================
 # 🚗 廠商 2：博辰車辨 (PAYTRONEX) 官方標準分流區
 # ====================================================================
-# 🎯 情境 A：入住 CKI / 綜合櫃台新增車號 ➔ 新增房客預約資料
+# 🎯 情境 A：全新入住 CKI / 綜合櫃台新增車號 ➔ 新增房客預約資料
 @parking_bp.route('/parktron/hpms/services/roomer/add', methods=['POST'])
 def paytronex_add_roomer():
     body_data = request.get_json() or {}
     room_number = body_data.get("Roomer", {}).get("RoomNumber", "未知")
-    logger.info(f"🚗 [博辰車辨 ➔ 大門路由] 收到新增房客預約請求 (房號: 【{room_number}】)")
+    
+    # 🎯 核心日誌：印出房號與完整 Payload
+    logger.info(f"🚗 [博辰 ➔ Add] 收到新增房客預約請求 (房號: 【{room_number}】)")
+    logger.info(f"📦 [Add Payload]:\n{json.dumps(body_data, indent=2, ensure_ascii=False)}")
     
     # 精準分流給博辰策略物件處理
     response_payload, status_code = paytronex_strategy.add_roomer(body_data)
     return jsonify(response_payload), status_code
 
-# 🎯 情境 B：取消入住 CIX / 變更或清除車號 ➔ 依車牌查詢房客租約 (取 RentId)
+# 🎯 核心情境 B：異動前置作業 ➔ 依「修改前舊車牌」逆查租約以取得 RentId
+# 💡 適用情境：綜合櫃台變更車牌、清除車牌、或修改退房日期，皆由此端點作為流水線第一步
 @parking_bp.route('/parktron/hpms/services/roomer/findByLicensePlate', methods=['POST'])
 def paytronex_find_by_plate():
     body_data = request.get_json() or {}
     search_plate = body_data.get("LicensePlate", "未知")
-    logger.info(f"🔍 [博辰車辨 ➔ 大門路由] 收到依車牌逆查租約請求 (車牌: 【{search_plate}】)")
+    
+    # 🎯 核心日誌：印出查詢車牌與完整 Payload
+    logger.info(f"🔍 [博辰 ➔ FindByPlate] 流水線第一步：依舊車牌 【{search_plate}】 逆查 RentId")
+    logger.info(f"📦 [FindByPlate Payload]:\n{json.dumps(body_data, indent=2, ensure_ascii=False)}")
     
     # 精準分流給博辰策略物件處理
     response_payload, status_code = paytronex_strategy.find_by_license_plate(body_data)
     return jsonify(response_payload), status_code
 
-# 🎯 情境 C：拿著 RentId 傳送更新 / 變更退房日期 / 註銷清空車牌
+# 🎯 核心情境 C：大一統異動更新端點 ➔ 拿著 RentId 進行實體異動覆寫
+# 💡 依據 Payload 內容區分三態：
+#    1. 更新車號：LicensePlateList 帶有新車號資料
+#    2. 清除車號：LicensePlateList 為空值 (廠商需註銷或停用該車牌)
+#    3. 延長退房：EndTime 帶有新退房時間
 @parking_bp.route('/parktron/hpms/services/roomer/update', methods=['POST'])
 def paytronex_update_roomer():
     body_data = request.get_json() or {}
     rent_id = body_data.get("Roomer", {}).get("RentId", "未知")
-    logger.info(f"🔄 [博辰車辨 ➔ 大門路由] 收到更新/註銷房客預約請求 (RentId: 【{rent_id}】)")
     
+    # 🎯 核心日誌：印出租約 ID 與完整 Payload
+    logger.info(f"🔄 [博辰 ➔ Update] 流水線第二步：實施實體異動更新 (RentId: 【{rent_id}】)")
+    logger.info(f"📦 [Update Payload]:\n{json.dumps(body_data, indent=2, ensure_ascii=False)}")
+
     # 精準分流給博辰策略物件處理
     response_payload, status_code = paytronex_strategy.update_roomer(body_data)
     return jsonify(response_payload), status_code
