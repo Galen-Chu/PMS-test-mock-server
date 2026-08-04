@@ -49,27 +49,19 @@ st.markdown("---")
 # ====================================================================
 # 🎛️ 戰略升級：多真實環境動態橫移大閘門
 # ====================================================================
-# 1. 在網頁渲染一個下拉選單，預設停留在 config.py 當前設定的環境
-env_options = ["LOCAL_OFFLINE", "LOCAL", "REAL_QA", "REAL_UG"]
-default_index = env_options.index(getattr(config, "ENV_SWITCH", "LOCAL"))
+# 💡 config 是 process 共享的全域模組，多人共用同一個 Streamlit process 時
+#    寫入它會互相覆蓋。這裡用 st.session_state 記住「這個瀏覽器分頁自己選了什麼」，
+#    並在每次重新渲染、每次動作觸發前都強制把 config 校準回本分頁的選擇，
+#    大幅縮小互相干擾的窗口。但這仍不是真正的多人隔離——若要完全不互相影響，
+#    每位同事應各自啟動一份獨立的 Streamlit process（不同 port）。
+def apply_env_to_config(target_env: str):
+    config.ENV_SWITCH = target_env
+    config.USE_REAL_SERVER = target_env.startswith("REAL")
 
-chosen_env = st.selectbox(
-    "🎯 **選擇當前聯調戰場環境 (Dynamic Environment Switch)**", 
-    options=env_options, 
-    index=default_index
-)
-
-# 2. 當使用者在網頁切換時，動態改寫 config 的變數並重新洗滌齒輪
-if chosen_env != config.ENV_SWITCH:
-    config.ENV_SWITCH = chosen_env
-    config.USE_REAL_SERVER = chosen_env.startswith("REAL")
-    
-    # 重新對齊 config 內部的所有變數與 Headers
-    active_cfg = config.ENV_MATRIX.get(chosen_env, config.ENV_MATRIX["LOCAL"])
+    active_cfg = config.ENV_MATRIX.get(target_env, config.ENV_MATRIX["LOCAL"])
     config.CURRENT_TOKEN = active_cfg["TOKEN"]
     config.CURRENT_HEADERS_BACCHUS = active_cfg["HEADERS"]
-    
-    # 重新洗滌小美犀 URLs 與 Params
+
     _base_ext = active_cfg["BASE_URL_EXTERNAL"]
     config.REAL_URL_ROOM_NOS   = f"{_base_ext}/room-pay/room-nos"
     config.REAL_URL_MIFARE_NOS = f"{_base_ext}/room-pay/mifare-nos"
@@ -79,18 +71,38 @@ if chosen_env != config.ENV_SWITCH:
     config.REAL_PARAMS_AMENITY["hotel"] = active_cfg["HOTEL_COD"]
     config.REAL_PARAMS_AMENITY["athena"] = active_cfg["ATHENA_ID"]
     config.CURRENT_PARAMS_AMENITY = config.REAL_PARAMS_AMENITY if config.USE_REAL_SERVER else {}
-    
-    # 重新洗滌車辨 URLs 與 Params
+
     config.REAL_URL_CAR_ARRIVAL = f"{_base_ext}/car-arrival"
     config.REAL_PARAMS_PARKING["hotel"] = active_cfg["HOTEL_COD"]
     config.REAL_PARAMS_PARKING["athena"] = active_cfg["ATHENA_ID"]
     config.CURRENT_PARAMS_PARKING = config.REAL_PARAMS_PARKING if config.USE_REAL_SERVER else {}
-    
+
+
+# 1. 每個瀏覽器分頁第一次載入時，記住當下的環境作為自己的起點
+if "chosen_env" not in st.session_state:
+    st.session_state.chosen_env = getattr(config, "ENV_SWITCH", "LOCAL")
+
+env_options = ["LOCAL_OFFLINE", "LOCAL", "REAL_QA", "REAL_UG"]
+
+chosen_env = st.selectbox(
+    "🎯 **選擇當前聯調戰場環境 (Dynamic Environment Switch)**",
+    options=env_options,
+    index=env_options.index(st.session_state.chosen_env)
+)
+
+# 2. 當使用者在網頁切換時，記住這個分頁自己的選擇，並套用到全域 config
+if chosen_env != st.session_state.chosen_env:
+    st.session_state.chosen_env = chosen_env
+    apply_env_to_config(chosen_env)
     st.toast(f"🚀 環境成功動態切換至：【{chosen_env}】！後端發砲燃料已完成動態校準。", icon="🔄")
     time.sleep(0.5)
     st.rerun()
 
+# 🔒 防禦性校準：就算其他分頁在中間動過全域 config，這裡一律以「本分頁記住的選擇」為準再套用一次
+apply_env_to_config(st.session_state.chosen_env)
+
 st.markdown("---")
+st.caption("⚠️ 多人同時開啟同一個 Streamlit process 測試時，環境切換仍共享同一份後端狀態；如需完全互不干擾，請每位測試者各自啟動獨立的 Streamlit process。")
 
 tab1, tab2, tab3 = st.tabs(["🚀 實時聯調點火中心", "📊 內部閉環測試報告", "🗃️ 數據池資產 (Fixtures) 檢視"])
 
