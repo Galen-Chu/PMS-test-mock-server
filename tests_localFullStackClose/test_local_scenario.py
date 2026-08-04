@@ -1,12 +1,14 @@
 # test_local_scenario.py
 import pytest
 import requests
+import config
 
 # 定義本地兩個不同的 API 端點
-URL_PMS_TO_VENDOR = "http://127.0.0.1:5000/vendor/pms-sync-data/check-in"
+URL_PMS_TO_VENDOR = "http://127.0.0.1:5000/pms-sync-data/check-in"
 URL_VENDOR_TO_PMS = "http://127.0.0.1:5000/external/vendor-sync-data/car-arrival"
 
-MOCK_TOKEN = "Bearer eyJhbGciOiJSUzI1Ni..."
+# 💡 沙盒實際驗證的是裸字串 Token（比照 hardware/simulate_camera.py 的用法），不帶 "Bearer " 前綴
+MOCK_TOKEN = config.LOCAL_TOKEN
 
 def test_full_hotel_stay_scenario():
     """
