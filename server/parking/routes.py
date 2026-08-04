@@ -305,12 +305,23 @@ def car_arrival():
     }
 
     target_url = f"{config.REAL_URL_CAR_ARRIVAL}?thirdParty=SHIN_YEONG"
-    
+
+    # 🔒 閉環規格比對模式：不對外發送任何請求，只回傳組好的 Payload 供比對 SA 文件欄位
+    if config.ENV_SWITCH == "LOCAL_OFFLINE":
+        print(f"🔒 [閉環模式] 已攔截出站請求，僅回傳組裝結果供規格比對 -> {target_url}")
+        return jsonify({
+            "status": "success",
+            "mode": "OFFLINE_SPEC_CHECK",
+            "would_call": target_url,
+            "would_send_headers": api_headers,
+            "would_send_payload": pms_car_payload
+        }), 200
+
     try:
         response = requests.post(
-            target_url, 
-            json=pms_car_payload, 
-            headers=api_headers, 
+            target_url,
+            json=pms_car_payload,
+            headers=api_headers,
             timeout=5
         )
         print(f"📡 【真實雲端回應】狀態碼: {response.status_code} | 內容: {response.text}")

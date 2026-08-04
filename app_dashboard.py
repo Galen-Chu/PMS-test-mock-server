@@ -50,7 +50,7 @@ st.markdown("---")
 # 🎛️ 戰略升級：多真實環境動態橫移大閘門
 # ====================================================================
 # 1. 在網頁渲染一個下拉選單，預設停留在 config.py 當前設定的環境
-env_options = ["LOCAL", "REAL_QA", "REAL_UG"]
+env_options = ["LOCAL_OFFLINE", "LOCAL", "REAL_QA", "REAL_UG"]
 default_index = env_options.index(getattr(config, "ENV_SWITCH", "LOCAL"))
 
 chosen_env = st.selectbox(
@@ -101,9 +101,11 @@ with tab1:
     col_env1, col_env2 = st.columns(2)
     with col_env1:
         if config.ENV_SWITCH == "REAL_UG":
-            st.success("🟢 當前環境：真實德安 UG 雲端 (REAL_UG_CLOUD)")
+            st.success("🟢 當前環境：真實德安 UG 雲端 (REAL_UG_CLOUD) — E2E 串接測試")
         elif config.ENV_SWITCH == "REAL_QA":
-            st.warning("🟠 當前環境：真實德安 QA 雲端 (REAL_QA_CLOUD)")
+            st.warning("🟠 當前環境：真實德安 QA 雲端 (REAL_QA_CLOUD) — E2E 串接測試")
+        elif config.ENV_SWITCH == "LOCAL_OFFLINE":
+            st.info("🔒 當前環境：閉環規格比對 (LOCAL_OFFLINE) — 不對外發送任何請求，僅比對 API Payload 是否符合規格")
         else:
             st.info("🔵 當前環境：本地隔離沙盒 (LOCAL_SANDBOX)")
     with col_env2:

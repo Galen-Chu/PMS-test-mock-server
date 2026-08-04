@@ -1,10 +1,12 @@
 # config.py
 
 # ====================================================================
-# ⚠️ 戰略總開關：[LOCAL = 本地沙盒 | REAL_QA = 真實QA雲端 | REAL_UG = 真實UG雲端]
+# ⚠️ 戰略總開關：[LOCAL_OFFLINE = 閉環規格比對(不出站) | LOCAL = 本地沙盒 | REAL_QA = 真實QA雲端 | REAL_UG = 真實UG雲端]
 # ====================================================================
-ENV_SWITCH = "REAL_UG"  # 💡 唯一的戰略指針！可切換為: "LOCAL", "REAL_QA", "REAL_UG"
+ENV_SWITCH = "REAL_UG"  # 💡 唯一的戰略指針！可切換為: "LOCAL_OFFLINE", "LOCAL", "REAL_QA", "REAL_UG"
 USE_REAL_SERVER = ENV_SWITCH.startswith("REAL")
+# 💡 閉環規格比對模式：路由組好 Payload 後直接回傳供比對，完全不對外發送任何請求
+IS_OFFLINE = ENV_SWITCH == "LOCAL_OFFLINE"
 
 # 本地邊緣端 Ngrok 轉發基底
 NGROK_BASE_URL = "https://2e5a-118-163-122-183.ngrok-free.app"
@@ -14,6 +16,19 @@ LOCAL_TOKEN = "2pKET7v9JqFxCzpj9bbT6dC17uM_wnTdoVjQtd1WbRPB48T7"
 # 📊 環境配置矩陣 (Environment Matrix)
 # ====================================================================
 ENV_MATRIX = {
+    "LOCAL_OFFLINE": {
+        # 💡 純規格比對用：URL/Token 僅供組裝 Payload 展示，路由層會在送出前攔截、永遠不會真的打出去
+        "BASE_URL_EXTERNAL": "OFFLINE://spec-check-no-egress",
+        "TOKEN": LOCAL_TOKEN,
+        "ATHENA_ID": "1",
+        "HOTEL_COD": "HOTEL01",
+        "HEADERS": {
+            "athena": "1",
+            "hotel": "HOTEL01",
+            "accept": "application/json",
+            "Content-Type": "application/json"
+        }
+    },
     "LOCAL": {
         "BASE_URL_EXTERNAL": f"{NGROK_BASE_URL}/external/vendor-sync-data",
         "TOKEN": LOCAL_TOKEN,
