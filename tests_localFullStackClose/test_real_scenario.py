@@ -27,7 +27,7 @@ def test_pms_real_api_success_flow():
         "room_no": "108",
         "guest_name": "Automation_Tester_Galen"
     }
-    res1 = requests.post(config.URL_CHECKIN, json=checkin_payload, headers=headers, params=config.CURRENT_PARAMS)
+    res1 = requests.post(config.REAL_URL_CHECKIN, json=checkin_payload, headers=headers, params=config.CURRENT_PARAMS_PARKING)
     
     # 💡 這裡加上條件判斷：因為真實環境的 check-in 端點可能由 PMS 觸發，外部不一定有權限打
     print(f"\n[步驟 1 雲端回應狀態碼]: {res1.status_code}")
@@ -40,7 +40,7 @@ def test_pms_real_api_success_flow():
         "arrival_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     
-    res2 = requests.post(config.URL_CAR_ARRIVAL, json=car_payload, headers=headers, params=config.CURRENT_PARAMS)
+    res2 = requests.post(config.REAL_URL_CAR_ARRIVAL, json=car_payload, headers=headers, params=config.CURRENT_PARAMS_PARKING)
     
     print(f"\n[步驟 2 雲端回應狀態碼]: {res2.status_code}")
     print(f"[步驟 2 雲端回應內容]: {res2.text}")
@@ -67,7 +67,7 @@ def test_pms_real_api_schema_boundary():
         "arrival_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     
-    res = requests.post(config.URL_CAR_ARRIVAL, json=dirty_payload, headers=headers, params=config.CURRENT_PARAMS)
+    res = requests.post(config.REAL_URL_CAR_ARRIVAL, json=dirty_payload, headers=headers, params=config.CURRENT_PARAMS_PARKING)
     
     print(f"\n[邊界測試 雲端回應狀態碼]: {res.status_code}")
     print(f"[邊界測試 雲端回應內容]: {res.text}")

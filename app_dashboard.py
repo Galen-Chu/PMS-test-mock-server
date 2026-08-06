@@ -27,18 +27,17 @@ def load_backend_assets():
     pool_dir = os.path.join(current_dir, "tests_data_pool")
     log_json_path = os.path.join(pool_dir, "verified_payload_logs.json")
     fixture_product = os.path.join(pool_dir, "aiello_product_fixtures.json")
-    fixture_car = os.path.join(pool_dir, "shin_yeong_car_fixtures.json")
-    
+
     # 嘗試導入後端記憶體 DB（供視覺化觀測）
     try:
         from server.keycard.routes import WaferlockLiveam_card_mapping_db
         from server.parking.vendors.vendor_PAYTRONEX import mock_paytronex_roomer_db
     except Exception:
         WaferlockLiveam_card_mapping_db, mock_paytronex_roomer_db = {}, {}
-        
-    return config, log_json_path, fixture_product, fixture_car, WaferlockLiveam_card_mapping_db, mock_paytronex_roomer_db
 
-config, LOG_JSON_PATH, FIXTURE_PRODUCT, FIXTURE_CAR, card_db, parking_db = load_backend_assets()
+    return config, log_json_path, fixture_product, WaferlockLiveam_card_mapping_db, mock_paytronex_roomer_db
+
+config, LOG_JSON_PATH, FIXTURE_PRODUCT, card_db, parking_db = load_backend_assets()
 
 # ====================================================================
 # 🎛️ 導覽列：切換「實時聯調中心」與「內部閉環報告」
@@ -177,16 +176,16 @@ with tab2:
     
     with col_rep1:
         st.subheader("🧪 離線盲測發動機 (Pytest Runner)")
-        st.markdown("直接調用 `tests_localFullStackClose/test_local_sandbox.py` 進行沙盒核心極限測試。")
-        
+        st.markdown("直接調用本地沙盒核心測試（`test_local_api.py` / `test_local_scenario.py`）。⚠️ 需先以 `python main.py` 啟動沙盒引擎（:5000）。")
+
         run_pytest = st.button("🧪 執行本地單元盲測 (Pytest)", use_container_width=True)
         pytest_log = st.empty()
-        
+
         if run_pytest:
             with st.spinner("正在執行 Pytest 斷言校驗中..."):
-                # 使用 subprocess 直接呼叫本地 pytest 
+                # 使用 subprocess 直接呼叫本地 pytest
                 result = subprocess.run(
-                    ["pytest", "tests_localFullStackClose/test_local_sandbox.py", "-v"], 
+                    ["pytest", "tests_localFullStackClose/test_local_api.py", "tests_localFullStackClose/test_local_scenario.py", "-v"],
                     capture_output=True, text=True, encoding="utf-8"
                 )
                 if result.returncode == 0:
@@ -225,20 +224,11 @@ with tab3:
     st.header("🏗️ 測試資產數據池靜態燃料 (Static Fixtures)")
     st.markdown("這些是與業務代碼完全平級的標準測資，確保測試的可重現性。")
     
-    col_fix1, col_fix2 = st.columns(2)
-    
-    with col_fix1:
-        st.subheader("🦏 小美犀備品與財務科目清單")
-        if os.path.exists(FIXTURE_PRODUCT):
-            with open(FIXTURE_PRODUCT, "r", encoding="utf-8") as f:
-                st.json(json.load(f))
-        else:
-            st.caption("未找到 aiello_product_fixtures.json")
-            
-    with col_fix2:
-        st.subheader("🚗 車辨常用白名單車牌清單")
-        if os.path.exists(FIXTURE_CAR):
-            with open(FIXTURE_CAR, "r", encoding="utf-8") as f:
-                st.json(json.load(f))
-        else:
-            st.caption("未找到 shin_yeong_car_fixtures.json")
+    st.subheader("🦏 小美犀備品與財務科目清單")
+    if os.path.exists(FIXTURE_PRODUCT):
+        with open(FIXTURE_PRODUCT, "r", encoding="utf-8") as f:
+            st.json(json.load(f))
+    else:
+        st.caption("未找到 aiello_product_fixtures.json")
+
+    st.caption("💡 目前數據池中唯一的靜態 Fixture 為 aiello_product_fixtures.json；其餘資產（如 verified_payload_logs.json）屬動態落庫紀錄，已於 Tab 2 呈現。")

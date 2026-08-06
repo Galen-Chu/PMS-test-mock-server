@@ -81,6 +81,8 @@ _base_ext = active_cfg["BASE_URL_EXTERNAL"]
 
 # 1. 🚗 模組一：新詠/博辰車辨辨識系統 URLs 封裝
 REAL_URL_CAR_ARRIVAL = f"{_base_ext}/car-arrival"
+# 💡 PMS→廠商方向的住客同步端點（比照 car-arrival 同基底）；真實雲端此端點多由 PMS 觸發，外部未必有權限直打
+REAL_URL_CHECKIN   = f"{_base_ext}/check-in"
 REAL_PARAMS_PARKING = {
     "bacchus-hotelcod": active_cfg["HOTEL_COD"],
     "bacchus-athenaid": active_cfg["ATHENA_ID"],
