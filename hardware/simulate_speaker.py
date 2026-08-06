@@ -89,17 +89,35 @@ def execute_request(method, url, params=None, json_body=None):
         logger.error(f"🚨[通訊邊緣端崩潰]: {e}")
         return None
 
-# 動態路由參數定義 (確保與 config.py 中的 URL 定義完全對齊，避免硬編碼風險)
-URL_ROOM_NOS = config.REAL_URL_ROOM_NOS if USE_REAL else f"{config.NGROK_BASE_URL}/external/vendor-sync-data/room-pay/room-nos"
-URL_MIFARE_NOS = config.REAL_URL_MIFARE_NOS if USE_REAL else f"{config.NGROK_BASE_URL}/external/vendor-sync-data/room-pay/mifare-nos"
-URL_ROOM_PAY = config.REAL_URL_ROOM_PAY if USE_REAL else f"{config.NGROK_BASE_URL}/external/vendor-sync-data/room-pay"
-URL_ROOM_PAY_CANCEL = config.REAL_URL_ROOM_PAY_CANCEL if USE_REAL else f"{config.NGROK_BASE_URL}/external/vendor-sync-data/room-pay-cancel"
-URL_ROOM_BILLING = config.REAL_URL_ROOM_BILLING if USE_REAL else f"{config.NGROK_BASE_URL}/external/vendor-sync-data/room-billing"
+# ====================================================================
+# 🔄 環境即時同步：Dashboard 動態切換環境後會改寫 config 模組變數；
+#    本函式讓本模組的快取變數同步跟上，確保「切換環境 → 重發」真正生效
+#    （修復原本模組 import 時就把環境凍結、後續切換無效的問題）。
+# ====================================================================
+def _refresh_live_config():
+    global USE_REAL, HEADERS, BASE_PARAMS
+    global URL_ROOM_NOS, URL_MIFARE_NOS, URL_ROOM_PAY, URL_ROOM_PAY_CANCEL, URL_ROOM_BILLING
+
+    USE_REAL = config.USE_REAL_SERVER
+    HEADERS = config.CURRENT_HEADERS_BACCHUS
+    BASE_PARAMS = config.CURRENT_PARAMS_AMENITY
+
+    _ngrok = config.NGROK_BASE_URL
+    URL_ROOM_NOS        = config.REAL_URL_ROOM_NOS        if USE_REAL else f"{_ngrok}/external/vendor-sync-data/room-pay/room-nos"
+    URL_MIFARE_NOS      = config.REAL_URL_MIFARE_NOS      if USE_REAL else f"{_ngrok}/external/vendor-sync-data/room-pay/mifare-nos"
+    URL_ROOM_PAY        = config.REAL_URL_ROOM_PAY        if USE_REAL else f"{_ngrok}/external/vendor-sync-data/room-pay"
+    URL_ROOM_PAY_CANCEL = config.REAL_URL_ROOM_PAY_CANCEL if USE_REAL else f"{_ngrok}/external/vendor-sync-data/room-pay-cancel"
+    URL_ROOM_BILLING    = config.REAL_URL_ROOM_BILLING    if USE_REAL else f"{_ngrok}/external/vendor-sync-data/room-billing"
+
+
+# 模組載入時先以當下 config 初始化（run_all_expanded_scenarios 每次執行前會再刷新一次）
+_refresh_live_config()
 
 # ====================================================================
 # 🎬 8 大核心擴充測試情境流水線大一統
 # ====================================================================
 def run_all_expanded_scenarios():
+    _refresh_live_config()  # 即時同步 Dashboard 動態切換的環境，避免用到 import 時凍結的舊環境
     logger.info(f"🚀 ===================================================")
     logger.info(f"🚀  小美犀 8 大核心擴充回歸情境引擎點火啟動 (環境: {'真實雲端' if USE_REAL else '本地沙盒'})")
     logger.info(f"🚀 ===================================================")

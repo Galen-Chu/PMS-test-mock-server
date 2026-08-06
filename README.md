@@ -106,19 +106,18 @@ pytest tests_localFullStackClose/
 
 ## 🎛️ Streamlit Dashboard 架構設計
 
-`app_dashboard.py` 是疊在沙盒引擎之上的**單檔 Web 控制台**——用最少的程式碼把後端的 `config` 戰略總開關、各廠商記憶體 DB、模擬發射腳本與測試資產，全部收攏成一個可點擊的操作介面。設計上不引入任何前端工程，直接以 Python 操縱後端單例。
+`app_dashboard.py` 是疊在沙盒引擎之上的**單檔 Web 控制台**——用最少的程式碼把後端的 `config` 戰略總開關、模擬發射腳本與測試資產，全部收攏成一個可點擊的操作介面。設計上不引入任何前端工程，直接以 Python 操縱後端單例。
 
 ### 🔑 核心設計理念
 
 1. **延遲資產載入（Lazy Backend Bootstrap）**
-   `load_backend_assets()` 以 `@st.cache_resource` 包覆，只在首次渲染時執行一次：
-   - 載入全域 `config` 模組；
-   - 指向 `tests_data_pool/` 內的資產檔案路徑；
-   - 嘗試 `import` 後端記憶體 DB（華豫寧卡片 Mapping、博辰 Roomer DB）。
-   - 以 `try/except` 退路為空 dict，**避免任何後端模組初始化失敗就拖垮整個 Dashboard**。
+   `load_backend_assets()` 以 `@st.cache_resource` 包覆，只在首次渲染時執行一次：載入全域 `config` 模組、並指向 `tests_data_pool/` 內的資產檔案路徑。
+   > 💡 此處**刻意不匯入**後端路由的記憶體 DB——沙盒引擎（`main.py`）與 Dashboard 是兩個獨立進程，記憶體不共享，跨進程 import 到的只會是永遠為空的副本。若需觀測 server 端狀態，請改打 server 的 HTTP 端點（如 `GET /parking/internal/whitelist`）。
 
-2. **多環境動態橫移引擎（`apply_env_to_config`）**
-   使用者在網頁切換環境時，此函式會**改寫 `config` 模組的執行期變數**——`ENV_SWITCH`、`USE_REAL_SERVER`、`CURRENT_TOKEN`、所有 `REAL_URL_*` 與 `REAL_PARAMS_*`——等於在不停程式的前提下「換檔」。後端路由讀到的就是最新的環境組態。
+2. **多環境動態橫移引擎（`apply_env_to_config` + `_refresh_live_config`）**
+   使用者在網頁切換環境時，`apply_env_to_config` 會**改寫 `config` 模組的執行期變數**——`ENV_SWITCH`、`USE_REAL_SERVER`、`IS_OFFLINE`、`CURRENT_TOKEN`、所有 `REAL_URL_*` 與 `REAL_PARAMS_*`（鍵名對齊 `bacchus-hotelcod` / `bacchus-athenaid`）——等於在不停程式的前提下「換檔」。
+   - **後端路由**在每次請求時讀 `config`，自然拿到最新組態。
+   - **模擬發射腳本**（`simulate_speaker`）因模組層會把環境快照凍結，改由 `_refresh_live_config()` 在每次 `run_all_expanded_scenarios()` 開頭即時重讀 `config`，確保「切換環境 → 重發」真正生效。
 
 3. **分頁級隔離（`st.session_state`）**
    `config` 是 process 共享的全域模組，多人共用同一個 Streamlit process 時，環境切換會互相覆蓋。Dashboard 用 `st.session_state.chosen_env` 讓**每個瀏覽器分頁記住自己的選擇**，並在每次重新渲染、每次動作前都「防禦性校準」回該分頁的選擇，把互相干擾的窗口縮到最小。
@@ -128,7 +127,7 @@ pytest tests_localFullStackClose/
 
 | Tab | 名稱 | 職責 |
 |-----|------|------|
-| 🚀 | **實時聯調點火中心** | 環境狀態指示燈＋`CURRENT_TOKEN` 指標；即時觀測華豫寧／博辰記憶體 DB；一鍵發射小美犀全情境回歸腳本，並把 `logging` 透過自訂 `StreamlitLogHandler` 即時串流進網頁。 |
+| 🚀 | **實時聯調點火中心** | 環境狀態指示燈＋`CURRENT_TOKEN` 指標；一鍵發射小美犀 8 大情境回歸腳本，並把 `logging` 透過自訂 `StreamlitLogHandler` 即時串流進網頁。 |
 | 📊 | **內部閉環測試報告** | 以 `subprocess` 呼叫 pytest 執行離線盲測；讀取 `verified_payload_logs.json` 呈現最新 5 筆通關 Payload 戰績。 |
 | 🗃️ | **數據池資產檢視** | 將 `tests_data_pool/` 的靜態 Fixture（`aiello_product_fixtures.json`）直接 `st.json` 視覺化，便於核對標準測資。 |
 

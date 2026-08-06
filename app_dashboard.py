@@ -23,21 +23,14 @@ st.set_page_config(page_title="PMS AIoT 沙盒測試控制台", page_icon="🎛�
 @st.cache_resource
 def load_backend_assets():
     import config
-    # 物理路徑定義
+    # 物理路徑定義（後端記憶體 DB 屬另一個 Flask 進程，無法跨進程共享，故不在此匯入）
     pool_dir = os.path.join(current_dir, "tests_data_pool")
     log_json_path = os.path.join(pool_dir, "verified_payload_logs.json")
     fixture_product = os.path.join(pool_dir, "aiello_product_fixtures.json")
 
-    # 嘗試導入後端記憶體 DB（供視覺化觀測）
-    try:
-        from server.keycard.routes import WaferlockLiveam_card_mapping_db
-        from server.parking.vendors.vendor_PAYTRONEX import mock_paytronex_roomer_db
-    except Exception:
-        WaferlockLiveam_card_mapping_db, mock_paytronex_roomer_db = {}, {}
+    return config, log_json_path, fixture_product
 
-    return config, log_json_path, fixture_product, WaferlockLiveam_card_mapping_db, mock_paytronex_roomer_db
-
-config, LOG_JSON_PATH, FIXTURE_PRODUCT, card_db, parking_db = load_backend_assets()
+config, LOG_JSON_PATH, FIXTURE_PRODUCT = load_backend_assets()
 
 # ====================================================================
 # 🎛️ 導覽列：切換「實時聯調中心」與「內部閉環報告」
@@ -56,6 +49,7 @@ st.markdown("---")
 def apply_env_to_config(target_env: str):
     config.ENV_SWITCH = target_env
     config.USE_REAL_SERVER = target_env.startswith("REAL")
+    config.IS_OFFLINE = target_env == "LOCAL_OFFLINE"
 
     active_cfg = config.ENV_MATRIX.get(target_env, config.ENV_MATRIX["LOCAL"])
     config.CURRENT_TOKEN = active_cfg["TOKEN"]
@@ -67,13 +61,15 @@ def apply_env_to_config(target_env: str):
     config.REAL_URL_ROOM_PAY   = f"{_base_ext}/room-pay"
     config.REAL_URL_ROOM_PAY_CANCEL = f"{_base_ext}/room-pay-cancel"
     config.REAL_URL_ROOM_BILLING    = f"{_base_ext}/room-billing"
-    config.REAL_PARAMS_AMENITY["hotel"] = active_cfg["HOTEL_COD"]
-    config.REAL_PARAMS_AMENITY["athena"] = active_cfg["ATHENA_ID"]
+    # 💡 鍵名必須對齊 config.py 真正送給德安雲端的 bacchus-* 查詢參數（修復原本誤寫成 hotel/athena）
+    config.REAL_PARAMS_AMENITY["bacchus-hotelcod"] = active_cfg["HOTEL_COD"]
+    config.REAL_PARAMS_AMENITY["bacchus-athenaid"] = active_cfg["ATHENA_ID"]
     config.CURRENT_PARAMS_AMENITY = config.REAL_PARAMS_AMENITY if config.USE_REAL_SERVER else {}
 
     config.REAL_URL_CAR_ARRIVAL = f"{_base_ext}/car-arrival"
-    config.REAL_PARAMS_PARKING["hotel"] = active_cfg["HOTEL_COD"]
-    config.REAL_PARAMS_PARKING["athena"] = active_cfg["ATHENA_ID"]
+    config.REAL_URL_CHECKIN     = f"{_base_ext}/check-in"
+    config.REAL_PARAMS_PARKING["bacchus-hotelcod"] = active_cfg["HOTEL_COD"]
+    config.REAL_PARAMS_PARKING["bacchus-athenaid"] = active_cfg["ATHENA_ID"]
     config.CURRENT_PARAMS_PARKING = config.REAL_PARAMS_PARKING if config.USE_REAL_SERVER else {}
 
 
@@ -123,48 +119,38 @@ with tab1:
         st.metric(label="全域通訊金鑰 (CURRENT_TOKEN)", value=str(getattr(config, "CURRENT_TOKEN", "None"))[:30] + "...")
 
     st.markdown("---")
-    col_l, col_r = st.columns([1, 1.2])
-    
-    with col_l:
-        st.subheader("📡 廠商即時記憶體快取 (Live Cache)")
-        with st.expander("💳 華豫寧門禁 Mapping DB 狀態", expanded=True):
-            st.json(card_db)
-        with st.expander("🚗 博辰車辨 Roomer DB 狀態", expanded=True):
-            st.json(parking_db)
+    st.subheader("🔥 模擬發射器 (Simulators)")
+    fire_speaker = st.button("🔥 啟動小美犀 1 ~ 8 全情境回歸發砲", type="primary", use_container_width=True)
 
-    with col_r:
-        st.subheader("🔥 模擬發射器 (Simulators)")
-        fire_speaker = st.button("🔥 啟動小美犀 1 ~ 8 全情境回歸發砲", type="primary", use_container_width=True)
-        
-        log_container = st.empty()
-        log_container.code("⏳ 等待點火指令下達... 系統就緒。")
+    log_container = st.empty()
+    log_container.code("⏳ 等待點火指令下達... 系統就緒。")
 
-        if fire_speaker:
-            log_container.code("🚀 正在加載自動化故事線，開始對真實雲端發砲...")
-            from hardware.simulate_speaker import run_all_expanded_scenarios
-            import logging
+    if fire_speaker:
+        log_container.code("🚀 正在加載自動化故事線，開始發砲...")
+        from hardware.simulate_speaker import run_all_expanded_scenarios
+        import logging
 
-            class StreamlitLogHandler(logging.Handler):
-                def __init__(self, text_widget):
-                    super().__init__()
-                    self.text_widget = text_widget
-                    self.log_txt = ""
-                def emit(self, record):
-                    self.log_txt += self.format(record) + "\n"
-                    self.text_widget.code(self.log_txt)
+        class StreamlitLogHandler(logging.Handler):
+            def __init__(self, text_widget):
+                super().__init__()
+                self.text_widget = text_widget
+                self.log_txt = ""
+            def emit(self, record):
+                self.log_txt += self.format(record) + "\n"
+                self.text_widget.code(self.log_txt)
 
-            speaker_logger = logging.getLogger("SpeakerSimulator")
-            handler = StreamlitLogHandler(log_container)
-            speaker_logger.addHandler(handler)
-            
-            try:
-                run_all_expanded_scenarios()
-                st.balloons()
-                st.success("🏁 全數擴充回歸情境流水線發射完賽！")
-            except Exception as e:
-                st.error(f"🚨 發射期中斷: {e}")
-            finally:
-                speaker_logger.removeHandler(handler)
+        speaker_logger = logging.getLogger("SpeakerSimulator")
+        handler = StreamlitLogHandler(log_container)
+        speaker_logger.addHandler(handler)
+
+        try:
+            run_all_expanded_scenarios()
+            st.balloons()
+            st.success("🏁 全數擴充回歸情境流水線發射完賽！")
+        except Exception as e:
+            st.error(f"🚨 發射期中斷: {e}")
+        finally:
+            speaker_logger.removeHandler(handler)
 
 # --------------------------------------------------------------------
 # 📊 TAB 2：內部閉環測試報告 (完整記錄與報告中心)
@@ -183,9 +169,9 @@ with tab2:
 
         if run_pytest:
             with st.spinner("正在執行 Pytest 斷言校驗中..."):
-                # 使用 subprocess 直接呼叫本地 pytest
+                # 使用 subprocess 直接呼叫本地 pytest（以 sys.executable 確保用對 venv 的核心）
                 result = subprocess.run(
-                    ["pytest", "tests_localFullStackClose/test_local_api.py", "tests_localFullStackClose/test_local_scenario.py", "-v"],
+                    [sys.executable, "-m", "pytest", "tests_localFullStackClose/test_local_api.py", "tests_localFullStackClose/test_local_scenario.py", "-v"],
                     capture_output=True, text=True, encoding="utf-8"
                 )
                 if result.returncode == 0:
