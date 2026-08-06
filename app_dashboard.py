@@ -99,12 +99,24 @@ apply_env_to_config(st.session_state.chosen_env)
 st.markdown("---")
 st.caption("⚠️ 多人同時開啟同一個 Streamlit process 測試時，環境切換仍共享同一份後端狀態；如需完全互不干擾，請每位測試者各自啟動獨立的 Streamlit process。")
 
-tab1, tab2, tab3 = st.tabs(["🚀 實時聯調點火中心", "📊 內部閉環測試報告", "🗃️ 數據池資產 (Fixtures) 檢視"])
+# 💡 用 st.radio 取代 st.tabs：radio 的選取值會自動保留於 session_state，
+#    點擊按鈕觸發 rerun 後不會跳回第一個分頁（修復 st.tabs 一律重置為 Tab 0 的摩擦）。
+_TAB_OPTIONS = ["🚀 實時聯調點火中心", "📊 內部閉環測試報告", "🗃️ 數據池資產 (Fixtures) 檢視"]
+st.markdown("""
+<style>
+/* 把水平 radio 偽裝成 tabs：隱藏圓點、加上底部分隔線與作用中標示 */
+div[role="radiogroup"][aria-orientation="horizontal"] { border-bottom: 1px solid rgba(49,51,63,0.12); padding-bottom: 0.4rem; }
+div[role="radiogroup"][aria-orientation="horizontal"] label input { display: none; }
+div[role="radiogroup"][aria-orientation="horizontal"] label { padding-right: 1.2rem; cursor: pointer; }
+div[role="radiogroup"][aria-orientation="horizontal"] label[aria-checked="true"] p { color: #ff4b4b; font-weight: 600; }
+</style>
+""", unsafe_allow_html=True)
+active_tab = st.radio("導覽列", _TAB_OPTIONS, horizontal=True, label_visibility="collapsed", key="active_tab")
 
 # --------------------------------------------------------------------
 # 🚀 TAB 1：實時聯調點火中心 (原有的高強健點火引擎)
 # --------------------------------------------------------------------
-with tab1:
+if active_tab == _TAB_OPTIONS[0]:
     col_env1, col_env2 = st.columns(2)
     with col_env1:
         if config.ENV_SWITCH == "REAL_UG":
@@ -155,7 +167,7 @@ with tab1:
 # --------------------------------------------------------------------
 # 📊 TAB 2：內部閉環測試報告 (完整記錄與報告中心)
 # --------------------------------------------------------------------
-with tab2:
+elif active_tab == _TAB_OPTIONS[1]:
     st.header("📊 內部完全閉環自動化測試報告")
     
     col_rep1, col_rep2 = st.columns([1, 2])
@@ -206,7 +218,7 @@ with tab2:
 # --------------------------------------------------------------------
 # 🗃️ TAB 3：數據池資產 (Fixtures) 檢視
 # --------------------------------------------------------------------
-with tab3:
+elif active_tab == _TAB_OPTIONS[2]:
     st.header("🏗️ 測試資產數據池靜態燃料 (Static Fixtures)")
     st.markdown("這些是與業務代碼完全平級的標準測資，確保測試的可重現性。")
     
