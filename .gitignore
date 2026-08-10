@@ -6,3 +6,6 @@ __pycache__/
 venv/
 .venv/
 *.egg-info/
+
+# ngrok 本機隧道工具 binary,請各自下載,不入庫
+ngrok.exe
