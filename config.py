@@ -1,9 +1,10 @@
 # config.py
+import os
 
 # ====================================================================
 # ⚠️ 戰略總開關：[LOCAL_OFFLINE = 閉環規格比對(不出站) | LOCAL = 本地沙盒 | REAL_QA = 真實QA雲端 | REAL_UG = 真實UG雲端]
 # ====================================================================
-ENV_SWITCH = "REAL_UG"  # 💡 唯一的戰略指針！可切換為: "LOCAL_OFFLINE", "LOCAL", "REAL_QA", "REAL_UG"
+ENV_SWITCH = os.environ.get("ENV_SWITCH", "REAL_UG")  # 💡 唯一的戰略指針！可由環境變數覆寫(CI 用 LOCAL_OFFLINE)；可切換為: "LOCAL_OFFLINE", "LOCAL", "REAL_QA", "REAL_UG"
 USE_REAL_SERVER = ENV_SWITCH.startswith("REAL")
 # 💡 閉環規格比對模式：路由組好 Payload 後直接回傳供比對，完全不對外發送任何請求
 IS_OFFLINE = ENV_SWITCH == "LOCAL_OFFLINE"
