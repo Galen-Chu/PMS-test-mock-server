@@ -54,7 +54,7 @@ def verify_and_align_params():
     
     if config.USE_REAL_SERVER:
         auth_header = request.headers.get('Authorization') or request.headers.get('bacchus-athenaid')
-        if not auth_header or (auth_header != config.CURRENT_TOKEN and auth_header != config.REAL_HEADERS_BACCHUS.get('bacchus-athenaid')):
+        if not auth_header or (auth_header != config.CURRENT_TOKEN and auth_header != config.CURRENT_HEADERS_BACCHUS.get('bacchus-athenaid')):
             return jsonify({"code": "401", "message": "Unauthorized."}), 401
 
 # ====================================================================

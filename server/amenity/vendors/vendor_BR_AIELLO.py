@@ -27,7 +27,7 @@ class VendorBRAielloStrategy(BaseAmenityVendorStrategy):
         }
         return {
             "resultCode": "0000",
-            "data": [vendor_node]
+            "data": {"data": [vendor_node]}
         }
 
     def transform_mifare_nos_query_response(self, sandbox_guest_dict):
