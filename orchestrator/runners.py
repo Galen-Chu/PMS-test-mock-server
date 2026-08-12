@@ -38,6 +38,12 @@ def _extract_ci_serial(res):
     return body["data"]["data"][0]["checkInSerial"]
 
 
+def _extract_room_nos(res):
+    """從 GET /mifare-nos 回應扒出歸屬房號（B 閉環斷言用）。"""
+    body = res.json()
+    return body["data"]["data"][0]["roomNos"]
+
+
 # ====================================================================
 # 🦏 房務備品（amenity / BR_AIELLO）—— 重用 simulate_speaker 的情境邏輯
 # ====================================================================
@@ -312,12 +318,152 @@ def run_car_arrival_retry(ctx: RunContext) -> CaseResult:
 
 
 # ====================================================================
-# 🔑 門禁製卡（keycard / WAFERLOCK_LIVEAM）—— 無執行器，全 UNIMPLEMENTED
+# 🔑 門禁製卡（keycard / WAFERLOCK_LIVEAM）
+# 方向提醒：此處 mock 模擬的是「廠商 API 面」，執行器扮 PMS（PMS→vendor 製卡），
+# 與真實情境（vendor→PMS）相反。真實方向的 vendor→PMS 閉環目前無 PMS 接收端可測
+# （需另補 PMS 側 mock，屬架構擴充）。下列案例測的是「跨模組卡片生命週期閉環」：
+# 製卡（寫入 mock_card_mapping_db）→ 用該卡號走 amenity mifare 刷回房號 → 斷言一致。
 # ====================================================================
-for _sid, _name, _ep in [
-    ("card_issue", "製卡發卡（Token 簽發）", "/keycard/issue"),
-    ("card_revoke", "消卡", "/keycard/revoke"),
-    ("order_query", "訂單狀態逆查", "/keycard/order-status"),
-    ("card_issue_exception", "製卡例外重試", "/keycard/issue"),
-]:
-    registry.register_unimplemented(_sid, module="keycard", vendor="WAFERLOCK_LIVEAM", name=_name, endpoint=_ep)
+def _keycard_auth_headers(ctx):
+    """keycard 製卡路由的 auth gate：LOCAL 模式帶 LOCAL_TOKEN；其餘沿用 ctx.headers。"""
+    h = dict(ctx.headers)
+    if not ctx.use_real:
+        h["Authorization"] = "2pKET7v9JqFxCzpj9bbT6dC17uM_wnTdoVjQtd1WbRPB48T7"  # config.LOCAL_TOKEN
+    return h
+
+
+@register_scenario(
+    "card_issue", module="keycard", vendor="WAFERLOCK_LIVEAM",
+    name="製卡發卡", endpoint="/api/OrderCard",
+)
+def run_card_issue(ctx: RunContext) -> CaseResult:
+    """PMS→vendor 製卡：建 order → POST /api/OrderCard 製卡，拿回 cardUid。"""
+    import time as _t
+    scenario = registry.get("card_issue")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    order_id, room = f"KC-ISSUE-{ts}", "207"
+    h = _keycard_auth_headers(ctx)
+    t0 = _t.perf_counter()
+    # 建 order（廠商有「查無 order 自動補」防禦，但正規流程先建）
+    execute_for_ctx(ctx, "POST", ctx.urls["keycard_order"], headers=h,
+                    json_body={"ikey": order_id, "roomNos": room, "guestName": "KeycardIssue"})
+    # 製卡
+    payload = {"ikey": order_id, "pmrId": "801F12A3D8CA", "roomNos": room, "guestName": "KeycardIssue"}
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["keycard_ordercard"], headers=h, json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("card_issue", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code in (200, 201) and body.get("cardUid"):
+        return _ok("card_issue", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("card_issue", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+@register_scenario(
+    "card_revoke", module="keycard", vendor="WAFERLOCK_LIVEAM",
+    name="消卡", endpoint="/api/OrderCard/<oid>/<cuid>",
+)
+def run_card_revoke(ctx: RunContext) -> CaseResult:
+    """PMS→vendor 銷卡：先製卡拿 cardUid，再 DELETE /api/OrderCard/<oid>/<cuid>。"""
+    import time as _t
+    scenario = registry.get("card_revoke")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    order_id, room = f"KC-REVOKE-{ts}", "208"
+    h = _keycard_auth_headers(ctx)
+    t0 = _t.perf_counter()
+    # 先製卡
+    execute_for_ctx(ctx, "POST", ctx.urls["keycard_order"], headers=h,
+                    json_body={"ikey": order_id, "roomNos": room, "guestName": "KeycardRevoke"})
+    make = execute_for_ctx(ctx, "POST", ctx.urls["keycard_ordercard"], headers=h,
+                           json_body={"ikey": order_id, "pmrId": "801F12A3D8CA", "roomNos": room, "guestName": "KeycardRevoke"})
+    res_mk, err_mk = make
+    if err_mk or res_mk is None or not res_mk.json().get("cardUid"):
+        dur = int((_t.perf_counter() - t0) * 1000)
+        return _fail("card_revoke", "", scenario, dur, response_payload={"__error__": "前置製卡失敗"})
+    card_uid = res_mk.json()["cardUid"]
+    # 銷卡
+    del_url = f"{ctx.urls['keycard_ordercard']}/{order_id}/{card_uid}"
+    res, err = execute_for_ctx(ctx, "DELETE", del_url, headers=h)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("card_revoke", "", scenario, dur, request_payload={"orderID": order_id, "cardUid": card_uid}, response_payload={"__error__": err or "no response"})
+    body = {"status_code": res.status_code}
+    if res.status_code in (200, 204):
+        return _ok("card_revoke", "", scenario, dur, request_payload={"orderID": order_id, "cardUid": card_uid}, response_payload=body)
+    return _fail("card_revoke", "", scenario, dur, request_payload={"orderID": order_id, "cardUid": card_uid}, response_payload=body)
+
+
+@register_scenario(
+    "order_query", module="keycard", vendor="WAFERLOCK_LIVEAM",
+    name="訂單狀態逆查", endpoint="/api/Operation/getCardInfo/<pmrId>",
+)
+def run_order_query(ctx: RunContext) -> CaseResult:
+    """PMS→vendor 讀卡機逆查：POST /api/Operation/getCardInfo/<pmrId>，模擬讀卡機感應。"""
+    import time as _t
+    scenario = registry.get("order_query")
+    h = _keycard_auth_headers(ctx)
+    pmr_id = "801F12A3D8CA"
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", f"{ctx.urls['keycard_ordercard'].replace('/api/OrderCard','')}/api/Operation/getCardInfo/{pmr_id}", headers=h)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("order_query", "", scenario, dur, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code == 200 and body.get("cardUid"):
+        return _ok("order_query", "", scenario, dur, request_payload={"pmrId": pmr_id}, response_payload=body)
+    return _fail("order_query", "", scenario, dur, request_payload={"pmrId": pmr_id}, response_payload=body)
+
+
+@register_scenario(
+    "card_lifecycle", module="keycard", vendor="WAFERLOCK_LIVEAM",
+    name="跨模組卡片生命週期閉環（製卡→mifare 刷回房號）", endpoint="/api/OrderCard + /room-pay/mifare-nos",
+)
+def run_card_lifecycle(ctx: RunContext) -> CaseResult:
+    """B 閉環：keycard 製卡（寫入 mock_card_mapping_db）→ 用 cardUid 走 amenity mifare 查詢
+    刷回房號 → 斷言房號與製卡時一致。跨廠商（門禁→房務）整合閉環。"""
+    import time as _t
+    scenario = registry.get("card_lifecycle")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    order_id, room = f"KC-LIFE-{ts}", "309"
+    h = _keycard_auth_headers(ctx)
+    t0 = _t.perf_counter()
+
+    # 1) keycard 製卡
+    execute_for_ctx(ctx, "POST", ctx.urls["keycard_order"], headers=h,
+                    json_body={"ikey": order_id, "roomNos": room, "guestName": "Lifecycle"})
+    mk = execute_for_ctx(ctx, "POST", ctx.urls["keycard_ordercard"], headers=h,
+                         json_body={"ikey": order_id, "pmrId": "801F12A3D8CA", "roomNos": room, "guestName": "Lifecycle"})
+    res_mk, err_mk = mk
+    if err_mk or res_mk is None or not res_mk.json().get("cardUid"):
+        dur = int((_t.perf_counter() - t0) * 1000)
+        return _fail("card_lifecycle", "", scenario, dur, response_payload={"__error__": "製卡階段失敗"})
+    card_uid = res_mk.json()["cardUid"]
+
+    # 2) 用該 cardUid 走 amenity mifare 查詢（跨模組）
+    res_mf, err_mf = execute_for_ctx(ctx, "GET", ctx.urls["mifare_nos"],
+                                     params={**ctx.params_amenity, "keyword": card_uid})
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err_mf or res_mf is None or res_mf.status_code != 200:
+        return _fail("card_lifecycle", "", scenario, dur,
+                     request_payload={"cardUid": card_uid, "expected_room": room},
+                     response_payload={"__error__": err_mf or f"mifare {getattr(res_mf,'status_code',None)}"})
+
+    # 3) 斷言刷回房號 == 製卡房號
+    read_room = _extract_room_nos(res_mf)
+    response_payload = {"cardUid": card_uid, "manufactured_room": room, "mifare_read_room": read_room}
+    if str(read_room) == str(room):
+        return _ok("card_lifecycle", "", scenario, dur,
+                   request_payload={"cardUid": card_uid, "expected_room": room}, response_payload=response_payload)
+    # 房號不符 → 欄位 diff
+    cr = _fail("card_lifecycle", "", scenario, dur,
+               request_payload={"cardUid": card_uid, "expected_room": room}, response_payload=response_payload)
+    cr.diff = [{"field": "roomNos", "expected": room, "actual": read_room}]
+    return cr

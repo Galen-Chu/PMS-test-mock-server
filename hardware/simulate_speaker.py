@@ -90,18 +90,27 @@ def execute_request(method, url, params=None, json_body=None):
         return None
 
 
-def execute_for_ctx(ctx, method, url, params=None, json_body=None):
+def execute_for_ctx(ctx, method, url, params=None, json_body=None, headers=None):
     """編排層專用發射引擎：直接用 RunContext 的 headers/params，不碰模組全域變數。
 
     與 execute_request 的差異：環境隔離（兩個並行 run 用不同環境不會互踩），
-    並把 timeout 統一為 10s。回傳 (response_or_None, error_msg_or_None)。
+    並把 timeout 統一為 10s。headers 可覆寫（keycard 製卡路由需 LOCAL_TOKEN 鑑別）。
+    回傳 (response_or_None, error_msg_or_None)。
     """
-    headers = dict(getattr(ctx, "headers", {}) or {})
+    if headers is None:
+        headers = dict(getattr(ctx, "headers", {}) or {})
     try:
-        if method.upper() == "GET":
+        m = method.upper()
+        if m == "GET":
             res = requests.get(url, params=params, headers=headers, timeout=10)
-        else:
+        elif m == "POST":
             res = requests.post(url, params=params, json=json_body, headers=headers, timeout=10)
+        elif m == "PUT":
+            res = requests.put(url, params=params, json=json_body, headers=headers, timeout=10)
+        elif m == "DELETE":
+            res = requests.delete(url, params=params, json=json_body, headers=headers, timeout=10)
+        else:
+            return None, f"Unsupported method: {method}"
         return res, None
     except Exception as e:
         return None, f"{type(e).__name__}: {e}"

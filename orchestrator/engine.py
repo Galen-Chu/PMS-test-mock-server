@@ -57,6 +57,9 @@ def build_run_context(environment: str) -> RunContext:
         # 非 vendor-sync 路由（停車的 PMS→廠商方向與內部端���）
         "check_in": f"{server_base}/pms-sync-data/check-in",
         "whitelist": f"{server_base}/parking/internal/whitelist",
+        # 門禁 keycard 廠商 API 面（PMS→vendor 製卡方向；非 vendor-sync 前綴）
+        "keycard_order": f"{server_base}/api/Order",
+        "keycard_ordercard": f"{server_base}/api/OrderCard",
     }
     return RunContext(
         environment=environment, use_real=use_real, base_url=base,

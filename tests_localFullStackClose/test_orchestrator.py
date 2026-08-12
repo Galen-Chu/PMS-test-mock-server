@@ -30,7 +30,7 @@ def test_registry_completeness():
     assert all(s.implemented for s in parking), "parking 4 案例應都已實作"
     keycard = by_mod["keycard"]
     assert len(keycard) == 4
-    assert not any(s.implemented for s in keycard), "keycard 應全為 UNIMPLEMENTED"
+    assert all(s.implemented for s in keycard), "keycard 案例應都已實作（B 閉環）"
 
 
 def test_environments_ready_flags():
@@ -89,8 +89,9 @@ def test_start_run_unknown_scenario_marked_fail():
     assert run.cases[0].error_category == "UNKNOWN_SCENARIO"
 
 
-def test_start_run_keycard_unimplemented_skipped():
-    """keycard 案例無 runner → SKIP + UNIMPLEMENTED。"""
-    run = engine.start_run(["card_issue"], "LOCAL_OFFLINE")
-    assert run.cases[0].status == models.CASE_SKIP
-    assert run.cases[0].error_category == classify.UNIMPLEMENTED
+def test_start_run_unknown_scenario_id_in_list():
+    """不存在的 case_id 混在合法清單中 → 該筆 FAIL(UNKNOWN_SCENARIO),其餘正常。"""
+    run = engine.start_run(["room_nos_query", "__nope__"], "LOCAL_OFFLINE")
+    statuses = {c.case_id: c.status for c in run.cases}
+    assert statuses["room_nos_query"] in (models.CASE_PASS, models.CASE_FAIL)
+    assert statuses["__nope__"] == models.CASE_FAIL
