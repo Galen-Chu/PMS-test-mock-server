@@ -89,6 +89,23 @@ def execute_request(method, url, params=None, json_body=None):
         logger.error(f"🚨[通訊邊緣端崩潰]: {e}")
         return None
 
+
+def execute_for_ctx(ctx, method, url, params=None, json_body=None):
+    """編排層專用發射引擎：直接用 RunContext 的 headers/params，不碰模組全域變數。
+
+    與 execute_request 的差異：環境隔離（兩個並行 run 用不同環境不會互踩），
+    並把 timeout 統一為 10s。回傳 (response_or_None, error_msg_or_None)。
+    """
+    headers = dict(getattr(ctx, "headers", {}) or {})
+    try:
+        if method.upper() == "GET":
+            res = requests.get(url, params=params, headers=headers, timeout=10)
+        else:
+            res = requests.post(url, params=params, json=json_body, headers=headers, timeout=10)
+        return res, None
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+
 # ====================================================================
 # 🔄 環境即時同步：Dashboard 動態切換環境後會改寫 config 模組變數；
 #    本函式讓本模組的快取變數同步跟上，確保「切換環境 → 重發」真正生效

@@ -1,0 +1,235 @@
+# orchestrator/runners.py
+"""案例執行器：把「發砲邏輯」包成回傳 CaseResult 的 runner，並註冊進 registry。
+
+設計原則：
+- 不重寫 hardware/simulate_speaker 的 payload 組裝，重用其 _execute_for_ctx（環境隔離版）。
+- runner 簽章固定：(RunContext) -> CaseResult。成功 2xx → PASS，否則 FAIL。
+- keycard 模組目前無執行器 → register_unimplemented（UI 顯示「待開發」）。
+"""
+from datetime import datetime
+
+from .registry import registry, register_scenario
+from .models import CaseResult, RunContext, CASE_PASS, CASE_FAIL
+
+# 重用模擬器的環境隔離發射引擎 + 數據池料號載入
+from hardware.simulate_speaker import execute_for_ctx, load_product_from_pool
+
+
+# ---- 共用輔助 ----------------------------------------------------------
+def _ok(case_id, run_id, scenario, duration_ms, request_payload=None, response_payload=None) -> CaseResult:
+    return CaseResult(
+        case_id=case_id, run_id=run_id, module=scenario.module, vendor=scenario.vendor,
+        scenario_name=scenario.name, endpoint=scenario.endpoint, status=CASE_PASS,
+        duration_ms=duration_ms, request_payload=request_payload, response_payload=response_payload,
+    )
+
+
+def _fail(case_id, run_id, scenario, duration_ms, request_payload=None, response_payload=None) -> CaseResult:
+    return CaseResult(
+        case_id=case_id, run_id=run_id, module=scenario.module, vendor=scenario.vendor,
+        scenario_name=scenario.name, endpoint=scenario.endpoint, status=CASE_FAIL,
+        duration_ms=duration_ms, request_payload=request_payload, response_payload=response_payload,
+    )
+
+
+def _extract_ci_serial(res):
+    """從 GET /room-nos 或 /mifare-nos 回應扒出 checkInSerial（對齊真實雲端 data.data[0]）。"""
+    body = res.json()
+    return body["data"]["data"][0]["checkInSerial"]
+
+
+# ====================================================================
+# 🦏 房務備品（amenity / BR_AIELLO）—— 重用 simulate_speaker 的情境邏輯
+# ====================================================================
+
+@register_scenario(
+    "room_nos_query", module="amenity", vendor="BR_AIELLO",
+    name="房號查詢", endpoint="/room-pay/room-nos",
+)
+def run_room_nos_query(ctx: RunContext) -> CaseResult:
+    import time as _t
+    scenario = registry.get("room_nos_query")
+    params = {**ctx.params_amenity, "keyword": "11101"}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params=params)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err:
+        return _fail("room_nos_query", "", scenario, dur, response_payload={"__error__": err})
+    body = res.json() if res is not None and res.status_code == 200 else None
+    if res is not None and res.status_code == 200:
+        return _ok("room_nos_query", "", scenario, dur, request_payload={"keyword": "11101"}, response_payload=body)
+    return _fail("room_nos_query", "", scenario, dur, request_payload={"keyword": "11101"}, response_payload=body)
+
+
+@register_scenario(
+    "mifare_query", module="amenity", vendor="BR_AIELLO",
+    name="Mifare 卡號查詢", endpoint="/room-pay/mifare-nos",
+)
+def run_mifare_query(ctx: RunContext) -> CaseResult:
+    import time as _t
+    scenario = registry.get("mifare_query")
+    params = {**ctx.params_amenity, "keyword": "1A2B3C"}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["mifare_nos"], params=params)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err:
+        return _fail("mifare_query", "", scenario, dur, response_payload={"__error__": err})
+    body = res.json() if res is not None and res.status_code == 200 else None
+    if res is not None and res.status_code == 200:
+        return _ok("mifare_query", "", scenario, dur, request_payload={"keyword": "1A2B3C"}, response_payload=body)
+    return _fail("mifare_query", "", scenario, dur, request_payload={"keyword": "1A2B3C"}, response_payload=body)
+
+
+@register_scenario(
+    "amenity_charge", module="amenity", vendor="BR_AIELLO",
+    name="備品入帳", endpoint="/room-billing",
+    expected_key="Scenario_1_Room_Nos_To_Billing",
+)
+def run_amenity_charge(ctx: RunContext) -> CaseResult:
+    """房號查驗 → 備品過帳（GET 取 ciSerial 後 POST /room-billing）。"""
+    import time as _t
+    scenario = registry.get("amenity_charge")
+    t0 = _t.perf_counter()
+    # Phase 1: GET room-nos 取 ciSerial
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"})
+    if err or res is None or res.status_code != 200:
+        dur = int((_t.perf_counter() - t0) * 1000)
+        return _fail("amenity_charge", "", scenario, dur, response_payload={"__error__": err or f"GET room-nos {getattr(res,'status_code',None)}"})
+    ci_serial = _extract_ci_serial(res)
+
+    # Phase 2: POST room-billing
+    payload = {"roomNos": "11101", "items": [{"seqNos": 1, "productNos": load_product_from_pool("M001"), "orderQuantity": 1}]}
+    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_billing"], params=ctx.params_amenity, json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err2 or res2 is None or res2.status_code not in (200, 204):
+        return _fail("amenity_charge", "", scenario, dur, request_payload=payload, response_payload={"__error__": err2 or f"POST billing {getattr(res2,'status_code',None)}"})
+    body2 = None
+    try:
+        body2 = res2.json()
+    except Exception:
+        body2 = {"status_code": res2.status_code}
+    return _ok("amenity_charge", "", scenario, dur, request_payload=payload, response_payload=body2)
+
+
+@register_scenario(
+    "amenity_cancel", module="amenity", vendor="BR_AIELLO",
+    name="入帳沖銷", endpoint="/room-pay-cancel",
+    expected_key="Scenario_3_Room_Nos_Pay_And_Cancel",
+)
+def run_amenity_cancel(ctx: RunContext) -> CaseResult:
+    """住掛 → 沖正作廢（先 POST /room-pay 取得單號，再 POST /room-pay-cancel）。"""
+    import time as _t
+    scenario = registry.get("amenity_cancel")
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"})
+    if err or res is None or res.status_code != 200:
+        dur = int((_t.perf_counter() - t0) * 1000)
+        return _fail("amenity_cancel", "", scenario, dur, response_payload={"__error__": err or "GET room-nos failed"})
+    ci_serial = _extract_ci_serial(res)
+
+    order_nos = f"BR-ORCH-{datetime.now().strftime('%m%d%H%M%S')}"
+    pay_payload = {"roomPayMain": {
+        "ciSerial": str(ci_serial), "roomNos": "11101", "orderNos": order_nos,
+        "needTransfer": "N", "rsptCode": "2FFO", "rsptName": "2F櫃台",
+        "mTimeCode": "LCH", "mTimeName": "午餐", "deskNos": "A01",
+        "payAmount": 120, "acuAmount": 0, "precreditTotal": 0, "custType": "5",
+    }, "roomPayDetail": [{"sequenceNos": 1, "productName": "特製飲品", "orderQuantity": 1, "specialAmount": 120, "precreditAmount": 0}]}
+    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay"], params=ctx.params_amenity, json_body=pay_payload)
+    if err2 or res2 is None or res2.status_code not in (200, 204):
+        dur = int((_t.perf_counter() - t0) * 1000)
+        return _fail("amenity_cancel", "", scenario, dur, request_payload=pay_payload, response_payload={"__error__": err2 or "POST room-pay failed"})
+
+    res3, err3 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay_cancel"], params={**ctx.params_amenity, "orderNos": order_nos})
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err3 or res3 is None or res3.status_code not in (200, 204):
+        return _fail("amenity_cancel", "", scenario, dur, request_payload={"cancelledOrderNos": order_nos}, response_payload={"__error__": err3 or f"cancel {getattr(res3,'status_code',None)}"})
+    body3 = None
+    try:
+        body3 = res3.json()
+    except Exception:
+        body3 = {"status_code": res3.status_code}
+    return _ok("amenity_cancel", "", scenario, dur, request_payload={"cancelledOrderNos": order_nos}, response_payload=body3)
+
+
+@register_scenario(
+    "billing_sync", module="amenity", vendor="BR_AIELLO",
+    name="帳務同步", endpoint="/room-pay",
+    expected_key="Scenario_2_Room_Nos_To_Pay",
+)
+def run_billing_sync(ctx: RunContext) -> CaseResult:
+    """房號查驗 → 餐廳住掛（POST /room-pay）。"""
+    import time as _t
+    scenario = registry.get("billing_sync")
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"})
+    if err or res is None or res.status_code != 200:
+        dur = int((_t.perf_counter() - t0) * 1000)
+        return _fail("billing_sync", "", scenario, dur, response_payload={"__error__": err or "GET room-nos failed"})
+    ci_serial = _extract_ci_serial(res)
+
+    order_nos = f"BR-SYNC-{datetime.now().strftime('%m%d%H%M%S')}"
+    payload = {"roomPayMain": {
+        "ciSerial": str(ci_serial), "roomNos": "11101", "orderNos": order_nos,
+        "needTransfer": "N", "rsptCode": "2FFO", "rsptName": "2F櫃台",
+        "mTimeCode": "LCH", "mTimeName": "午餐", "deskNos": "A02",
+        "payAmount": 500, "acuAmount": 0, "precreditTotal": 0, "custType": "5",
+    }, "roomPayDetail": [{"sequenceNos": 1, "productName": "牛排", "orderQuantity": 1, "specialAmount": 500, "precreditAmount": 0}]}
+    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay"], params=ctx.params_amenity, json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err2 or res2 is None or res2.status_code not in (200, 204):
+        return _fail("billing_sync", "", scenario, dur, request_payload=payload, response_payload={"__error__": err2 or f"POST room-pay {getattr(res2,'status_code',None)}"})
+    body2 = None
+    try:
+        body2 = res2.json()
+    except Exception:
+        body2 = {"status_code": res2.status_code}
+    return _ok("billing_sync", "", scenario, dur, request_payload=payload, response_payload=body2)
+
+
+# ====================================================================
+# 🚗 停車車辨（parking / SHIN_YEONG）—— 至少接入 car_arrival
+# ====================================================================
+@register_scenario(
+    "car_arrival", module="parking", vendor="SHIN_YEONG",
+    name="車輛抵達回推", endpoint="/car-arrival",
+)
+def run_car_arrival(ctx: RunContext) -> CaseResult:
+    """模擬車辨回推車輛抵達。需先有 check-in 落庫的白名單（LOCAL 時由 /check-in 建立）。"""
+    import time as _t
+    scenario = registry.get("car_arrival")
+    ts = datetime.now().strftime("%m%d%H%M")
+    payload = {"guest_id": f"G-{ts}", "car_number": f"ABC-{ts}", "guest_name": "Orchestrator", "arrival_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"], params=ctx.params_parking, json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("car_arrival", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code, "text": getattr(res, "text", "")[:200]}
+    if res.status_code == 200:
+        return _ok("car_arrival", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("car_arrival", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+# 停車其餘案例：先登錄為 UNIMPLEMENTED（check-in 同步、白名單異動、逾時重試）
+for _sid, _name, _ep in [
+    ("checkin_sync", "住客入住同步", "/check-in"),
+    ("whitelist_update", "PMS 白名單異動", "/internal/whitelist"),
+    ("car_arrival_retry", "逾時重試情境", "/car-arrival"),
+]:
+    registry.register_unimplemented(_sid, module="parking", vendor="SHIN_YEONG", name=_name, endpoint=_ep)
+
+
+# ====================================================================
+# 🔑 門禁製卡（keycard / WAFERLOCK_LIVEAM）—— 無執行器，全 UNIMPLEMENTED
+# ====================================================================
+for _sid, _name, _ep in [
+    ("card_issue", "製卡發卡（Token 簽發）", "/keycard/issue"),
+    ("card_revoke", "消卡", "/keycard/revoke"),
+    ("order_query", "訂單狀態逆查", "/keycard/order-status"),
+    ("card_issue_exception", "製卡例外重試", "/keycard/issue"),
+]:
+    registry.register_unimplemented(_sid, module="keycard", vendor="WAFERLOCK_LIVEAM", name=_name, endpoint=_ep)

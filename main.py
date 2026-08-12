@@ -5,8 +5,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask
 from server.parking.routes import parking_bp
-from server.amenity.routes import amenity_bp 
+from server.amenity.routes import amenity_bp
 from server.keycard.routes import keycard_bp
+from orchestrator.api import orchestrator_bp
 
 import logging
 
@@ -23,6 +24,7 @@ app = Flask(__name__)
 app.register_blueprint(parking_bp)
 app.register_blueprint(amenity_bp)
 app.register_blueprint(keycard_bp)
+app.register_blueprint(orchestrator_bp)
 
 if __name__ == '__main__':
     print("🚀 [大一統沙盒平台] 核心微服務 Engine 完全體點火成功！")
@@ -30,5 +32,6 @@ if __name__ == '__main__':
     print("   1. [停車車辨系統 (Parking Blueprint)] -> ⚡已在線，支援全生命週期邏輯 Upsert")
     print("   2. [房務備品系統 (Amenity Blueprint)] -> ⚡已在線，支援全生命週期邏輯 Upsert")
     print("   3. [門禁卡鎖系統 (Keycard Blueprint)] -> ⚡已在線，支援全生命週期邏輯 Upsert")
+    print("   4. [測試編排層 (Orchestrator Blueprint)] -> ⚡已在線，/environments /scenarios /runs")
     # 💡 保持 debug 模式看報錯，但明確關閉會背刺記憶體的 reloader
     app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)

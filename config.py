@@ -12,6 +12,8 @@ IS_OFFLINE = ENV_SWITCH == "LOCAL_OFFLINE"
 # 本地邊緣端 Ngrok 轉發基底
 NGROK_BASE_URL = "https://2e5a-118-163-122-183.ngrok-free.app"
 LOCAL_TOKEN = "2pKET7v9JqFxCzpj9bbT6dC17uM_wnTdoVjQtd1WbRPB48T7"
+# 本地 Flask 沙盒基底（main.py 跑在 127.0.0.1:5000）；LOCAL/LOCAL_OFFLINE 編排時直接打這裡
+LOCAL_SERVER_BASE = os.environ.get("LOCAL_SERVER_BASE", "http://127.0.0.1:5000")
 
 # ====================================================================
 # 📊 環境配置矩陣 (Environment Matrix)
@@ -28,7 +30,9 @@ ENV_MATRIX = {
             "hotel": "HOTEL01",
             "accept": "application/json",
             "Content-Type": "application/json"
-        }
+        },
+        "READY": True,    # 編排層是否允許執行（False → POST /runs 回 409）
+        "PMS_URL": ""     # UI「真實環境提示卡」顯示用；LOCAL_* 無對外 URL
     },
     "LOCAL": {
         "BASE_URL_EXTERNAL": f"{NGROK_BASE_URL}/external/vendor-sync-data",
@@ -40,7 +44,9 @@ ENV_MATRIX = {
             "hotel": "HOTEL01",
             "accept": "application/json",
             "Content-Type": "application/json"
-        }
+        },
+        "READY": True,
+        "PMS_URL": NGROK_BASE_URL
     },
     "REAL_QA": {
         "BASE_URL_EXTERNAL": "https://qa-cloud.athena.com.tw/pms/api/v3.0/pms/external/vendor-sync-data",
@@ -52,7 +58,9 @@ ENV_MATRIX = {
             "bacchus-hotelcod": "01",
             "accept": "*/*",
             "Content-Type": "application/json"
-        }
+        },
+        "READY": True,
+        "PMS_URL": "https://qa-cloud.athena.com.tw/pms/api/v3.0/pms"
     },
     "REAL_UG": {
         "BASE_URL_EXTERNAL": "https://bacug.athena.com.tw/pms/api/v3.0/pms/external/vendor-sync-data",
@@ -64,9 +72,42 @@ ENV_MATRIX = {
             "bacchus-hotelcod": "01",
             "accept": "*/*",
             "Content-Type": "application/json"
-        }
+        },
+        "READY": True,
+        "PMS_URL": "https://bacug.athena.com.tw/pms/api/v3.0/pms"
+    },
+    "REAL_SIT": {
+        # 💡 預留：尚未取得 SIT 雲端的 URL/Token/Header，READY=False 讓 UI 顯示「尚未設定」、API 拒絕執行
+        "BASE_URL_EXTERNAL": "",
+        "TOKEN": "",
+        "ATHENA_ID": "",
+        "HOTEL_COD": "",
+        "HEADERS": {"accept": "*/*", "Content-Type": "application/json"},
+        "READY": False,
+        "PMS_URL": ""
+    },
+    "REAL_MAS": {
+        # 💡 預留：尚未取得 MAS 雲端的 URL/Token/Header，READY=False
+        "BASE_URL_EXTERNAL": "",
+        "TOKEN": "",
+        "ATHENA_ID": "",
+        "HOTEL_COD": "",
+        "HEADERS": {"accept": "*/*", "Content-Type": "application/json"},
+        "READY": False,
+        "PMS_URL": ""
     }
 }
+
+# 🎨 環境 UI metadata（對齊設計規格 §3 / 原型 ENV_META）：顯示名稱、狀態點顏色、二列佈局
+ENV_UI_META = {
+    "LOCAL_OFFLINE": {"desc": "閉環規格比對，不對外發送任何請求", "color": "#9aa0ac"},
+    "LOCAL":         {"desc": "本地沙盒，走 Ngrok 邊緣端轉發",     "color": "#4da3ff"},
+    "REAL_QA":       {"desc": "真實德安 QA 雲端 E2E 串接",          "color": "#f472b6"},
+    "REAL_SIT":      {"desc": "真實德安 SIT 測試雲端 E2E 串接（config 待開發）", "color": "#c084fc"},
+    "REAL_UG":       {"desc": "真實德安 UG 雲端 E2E 串接（預設）",  "color": "#35d399"},
+    "REAL_MAS":      {"desc": "真實德安 MAS 雲端 E2E 串接（config 待開發）", "color": "#ff8a3d"},
+}
+ENV_UI_ROWS = [["LOCAL_OFFLINE", "LOCAL", "REAL_QA"], ["REAL_SIT", "REAL_UG", "REAL_MAS"]]
 
 # ====================================================================
 # 🌊 執行期動態洗滌與大一統對齊 (Runtime Dynamic Resolution)
