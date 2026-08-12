@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from flask import Flask
+from flask import Flask, send_from_directory
 # 🏗️ 第 0 層：測試編排協調層 (Orchestrator) — 統籌底下所有互動系統的測試編排
 from orchestrator.api import orchestrator_bp
 # 🔌 互動系統層（被測系統）：目前三個廠商模組，後續可擴充房控、刷卡等其他互動系統
@@ -31,6 +31,18 @@ app.register_blueprint(orchestrator_bp)   # 第 0 層：編排協調
 app.register_blueprint(parking_bp)        # 互動系統 1：停車車辨
 app.register_blueprint(amenity_bp)        # 互動系統 2：房務備品
 app.register_blueprint(keycard_bp)        # 互動系統 3：門禁製卡
+
+
+# ====================================================================
+# 🖥️ 測試主控台前端（vanilla SPA）：Flask 直接 serve static/，前端 fetch 編排 API
+# ====================================================================
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_STATIC = os.path.join(_HERE, "static")
+
+
+@app.route('/')
+def console_index():
+    return send_from_directory(_STATIC, "index.html")
 
 if __name__ == '__main__':
     print("🚀 [大一統沙盒平台] 核心微服務 Engine 完全體點火成功！")
