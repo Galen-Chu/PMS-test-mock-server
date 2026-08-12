@@ -194,11 +194,16 @@ def run_billing_sync(ctx: RunContext) -> CaseResult:
     name="車輛抵達回推", endpoint="/car-arrival",
 )
 def run_car_arrival(ctx: RunContext) -> CaseResult:
-    """模擬車辨回推車輛抵達。需先有 check-in 落庫的白名單（LOCAL 時由 /check-in 建立）。"""
+    """模擬車辨回推車輛抵達。先 check-in 落庫白名單，再觸發 car-arrival（car_arrival 需 guest 在白名單）。"""
     import time as _t
     scenario = registry.get("car_arrival")
-    ts = datetime.now().strftime("%m%d%H%M")
-    payload = {"guest_id": f"G-{ts}", "car_number": f"ABC-{ts}", "guest_name": "Orchestrator", "arrival_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    guest_id, car = f"G-{ts}", f"ABC-{ts}"
+    # 先 check-in 落庫（car_arrival 路由會查 mock_vendor_db，無此 guest 會 404）
+    execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
+        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator", "start_date": now, "end_date": now})
+    payload = {"guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator", "arrival_time": now}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"], params=ctx.params_parking, json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -214,13 +219,96 @@ def run_car_arrival(ctx: RunContext) -> CaseResult:
     return _fail("car_arrival", "", scenario, dur, request_payload=payload, response_payload=body)
 
 
-# 停車其餘案例：先登錄為 UNIMPLEMENTED（check-in 同步、白名單異動、逾時重試）
-for _sid, _name, _ep in [
-    ("checkin_sync", "住客入住同步", "/check-in"),
-    ("whitelist_update", "PMS 白名單異動", "/internal/whitelist"),
-    ("car_arrival_retry", "逾時重試情境", "/car-arrival"),
-]:
-    registry.register_unimplemented(_sid, module="parking", vendor="SHIN_YEONG", name=_name, endpoint=_ep)
+@register_scenario(
+    "checkin_sync", module="parking", vendor="SHIN_YEONG",
+    name="住客入住同步", endpoint="/check-in",
+)
+def run_checkin_sync(ctx: RunContext) -> CaseResult:
+    """PMS→廠商方向：模擬 PMS 推播住客 check-in 落庫（建立白名單）。"""
+    import time as _t
+    scenario = registry.get("checkin_sync")
+    ts = datetime.now().strftime("%m%d%H%M")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = {
+        "guest_id": f"G-{ts}", "car_number": f"ABC-{ts}",
+        "guest_name": "Orchestrator", "start_date": now, "end_date": now,
+    }
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("checkin_sync", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code == 200:
+        return _ok("checkin_sync", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("checkin_sync", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+@register_scenario(
+    "whitelist_update", module="parking", vendor="SHIN_YEONG",
+    name="PMS 白名單異動", endpoint="/internal/whitelist",
+)
+def run_whitelist_update(ctx: RunContext) -> CaseResult:
+    """驗證白名單查詢端點回傳當前落庫的住客字典（GET /parking/internal/whitelist）。"""
+    import time as _t
+    scenario = registry.get("whitelist_update")
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["whitelist"])
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("whitelist_update", "", scenario, dur, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code == 200:
+        return _ok("whitelist_update", "", scenario, dur, request_payload=None, response_payload=body)
+    return _fail("whitelist_update", "", scenario, dur, response_payload=body)
+
+
+@register_scenario(
+    "car_arrival_retry", module="parking", vendor="SHIN_YEONG",
+    name="逾時重試情境", endpoint="/car-arrival",
+)
+def run_car_arrival_retry(ctx: RunContext) -> CaseResult:
+    """逾時重試：先 check-in 建立白名單，再連打兩次 car-arrival（第二次模擬重試）。"""
+    import time as _t
+    scenario = registry.get("car_arrival_retry")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    guest_id = f"G-RETRY-{ts}"
+    car = f"RETRY-{ts}"
+    t0 = _t.perf_counter()
+    # 先 check-in 落庫（car_arrival 需 guest 在白名單才會 200）
+    ci = {"guest_id": guest_id, "car_number": car, "guest_name": "Retry", "start_date": now, "end_date": now}
+    execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body=ci)
+    # 第一次 car-arrival
+    payload = {"guest_id": guest_id, "car_number": car, "guest_name": "Retry", "arrival_time": now}
+    res1, err1 = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"], params=ctx.params_parking, json_body=payload)
+    if err1 or res1 is None or res1.status_code != 200:
+        dur = int((_t.perf_counter() - t0) * 1000)
+        return _fail("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload={"__error__": err1 or f"first try {getattr(res1,'status_code',None)}"})
+    # 重試（第二次）— 應仍 200
+    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"], params=ctx.params_parking, json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err2 or res2 is None:
+        return _fail("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload={"__error__": err2 or "retry no response"})
+    body = None
+    try:
+        body = res2.json()
+    except Exception:
+        body = {"status_code": res2.status_code}
+    if res2.status_code == 200:
+        return _ok("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+# （原本 checkin_sync/whitelist_update/car_arrival_retry 的 UNIMPLEMENTED 註冊已由上方實作取代）
 
 
 # ====================================================================

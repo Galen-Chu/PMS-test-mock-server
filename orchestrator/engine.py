@@ -40,7 +40,13 @@ def build_run_context(environment: str) -> RunContext:
     # LOCAL / LOCAL_OFFLINE 模式：runner 是「客戶端」，要打到本地 Flask 伺服器。
     # LOCAL_OFFLINE 的攔截（不出站）發生在「伺服器路由內部」，所以客戶端仍指向 localhost。
     if not use_real:
+        server_base = config.LOCAL_SERVER_BASE            # 伺服器根，給非 vendor-sync 路由用
         base = config.LOCAL_SERVER_BASE + "/external/vendor-sync-data"
+        # 本地 mock 的車辨 car_arrival 路由有 auth gate（Authorization 须 = LOCAL_TOKEN 或 CURRENT_TOKEN）
+        # runner 在本地模式帶 LOCAL_TOKEN，確保通過；REAL 模式由各環境 bacchus header 鑑別。
+        headers["Authorization"] = config.LOCAL_TOKEN
+    else:
+        server_base = config.ENV_MATRIX[environment].get("BASE_URL_EXTERNAL", "").replace("/external/vendor-sync-data", "") or config.ENV_MATRIX[environment].get("PMS_URL", "")
     urls = {
         "room_nos": f"{base}/room-pay/room-nos",
         "mifare_nos": f"{base}/room-pay/mifare-nos",
@@ -48,6 +54,9 @@ def build_run_context(environment: str) -> RunContext:
         "room_pay_cancel": f"{base}/room-pay-cancel",
         "room_billing": f"{base}/room-billing",
         "car_arrival": f"{base}/car-arrival",
+        # 非 vendor-sync 路由（停車的 PMS→廠商方向與內部端���）
+        "check_in": f"{server_base}/pms-sync-data/check-in",
+        "whitelist": f"{server_base}/parking/internal/whitelist",
     }
     return RunContext(
         environment=environment, use_real=use_real, base_url=base,

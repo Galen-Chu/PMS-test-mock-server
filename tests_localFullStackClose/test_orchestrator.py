@@ -25,6 +25,9 @@ def test_registry_completeness():
     amenity = by_mod["amenity"]
     assert len(amenity) == 5
     assert all(s.implemented for s in amenity)
+    parking = by_mod["parking"]
+    assert len(parking) == 4
+    assert all(s.implemented for s in parking), "parking 4 案例應都已實作"
     keycard = by_mod["keycard"]
     assert len(keycard) == 4
     assert not any(s.implemented for s in keycard), "keycard 應全為 UNIMPLEMENTED"
