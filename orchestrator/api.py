@@ -37,17 +37,21 @@ def list_environments():
 
 @orchestrator_bp.route('/scenarios', methods=['GET'])
 def list_scenarios():
+    """三層結構:模組 → 廠商 → 案例(對齊原型,供前端畫廠商 chip)。"""
+    _MODULE_LABEL = {"parking": "🚗 停車車辨", "amenity": "🦏 房務備品", "keycard": "🔑 門禁製卡"}
     out = []
     for module, scs in registry.by_module().items():
+        # 同模組的案例依 vendor 分組
+        vendors_map = {}
+        for s in scs:
+            vendors_map.setdefault(s.vendor, []).append({
+                "id": s.id, "name": s.name, "endpoint": s.endpoint, "implemented": s.implemented,
+            })
+        vendors = [{"id": v, "label": v, "scenarios": items} for v, items in vendors_map.items()]
         out.append({
             "module": module,
-            "scenarios": [
-                {
-                    "id": s.id, "vendor": s.vendor, "name": s.name,
-                    "endpoint": s.endpoint, "implemented": s.implemented,
-                }
-                for s in scs
-            ],
+            "label": _MODULE_LABEL.get(module, module),
+            "vendors": vendors,
         })
     return jsonify(out), 200
 

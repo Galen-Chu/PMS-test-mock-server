@@ -54,9 +54,9 @@ a { color: var(--link); } a:hover { color: var(--link-hover); }
 
 /* ---- ① 設定頁：環境卡 ---- */
 .section-label { font: 600 12px 'Space Grotesk'; color: var(--text-mute); letter-spacing: .04em; margin-bottom: 10px; }
-.env-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.env-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
 .env-card {
-  cursor: pointer; flex: 1; min-width: 190px; padding: 14px; border-radius: 10px;
+  cursor: pointer; padding: 14px; border-radius: 10px;
   background: transparent; border: 1.5px solid rgba(255,255,255,.1);
 }
 .env-card.active { background: rgba(255,255,255,.06); }

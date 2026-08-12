@@ -9,9 +9,11 @@ const API = '';
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;          // null/false → 不設屬性
     if (k === 'class') e.className = v;
     else if (k === 'onclick') e.onclick = v;
     else if (k === 'text') e.textContent = v;
+    else if (k === 'disabled') e.disabled = !!v;      // 布林屬性正確處理
     else e.setAttribute(k, v);
   }
   for (const kid of kids.flat()) {
@@ -26,7 +28,8 @@ const state = {
   activeTab: 'setup',
   environments: [],        // [{id,desc,color,ready,pms_url}]
   env: null,               // 當前選環境 id
-  modules: [],             // [{module, scenarios:[{id,vendor,name,endpoint,implemented}]}]
+  modules: [],             // [{module,label,vendors:[{id,label,scenarios:[{id,name,endpoint,implemented}]}]}]
+  activeVendor: {},        // module → 當前選廠商 id
   expanded: {},            // module → bool
   checked: {},             // case_id → bool
   runStep: 'idle',         // idle / running / done
@@ -55,8 +58,11 @@ async function init() {
   state.environments = envs;
   state.modules = mods;
   state.env = envs[0]?.id || 'LOCAL_OFFLINE';
-  // 預設勾選所有已實作案例
-  for (const m of mods) for (const s of m.scenarios) if (s.implemented) state.checked[s.id] = true;
+  // 預設勾選所有已實作案例(遍歷模組→廠商→案例);每模組預設選第一個廠商
+  for (const m of mods) {
+    state.activeVendor[m.module] = m.vendors[0]?.id;
+    for (const v of m.vendors) for (const s of v.scenarios) if (s.implemented) state.checked[s.id] = true;
+  }
   render();
 }
 
@@ -161,24 +167,42 @@ function renderSetup() {
   ));
   const stack = el('div', { class: 'list-stack' });
   for (const m of state.modules) {
-    const impl = m.scenarios.filter(s => s.implemented);
-    const selCount = m.scenarios.filter(s => state.checked[s.id]).length;
+    // 該模組所有廠商的案例合計
+    const allScenarios = m.vendors.flatMap(v => v.scenarios);
+    const selCount = allScenarios.filter(s => state.checked[s.id]).length;
     const expanded = state.expanded[m.module];
     const mod = el('div', { class: 'module' },
       el('div', { class: 'module-head', onclick: () => { state.expanded[m.module] = !expanded; render(); } },
         el('div', { class: 'left' },
-          el('span', { class: 'label', text: moduleLabel(m.module) }),
-          el('span', { class: 'vendor', text: m.scenarios[0]?.vendor || '' }),
+          el('span', { class: 'label', text: m.label || moduleLabel(m.module) }),
         ),
         el('div', { style: 'display:flex;align-items:center;gap:12px' },
-          el('span', { class: 'count', text: `${selCount}/${m.scenarios.length}` }),
+          el('span', { class: 'count', text: `${selCount}/${allScenarios.length}` }),
           el('span', { style: 'font-size:11px;color:#6b7280', text: expanded ? '▲' : '▼' }),
         ),
       ),
     );
     if (expanded) {
       const body = el('div', { class: 'module-body' });
-      for (const s of m.scenarios) {
+      // 廠商 chip 列(切換 activeVendor)
+      const chipRow = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px' });
+      for (const v of m.vendors) {
+        const active = (state.activeVendor[m.module] || m.vendors[0]?.id) === v.id;
+        chipRow.appendChild(el('div', {
+          class: 'vendor-chip' + (active ? ' active' : ''),
+          onclick: (e) => { e.stopPropagation(); state.activeVendor[m.module] = v.id; render(); },
+          style: active
+            ? 'background:rgba(255,138,61,.15);border:1.5px solid #ff8a3d'
+            : 'background:transparent;border:1.5px solid rgba(255,255,255,.12)',
+        },
+          el('span', { style: `font:600 11.5px 'JetBrains Mono';color:${active ? '#fff' : '#9aa0ac'}`, text: v.label }),
+          el('span', { style: 'font:10.5px \'JetBrains Mono\';color:#6b7280', text: String(v.scenarios.filter(s => state.checked[s.id]).length) }),
+        ));
+      }
+      body.appendChild(chipRow);
+      // 當前選中廠商的案例清單
+      const activeV = m.vendors.find(v => v.id === (state.activeVendor[m.module] || m.vendors[0]?.id)) || m.vendors[0];
+      if (activeV) for (const s of activeV.scenarios) {
         const ck = !!state.checked[s.id];
         body.appendChild(el('div', { class: 'scenario', onclick: () => { state.checked[s.id] = !state.checked[s.id]; render(); } },
           el('span', { class: 'box' + (ck ? ' checked' : '') }, ck ? el('span', { text: '✓' }) : null),
@@ -198,7 +222,7 @@ function renderSetup() {
   const canLaunch = totalSelected > 0 && envMeta.ready !== false && state.runStep !== 'running';
   page.appendChild(el('div', { class: 'launch-bar' },
     el('div', { class: 'meta', text: `環境 ${state.env} ・ 已選 ${totalSelected} 案例` }),
-    el('button', { class: 'btn-launch', text: state.runStep === 'running' ? '執行中…' : '🚀 啟動測試', onclick: startRun, disabled: !canLaunch ? '' : null }),
+    el('button', { class: 'btn-launch', text: state.runStep === 'running' ? '執行中…' : '🚀 啟動測試', onclick: startRun, disabled: !canLaunch }),
   ));
   if (state.launchMsg) page.appendChild(el('div', { class: 'error-banner', text: state.launchMsg }));
 
@@ -268,7 +292,7 @@ function renderMonitor() {
     el('div', { class: 'status', text: statusText }),
   ));
   if (!state.caseResults.length) {
-    page.appendChild(el('div', { class: 'empty', text: '尚未啟動測試，請回到「① 環境/案例設定���勾選案例並啟動' }));
+    page.appendChild(el('div', { class: 'empty', text: '尚未啟動測試，請回到「① 環境/案例設定」勾選案例並啟動' }));
   } else {
     const list = el('div', { class: 'list-stack' });
     for (const c of state.caseResults) {

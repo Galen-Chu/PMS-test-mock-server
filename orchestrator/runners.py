@@ -278,38 +278,97 @@ def run_whitelist_update(ctx: RunContext) -> CaseResult:
 
 
 @register_scenario(
-    "car_arrival_retry", module="parking", vendor="SHIN_YEONG",
-    name="逾時重試情境", endpoint="/car-arrival",
+    "night_audit", module="parking", vendor="SHIN_YEONG",
+    name="夜核名單同步", endpoint="/pms-sync-data/night-audit",
 )
-def run_car_arrival_retry(ctx: RunContext) -> CaseResult:
-    """逾時重試：先 check-in 建立白名單，再連打兩次 car-arrival（第二次模擬重試）。"""
+def run_night_audit(ctx: RunContext) -> CaseResult:
+    """PMS→廠商夜核:POST /pms-sync-data/night-audit 推播夜核住客名單(增量 Upsert)。"""
+    import time as _t
+    scenario = registry.get("night_audit")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = {
+        "guest_id": f"G-AUDIT-{ts}", "car_number": f"AUD-{ts}",
+        "guest_name": "NightAudit", "start_date": now, "end_date": now,
+    }
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["night_audit"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("night_audit", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code == 200:
+        return _ok("night_audit", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("night_audit", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+# ====================================================================
+# 🚗 停車車辨（parking / PAYTRONEX）—— 博辰專屬路由(/parktron/hpms/services/roomer/*)
+# 注意:PAYTRONEX 與 SHIN_YEONG 的 API 合約不同(endpoint + payload shape),故獨立 runner。
+# ====================================================================
+@register_scenario(
+    "car_arrival_pt", module="parking", vendor="PAYTRONEX",
+    name="新增房客預約(車輛抵達)", endpoint="/parktron/hpms/services/roomer/add",
+)
+def run_paytronex_add(ctx: RunContext) -> CaseResult:
+    """PAYTRONEX:POST /parktron/hpms/services/roomer/add 新增房客預約(帶車牌)。"""
+    import time as _t
+    scenario = registry.get("car_arrival_pt")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    payload = {"Roomer": {
+        "RoomNumber": "207", "StartTime": "2026-08-12T15:00:00", "EndTime": "2026-08-13T12:00:00",
+        "LicensePlateList": [f"PT-{ts}"],
+    }}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["paytronex_add"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("car_arrival_pt", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code == 200 and str(body.get("resultCode", "")) == "0000":
+        return _ok("car_arrival_pt", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("car_arrival_pt", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+@register_scenario(
+    "car_arrival_retry", module="parking", vendor="PAYTRONEX",
+    name="車牌逆查(逾時重試)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate",
+)
+def run_paytronex_find(ctx: RunContext) -> CaseResult:
+    """PAYTRONEX:先 add_roomer 建租約,再 findByLicensePlate 逆查(模擬車辨感應 → 查租約)。
+
+    若查無對應租約,mock 會動態就地合法(建虛擬租約),故應回 200 + roomer。
+    """
     import time as _t
     scenario = registry.get("car_arrival_retry")
     ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    guest_id = f"G-RETRY-{ts}"
-    car = f"RETRY-{ts}"
+    plate = f"FIND-{ts}"
     t0 = _t.perf_counter()
-    # 先 check-in 落庫（car_arrival 需 guest 在白名單才會 200）
-    ci = {"guest_id": guest_id, "car_number": car, "guest_name": "Retry", "start_date": now, "end_date": now}
-    execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body=ci)
-    # 第一次 car-arrival
-    payload = {"guest_id": guest_id, "car_number": car, "guest_name": "Retry", "arrival_time": now}
-    res1, err1 = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"], params=ctx.params_parking, json_body=payload)
-    if err1 or res1 is None or res1.status_code != 200:
-        dur = int((_t.perf_counter() - t0) * 1000)
-        return _fail("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload={"__error__": err1 or f"first try {getattr(res1,'status_code',None)}"})
-    # 重試（第二次）— 應仍 200
-    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"], params=ctx.params_parking, json_body=payload)
+    # 先 add 建立含該車牌的租約
+    execute_for_ctx(ctx, "POST", ctx.urls["paytronex_add"], json_body={"Roomer": {
+        "RoomNumber": "209", "StartTime": "2026-08-12T15:00:00", "EndTime": "2026-08-13T12:00:00",
+        "LicensePlateList": [plate],
+    }})
+    # 再逆查
+    payload = {"LicensePlate": plate}
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["paytronex_find"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
-    if err2 or res2 is None:
-        return _fail("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload={"__error__": err2 or "retry no response"})
+    if err or res is None:
+        return _fail("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
     body = None
     try:
-        body = res2.json()
+        body = res.json()
     except Exception:
-        body = {"status_code": res2.status_code}
-    if res2.status_code == 200:
+        body = {"status_code": res.status_code}
+    if res.status_code == 200 and body.get("roomer"):
         return _ok("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload=body)
     return _fail("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload=body)
 
@@ -333,7 +392,7 @@ def _keycard_auth_headers(ctx):
 
 
 @register_scenario(
-    "card_issue", module="keycard", vendor="WAFERLOCK_LIVEAM",
+    "card_issue", module="keycard", vendor="WAFERLOCK",
     name="製卡發卡", endpoint="/api/OrderCard",
 )
 def run_card_issue(ctx: RunContext) -> CaseResult:
@@ -364,7 +423,7 @@ def run_card_issue(ctx: RunContext) -> CaseResult:
 
 
 @register_scenario(
-    "card_revoke", module="keycard", vendor="WAFERLOCK_LIVEAM",
+    "card_revoke", module="keycard", vendor="WAFERLOCK",
     name="消卡", endpoint="/api/OrderCard/<oid>/<cuid>",
 )
 def run_card_revoke(ctx: RunContext) -> CaseResult:
@@ -398,7 +457,7 @@ def run_card_revoke(ctx: RunContext) -> CaseResult:
 
 
 @register_scenario(
-    "order_query", module="keycard", vendor="WAFERLOCK_LIVEAM",
+    "order_query", module="keycard", vendor="WAFERLOCK",
     name="訂單狀態逆查", endpoint="/api/Operation/getCardInfo/<pmrId>",
 )
 def run_order_query(ctx: RunContext) -> CaseResult:
@@ -423,7 +482,7 @@ def run_order_query(ctx: RunContext) -> CaseResult:
 
 
 @register_scenario(
-    "card_lifecycle", module="keycard", vendor="WAFERLOCK_LIVEAM",
+    "card_lifecycle", module="keycard", vendor="WAFERLOCK",
     name="跨模組卡片生命週期閉環（製卡→mifare 刷回房號）", endpoint="/api/OrderCard + /room-pay/mifare-nos",
 )
 def run_card_lifecycle(ctx: RunContext) -> CaseResult:
@@ -467,3 +526,14 @@ def run_card_lifecycle(ctx: RunContext) -> CaseResult:
                request_payload={"cardUid": card_uid, "expected_room": room}, response_payload=response_payload)
     cr.diff = [{"field": "roomNos", "expected": room, "actual": read_room}]
     return cr
+
+
+# ====================================================================
+# 🔑 門禁製卡（keycard / LIVEAM）—— 華豫寧��製面(/key-card-management/liveam/*)
+# 不同於 WAFERLOCK 的 /api/Order* 面;LIVEAM 走 /key-card-management 路由。
+# 製卡例外重試:先登錄為 UNIMPLEMENTED(LIVEAM 客製路由合約待補 runner)。
+# ====================================================================
+registry.register_unimplemented(
+    "card_issue_exception", module="keycard", vendor="LIVEAM",
+    name="製卡例外重試", endpoint="/key-card-management/liveam/create-card",
+)

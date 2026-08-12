@@ -26,11 +26,16 @@ def test_registry_completeness():
     assert len(amenity) == 5
     assert all(s.implemented for s in amenity)
     parking = by_mod["parking"]
-    assert len(parking) == 4
-    assert all(s.implemented for s in parking), "parking 4 案例應都已實作"
+    assert len(parking) == 6  # SHIN_YEONG 4 + PAYTRONEX 2
+    parking_vendors = {s.vendor for s in parking}
+    assert parking_vendors == {"SHIN_YEONG", "PAYTRONEX"}
+    assert all(s.implemented for s in parking), "parking 6 案例應都已實作"
     keycard = by_mod["keycard"]
-    assert len(keycard) == 4
-    assert all(s.implemented for s in keycard), "keycard 案例應都已實作（B 閉環）"
+    assert len(keycard) == 5  # WAFERLOCK 4 + LIVEAM 1
+    keycard_vendors = {s.vendor for s in keycard}
+    assert keycard_vendors == {"WAFERLOCK", "LIVEAM"}
+    # LIVEAM card_issue_exception 為 UNIMPLEMENTED,其餘已實作
+    assert any(not s.implemented for s in keycard if s.vendor == "LIVEAM")
 
 
 def test_environments_ready_flags():
