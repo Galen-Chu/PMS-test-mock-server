@@ -34,11 +34,14 @@ def test_registry_completeness():
 
 
 def test_environments_ready_flags():
-    """SIT/MAS 尚未設定 → ready=false，其餘 true。"""
-    assert config.ENV_MATRIX["REAL_SIT"]["READY"] is False
-    assert config.ENV_MATRIX["REAL_MAS"]["READY"] is False
-    for env in ("LOCAL_OFFLINE", "LOCAL", "REAL_QA", "REAL_UG"):
+    """6 環境皆已設定 → ready=true（SIT/MAS 已補上 config）。"""
+    for env in ("LOCAL_OFFLINE", "LOCAL", "REAL_QA", "REAL_UG", "REAL_SIT", "REAL_MAS"):
         assert config.ENV_MATRIX[env]["READY"] is True
+    # SIT/MAS 補上後應有完整 URL/Header
+    assert config.ENV_MATRIX["REAL_SIT"]["PMS_URL"].startswith("https://sit.athena.com.tw")
+    assert config.ENV_MATRIX["REAL_MAS"]["PMS_URL"].startswith("https://bacmas.athena.com.tw")
+    assert config.ENV_MATRIX["REAL_SIT"]["HEADERS"]["bacchus-athenaid"] == "01"
+    assert config.ENV_MATRIX["REAL_MAS"]["HEADERS"]["bacchus-athenaid"] == "35"
 
 
 def test_compute_diff_field_missing_and_mismatch():

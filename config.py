@@ -77,24 +77,32 @@ ENV_MATRIX = {
         "PMS_URL": "https://bacug.athena.com.tw/pms/api/v3.0/pms"
     },
     "REAL_SIT": {
-        # 💡 預留：尚未取得 SIT 雲端的 URL/Token/Header，READY=False 讓 UI 顯示「尚未設定」、API 拒絕執行
-        "BASE_URL_EXTERNAL": "",
+        "BASE_URL_EXTERNAL": "https://sit.athena.com.tw/pms/api/v3.0/pms/external/vendor-sync-data",
         "TOKEN": "",
-        "ATHENA_ID": "",
-        "HOTEL_COD": "",
-        "HEADERS": {"accept": "*/*", "Content-Type": "application/json"},
-        "READY": False,
-        "PMS_URL": ""
+        "ATHENA_ID": "01",
+        "HOTEL_COD": "01",
+        "HEADERS": {
+            "bacchus-athenaid": "01",
+            "bacchus-hotelcod": "01",
+            "accept": "*/*",
+            "Content-Type": "application/json"
+        },
+        "READY": True,
+        "PMS_URL": "https://sit.athena.com.tw/pms/api/v3.0/pms"
     },
     "REAL_MAS": {
-        # 💡 預留：尚未取得 MAS 雲端的 URL/Token/Header，READY=False
-        "BASE_URL_EXTERNAL": "",
+        "BASE_URL_EXTERNAL": "https://bacmas.athena.com.tw/pms/api/v3.0/pms/external/vendor-sync-data",
         "TOKEN": "",
-        "ATHENA_ID": "",
-        "HOTEL_COD": "",
-        "HEADERS": {"accept": "*/*", "Content-Type": "application/json"},
-        "READY": False,
-        "PMS_URL": ""
+        "ATHENA_ID": "35",
+        "HOTEL_COD": "01",
+        "HEADERS": {
+            "bacchus-athenaid": "35",
+            "bacchus-hotelcod": "01",
+            "accept": "*/*",
+            "Content-Type": "application/json"
+        },
+        "READY": True,
+        "PMS_URL": "https://bacmas.athena.com.tw/pms/api/v3.0/pms"
     }
 }
 
@@ -103,9 +111,9 @@ ENV_UI_META = {
     "LOCAL_OFFLINE": {"desc": "閉環規格比對，不對外發送任何請求", "color": "#9aa0ac"},
     "LOCAL":         {"desc": "本地沙盒，走 Ngrok 邊緣端轉發",     "color": "#4da3ff"},
     "REAL_QA":       {"desc": "真實德安 QA 雲端 E2E 串接",          "color": "#f472b6"},
-    "REAL_SIT":      {"desc": "真實德安 SIT 測試雲端 E2E 串接（config 待開發）", "color": "#c084fc"},
+    "REAL_SIT":      {"desc": "真實德安 SIT 測試雲端 E2E 串接", "color": "#c084fc"},
     "REAL_UG":       {"desc": "真實德安 UG 雲端 E2E 串接（預設）",  "color": "#35d399"},
-    "REAL_MAS":      {"desc": "真實德安 MAS 雲端 E2E 串接（config 待開發）", "color": "#ff8a3d"},
+    "REAL_MAS":      {"desc": "真實德安 MAS 雲端 E2E 串接", "color": "#ff8a3d"},
 }
 ENV_UI_ROWS = [["LOCAL_OFFLINE", "LOCAL", "REAL_QA"], ["REAL_SIT", "REAL_UG", "REAL_MAS"]]
 
