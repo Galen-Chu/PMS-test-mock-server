@@ -18,9 +18,6 @@ from . import engine
 
 orchestrator_bp = Blueprint('orchestrator', __name__)
 
-# 同步執行下，run 結果以 run_id 暫存於記憶體（程序重啟即清；足夠 MVP / 單人測試）
-_RUNS = {}
-
 
 @orchestrator_bp.route('/environments', methods=['GET'])
 def list_environments():
@@ -69,14 +66,13 @@ def create_run():
     if not scenario_ids:
         return jsonify({"error": "NO_SCENARIOS"}), 400
 
-    run = engine.start_run(scenario_ids, environment)
-    _RUNS[run.run_id] = run
-    return jsonify(_run_summary(run)), 201
+    run = engine.start_run_async(scenario_ids, environment)  # 背景執行；立即回 RUNNING
+    return jsonify(_run_summary(run)), 202   # 202 Accepted：已受理、執行中
 
 
 @orchestrator_bp.route('/runs/<run_id>', methods=['GET'])
 def get_run(run_id):
-    run = _RUNS.get(run_id)
+    run = engine.snapshot_run(run_id)   # 序列化安全快照(背景執行緒持續 append 不會撞)
     if run is None:
         return jsonify({"error": "RUN_NOT_FOUND", "run_id": run_id}), 404
     return jsonify(_run_summary(run)), 200
@@ -84,7 +80,7 @@ def get_run(run_id):
 
 @orchestrator_bp.route('/runs/<run_id>/results', methods=['GET'])
 def get_run_results(run_id):
-    run = _RUNS.get(run_id)
+    run = engine.snapshot_run(run_id)
     if run is None:
         return jsonify({"error": "RUN_NOT_FOUND", "run_id": run_id}), 404
     return jsonify([_case_dict(c) for c in run.cases]), 200

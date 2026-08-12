@@ -9,6 +9,7 @@
 """
 import time
 import uuid
+import threading
 from datetime import datetime
 
 import config
@@ -19,6 +20,36 @@ from .models import (
 from .registry import registry
 from . import expected as expected_mod
 from . import classify as classify_mod
+
+# 全域 run 存放（程序記憶體；重啟即清）+ 並行安全鎖
+_RUNS = {}
+_RUNS_LOCK = threading.RLock()
+
+
+def store_run(run):
+    """把 Run 存入記憶體表（thread-safe）。"""
+    with _RUNS_LOCK:
+        _RUNS[run.run_id] = run
+
+
+def get_run(run_id):
+    with _RUNS_LOCK:
+        return _RUNS.get(run_id)
+
+
+def snapshot_run(run_id):
+    """取 Run 的淺拷貝快照供序列化（避免序列化時 cases list 被背景執行緒改動）。"""
+    with _RUNS_LOCK:
+        run = _RUNS.get(run_id)
+        if run is None:
+            return None
+        snap = Run(
+            run_id=run.run_id, triggered_at=run.triggered_at, environment=run.environment,
+            status=run.status, total_cases=run.total_cases, passed=run.passed,
+            failed=run.failed, duration_ms=run.duration_ms,
+        )
+        snap.cases = list(run.cases)
+        return snap
 
 
 def build_run_context(environment: str) -> RunContext:
@@ -85,56 +116,69 @@ def _build_case_result(case_id, run_id, scenario, status, duration_ms,
     return cr
 
 
-def start_run(scenario_ids, environment: str) -> Run:
-    """同步執行一組案例，回傳完整 Run。
+def _execute_run(run, scenario_ids, ctx):
+    """背景執行緒主體：逐案例執行，每案完成即 append + recompute（鎖保護 cases list）。"""
+    run_id = run.run_id
+    for sid in scenario_ids:
+        sc = registry.get(sid)
+        if sc is None:
+            cr = CaseResult(
+                case_id=sid, run_id=run_id, module="?", vendor="?",
+                scenario_name=sid, endpoint="?", status=CASE_FAIL,
+                error_category="UNKNOWN_SCENARIO",
+            )
+        elif not sc.implemented:
+            cr = _build_case_result(sid, run_id, sc, CASE_SKIP, 0)
+            cr.error_category = classify_mod.UNIMPLEMENTED
+        else:
+            t0 = time.perf_counter()
+            try:
+                cr = sc.runner(ctx)
+                cr.run_id = run_id
+                if cr.expected_payload is None and sc.expected_key:
+                    cr.expected_payload = expected_mod.get_expected(sc.expected_key, sc.endpoint)
+                    cr.diff = expected_mod.compute_diff(cr.response_payload, cr.expected_payload)
+                if cr.error_category is None:
+                    cr.error_category = classify_mod.classify(cr)
+                cr.duration_ms = cr.duration_ms or int((time.perf_counter() - t0) * 1000)
+            except Exception as e:
+                dur = int((time.perf_counter() - t0) * 1000)
+                cr = _build_case_result(
+                    sid, run_id, sc, CASE_FAIL, dur,
+                    response_payload={"__error__": f"{type(e).__name__}: {e}"},
+                )
+        with _RUNS_LOCK:
+            run.cases.append(cr)
+            run.recompute()
 
-    - UNIMPLEMENTED 案例（無 runner）→ SKIP + error_category=UNIMPLEMENTED。
-    - runner 拋例外 → FAIL + TIMEOUT（連線/程式錯誤），不中斷整個 run。
-    """
-    ctx = build_run_context(environment)
-    run_id = uuid.uuid4().hex[:12]
-    run = Run(
-        run_id=run_id,
+
+def _new_run(environment: str) -> Run:
+    return Run(
+        run_id=uuid.uuid4().hex[:12],
         triggered_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         environment=environment,
         status=RUN_RUNNING,
     )
 
-    for sid in scenario_ids:
-        sc = registry.get(sid)
-        if sc is None:
-            run.cases.append(CaseResult(
-                case_id=sid, run_id=run_id, module="?", vendor="?",
-                scenario_name=sid, endpoint="?", status=CASE_FAIL,
-                error_category="UNKNOWN_SCENARIO",
-            ))
-            continue
 
-        if not sc.implemented:
-            run.cases.append(_build_case_result(
-                sid, run_id, sc, CASE_SKIP, 0))
-            run.cases[-1].error_category = classify_mod.UNIMPLEMENTED
-            continue
+def start_run(scenario_ids, environment: str) -> Run:
+    """同步執行一組案例，回傳完整 Run（跑完才回）。供需要同步語意的呼叫端用。"""
+    ctx = build_run_context(environment)
+    run = _new_run(environment)
+    _execute_run(run, scenario_ids, ctx)
+    return run
 
-        t0 = time.perf_counter()
-        try:
-            cr = sc.runner(ctx)
-            # runner 可能只回部分欄位；補上 run_id 與分類
-            cr.run_id = run_id
-            if cr.expected_payload is None and sc.expected_key:
-                cr.expected_payload = expected_mod.get_expected(sc.expected_key, sc.endpoint)
-                cr.diff = expected_mod.compute_diff(cr.response_payload, cr.expected_payload)
-            if cr.error_category is None:
-                cr.error_category = classify_mod.classify(cr)
-            cr.duration_ms = cr.duration_ms or int((time.perf_counter() - t0) * 1000)
-            run.cases.append(cr)
-        except Exception as e:
-            dur = int((time.perf_counter() - t0) * 1000)
-            run.cases.append(_build_case_result(
-                sid, run_id, sc, CASE_FAIL, dur,
-                response_payload={"__error__": f"{type(e).__name__}: {e}"},
-            ))
 
-    run.recompute()
+def start_run_async(scenario_ids, environment: str) -> Run:
+    """非同步執行：背景執行緒跑案例，立即回傳 status=RUNNING 的 Run。
+
+    client 用 GET /runs/<id> polling(snapshot_run 給序列化安全快照)直到 status != RUNNING。
+    Run 先 store_run 入記憶體表(鎖保護)，背景執行緒逐案 append + recompute。
+    """
+    ctx = build_run_context(environment)
+    run = _new_run(environment)
+    store_run(run)
+    t = threading.Thread(target=_execute_run, args=(run, scenario_ids, ctx), daemon=True)
+    t.start()
     return run
 
