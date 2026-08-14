@@ -9,3 +9,7 @@ venv/
 
 # ngrok 本機隧道工具 binary,請各自下載,不入庫
 ngrok.exe
+
+# Claude 環境暫存(截圖/瀏覽器產物),不入庫
+.playwright-mcp/
+ui-*.png

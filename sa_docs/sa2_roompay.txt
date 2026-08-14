@@ -1,0 +1,259 @@
+┌─TABLE─┐
+ │ A7PM公版住掛串接說明
+ │ 修訂歷程
+ │ 版本 │ 日期 │ 修訂者 │ 目的
+ │ 1.0 │ 2026/05/04 │ 蔡佳伶 │ 建立
+ │ 1.1 │ 2026/07/10 │ 蔡佳伶 │ 「ROOMPAY_INQUIRY」 增加回傳 C/I Date, C/O Date, 訂房卡號
+ │ 1.2 │ 2026/07/24 │ 蔡佳伶 │ 「ROOMPAY_INQUIRY」增加回傳性別
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+└───────┘
+URL，規格如下
+URL: https://IP/external/vendor-sync-data/
+Content-Type: application/json
+Accept: application/json
+Http Status 200 成功，417 處理失敗，回傳失敗原因
+固定代碼，上線後提供
+┌─TABLE─┐
+ │ 代碼 │ 型別 │ 說明
+ │ athena │ Integer │ 飯店 ID，範例為1
+ │ hotel │ String │ 飯店代碼，範例為HOTEL01
+ │ thirdParty │ String │ 第三方廠商代碼，範例為ABCDEFG
+ │ rsptCode │ String │ 飯店設定的銷售點，範例為BUF
+└───────┘
+一、房號查詢取得住客
+URL
+GET  https://IP/external/vendor-sync-data/room-pay/room-nos
+Request 參數
+Header 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ athena │ Integer │ 飯店 ID
+ │ V │ hotel │ String │ 飯店代碼
+└───────┘
+URL 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ thirdParty │ String │ 第三方廠商代碼
+ │ V │ keyword │ String │ 房號
+└───────┘
+Response
+成功 HTTP Status Codes=200
+Response欄位說明
+┌─TABLE─┐
+ │ 必填 │ Json名稱 │ 型別 │ 說明
+ │ V │ guestStatus │ String │ O:可住掛 K:不可住掛
+ │ V │ roomNos │ String │ 房號
+ │ V │ roomSerial │ String │ 房間序號，住掛房帳使用
+ │ V │ checkInSerial │ String │ 住客序號
+ │  │ orderRemark │ String │ 訂房備註
+ │  │ checkOutRemark │ String │ 退房提醒
+ │  │ sumItemTotal │ Number │ 已消費總額
+ │  │ sumAdvcTotal │ Number │ 已預收金額
+ │  │ preCreditAmount │ Number │ 已預授權金額
+ │  │ groupNos │ String │ 團號
+ │  │ chargeInfo │ String │ 不可掛帳的原因
+ │  │ ciDate │ Date │ C/I 日期
+ │  │ coDate │ Date │ C/O日期
+ │  │ ikey │ String │ 訂房卡號
+ │  │ sexType │ String │ 性別:M:男 F:女 U:未定義 S:保密
+└───────┘
+失敗 HTTP Status Codes=417
+Response欄位說明
+┌─TABLE─┐
+ │ 必填 │ Json名稱 │ 型別 │ 說明
+ │ V │ code │ String │ 失敗訊息代碼
+ │ V │ message │ String │ 失敗訊息內容
+└───────┘
+說明
+Respoinse 的resultCode=S，且guestStatus= O才可以掛客房帳
+範例
+查詢房號：1001
+┌─TABLE─┐
+ │ GET /external/vendor-sync-data/room-pay/room-nos?thirdParty=ABCDEFG&keyword=1001 Headers: athena: 1 hotel: HOTEL01
+└───────┘
+Response 成功 httpstatus = 200
+┌─TABLE─┐
+ │ [ { "guestStatus":"O", "roomNos":"1001", "roomSerial":"001", "altName":"王小明", "checkInSerial":"20260413001", "orderRemark":"備註事項", "checkOutRemark":"退房通知", "sumItemTotal":1000.00, "sumAdvcTotal":500.00, "preCreditAmount":0.00, "groupNos":"TA-G001", "chargeInfo":"" } ]
+└───────┘
+Response 失敗 httpstatus = 417
+┌─TABLE─┐
+ │ { "code":1001 "message":"查無此房號" }
+└───────┘
+二、房卡卡號查詢取得住客
+URL
+GET  https://IP/external/vendor-sync-data/room-pay/ mifare-nos
+Request 參數
+Header 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ athena │ Integer │ 飯店 ID
+ │ V │ hotel │ String │ 飯店代碼
+└───────┘
+URL 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ thirdParty │ String │ 第三方廠商代碼
+ │ V │ keyword │ String │ 房卡卡號
+└───────┘
+Response
+Response欄位說明
+與房號查詢取得住客相同
+範例
+查詢房卡卡號：123456789
+┌─TABLE─┐
+ │ GET /external/vendor-sync-data/room-pay/room-nos?thirdParty=ABCDEFG&keyword=123456789 Headers: athena: 1 hotel: HOTEL01
+└───────┘
+Response與房號查詢取得住客相同
+三、住掛房帳
+URL
+POST  https://IP/external/vendor-sync-data/room-pay
+Request 參數
+Header 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ athena │ Integer │ 飯店 ID
+ │ V │ hotel │ String │ 飯店代碼
+└───────┘
+URL 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ thirdParty │ String │ 第三方廠商代碼
+└───────┘
+Request欄位說明
+主檔
+┌─TABLE─┐
+ │ 必填 │ Json名稱 │ 型別 │ 碼數 │ 說明
+ │ V │ ciSerial │ String │ 20 │ 住客序號，由查詢中取得
+ │ V │ roomNos │ String │ 6 │ 房號
+ │ V │ orderNos │ String │ 21 │ 訂單單號(唯一值)(取消住掛時使用)
+ │ V │ needTransfer │ String │ 1 │ 是否需轉換銷售點，填N，必要時才填Y N:否，Y:需要
+ │ V │ rsptCode │ String │ 4 │ 銷售點代號
+ │ V │ rsptName │ String │ 10 │ 銷售點名稱
+ │ V │ mTimeCode │ String │ 4 │ 餐廳代號
+ │ V │ mTimeName │ String │ 10 │ 餐期名稱
+ │ V │ deskNos │ String │ 10 │ 桌號
+ │ V │ payAmount │ Number │  │ 住掛總金額
+ │ V │ acuAmount │ Number │  │ 可積點金額
+ │ V │ precreditTotal │ Number │  │ 內含代支總額
+ │ V │ custType │ String │ 1 │ 結帳客戶類別，填：5
+└───────┘
+明細檔
+┌─TABLE─┐
+ │ 必填 │ Json名稱 │ 型別 │ 碼數 │ 說明
+ │ V │ sequenceNos │ Integer │  │ 第幾筆明細，從1開始
+ │ V │ productName │ String │ 30 │ 單品名稱
+ │ V │ orderQuantity │ Integer │  │ 數量
+ │ V │ specialAmount │ Number │  │ 金額小計(含代支金額)
+ │ V │ precreditAmount │ Number │  │ 代支金額
+└───────┘
+Response
+成功 HTTP Status Codes=200
+Response欄位說明
+┌─TABLE─┐
+ │ 必填 │ Json名稱 │ 型別 │ 說明
+ │ V │ acctNos │ String │ 入帳成功的單號
+└───────┘
+失敗 HTTP Status Codes=417
+Response欄位說明
+┌─TABLE─┐
+ │ 必填 │ Json名稱 │ 型別 │ 說明
+ │ V │ code │ String │ 失敗訊息代碼
+ │ V │ message │ String │ 失敗訊息內容
+└───────┘
+範例
+┌─TABLE─┐
+ │ POST /external/vendor-sync-data/room-pay?thirdParty=ABCDEFG Headers: athena: 1 hotel: HOTEL01 Body: { "roomPayMain": { "ciSerial": "20260413001", "roomNos": "1001", "orderNos": "ORDER001", "needTransfer": "N", "rsptCode": "BUFFET", "rsptName": "自助餐", "mTimeCode": "LUNCH", "mTimeName": "午餐", "deskNos": "A01", "payAmount": 500.00, "custType": "ADULT", "acuAmount": 0.00, "precreditTotal": 0.00 }, "roomPayDetail": [ { "sequenceNos": 1, "productName": "牛排", "orderQuantity": 1, "specialAmount": 500, "precreditAmount": 0 }, { "sequenceNos": 2, "productName": "可樂", "orderQuantity": 2, "specialAmount": 100, "precreditAmount": 0 } ] }
+└───────┘
+Response 成功 httpstatus = 200
+┌─TABLE─┐
+ │ { "acctNos":"ACCT001" }
+└───────┘
+Response 失敗 httpstatus = 417
+┌─TABLE─┐
+ │ { "code":1001 "message":"無符合的住客資料" }
+└───────┘
+四、取消住掛房帳
+URL
+POST  https://IP/external/vendor-sync-data/ room-pay-cancel
+Request 參數
+Header 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ athena │ Integer │ 飯店 ID
+ │ V │ hotel │ String │ 飯店代碼
+└───────┘
+URL 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ thirdParty │ String │ 第三方廠商代碼
+ │ V │ orderNos │ String │ 訂單單號
+└───────┘
+Response
+成功 HTTP Status Codes=200
+Response欄位說明
+┌─TABLE─┐
+ │ 必填 │ Json名稱 │ 型別 │ 說明
+ │ V │ acctNos │ String │ 取消入帳成功的單號
+└───────┘
+失敗 HTTP Status Codes=417
+Response欄位說明
+┌─TABLE─┐
+ │ 必填 │ Json名稱 │ 型別 │ 說明
+ │ V │ code │ String │ 失敗訊息代碼
+ │ V │ message │ String │ 失敗訊息內容
+└───────┘
+範例
+┌─TABLE─┐
+ │ POST /external/vendor-sync-data/room-pay-cancel?thirdParty=ABCDEFG&orderNos=ORDER001 Headers: athena: 1 hotel: HOTEL01
+└───────┘
+Response 成功 httpstatus = 200
+┌─TABLE─┐
+ │ { "Code":"200" "Message": "" "acctNos":"ACCT002" }
+└───────┘
+Response 失敗 httpstatus = 417
+┌─TABLE─┐
+ │ { "code":"2007" "message":"客房已結帳. 不可掛帳取消" }
+└───────┘
+附註：失敗訊息代碼
+┌─TABLE─┐
+ │ 訊息代碼 │ 訊息內容
+ │ 1001 │ 無符合的住客資料
+ │ 1002 │ 此住客設定為不可掛帳
+ │ 1003 │ 查無此住客，不可掛帳
+ │ 1004 │ 此住客已結帳，不可掛帳
+ │ 1005 │ 此住客關帳，不可掛帳
+ │ 1006 │ 查無此掛帳廳別，請檢查設定，廳別代號為: {廳別代號}
+ │ 1007 │ 掛帳廳別無設定服務項目，請檢查是否設定正確
+ │ 1008 │ 請在共用設定，將廠商銷售點代號，對應成A7銷售點代號
+ │ 1009 │ 在服務項目對照檔中查無對應的掛帳廳別服務項目代號資訊，請檢查是否設
+ │ 1010 │ 此單號已掛帳，不可重複掛帳
+ │ 1011 │ 查無任何與此住客相符的住客帳
+ │ 1012 │ 該住客已被館別: {館別}, 使用者帳號: {帳號}使用
+ │ 1013 │ 未找到資料
+ │ 1014 │ 預收款缺少付款資訊，請確認相關付款資訊是否正確輸入
+ │ 1015 │ 對資料庫的操作失敗
+ │ 1016 │ 無法將輸入的時間轉換成預設的時間格式
+ │ 1017 │ 無開班班別，請先開班
+ │ 1018 │ 請檢查當前班別是否有開班，請確認後，重新操作
+ │ 2001 │ 掛帳資料找不到
+ │ 2002 │ 已掛帳取消,不可再掛帳取消
+ │ 2003 │ 在餐廳掛帳主檔中未找到對應的結帳單號: {單號}
+ │ 2004 │ 在住客帳明細檔中未找到對應的餐廳掛帳結帳單號: {單號}
+ │ 2005 │ 該住客已被館別: {某個館}, 使用者帳號: {某個帳號}使用
+ │ 2006 │ 客房已註銷
+ │ 2007 │ 客房已結帳. 不可掛帳取消
+ │ 2008 │ 此住客未開帳，不可掛帳取消
+ │ 2009 │ 對資料庫的操作失敗
+ │ 2010 │ 無法將輸入的時間轉換成預設的時間格式
+ │ 2011 │ 無開班班別，請先開班
+ │ 2012 │ 請檢查當前班別是否有開班，請確認後，重新操作
+ │ 2013 │ 優惠劵非當天當班不能取消
+ │ 2014 │ 住客帳明細資料在程序中並沒有被記錄
+ │ 7001 │ {傳入參數}有誤
+ │ 9999 │ 非預期錯誤
+└───────┘

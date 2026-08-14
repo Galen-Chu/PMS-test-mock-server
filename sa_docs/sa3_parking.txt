@@ -1,0 +1,476 @@
+===== PAGE 1 =====
+/ / / /󰋜 integration parking_lot A7 default_json
+公版停⾞場 (JSON)
+德安系統停⾞場第三⽅廠商公版串接規格
+事件 動作代號 ⾏為
+夜間稽核 NIGHT_AUDIT 德安系統傳送明天預計⼊住且有⾞號之住客資料、啟⽤給
+廠商
+⼊住 CKI 德安系統傳送住客資料、啟⽤給廠商
+取消⼊住 CIX 德安系統傳送住客資料、啟⽤給廠商
+結束⽇期依執⾏取消⼊住當下主機時間加緩衝分鐘數計算
+綜合櫃台新
+增⾞號 CHG_CAR_NOS 德安系統傳送住客資料、啟⽤給廠商
+綜合櫃台清
+除⾞號 CHG_CAR_NOS 德安系統傳送住客資料、停⽤給廠商
+住客資料的⾞號為原⾞號
+公版停⾞場 (JSON)
+串接規格
+公版停⾞場廠商串接規格󰏌▸
+說明
+串接依事件類別可分為德安系統傳送停⾞場廠商及停⾞場廠商傳送德安系統▸
+德安系統傳送停⾞場廠商
+德安將住客資料、是否啟⽤打給串接廠商，由串接廠商⾃⾏判斷後續邏輯。 ( 收費、折扣等 )▸
+依動作⼀次傳送⼀筆串接資料，分次傳給廠商  ( thirdparty_tr 要⼊多筆  )▸
+停⾞場廠商傳送德安系統
+停⾞場廠商於住客⾏⾞抵達停⾞場，傳送訊息⾄德安系統，德安系統接收時寫⼊記錄於綜合櫃檯顯⽰提醒圖
+⽰及當⽇記錄清單
+▸
+事件
+
+===== PAGE 2 =====
+事件 動作代號 ⾏為
+綜合櫃台更
+新⾞號 CHG_CAR_NOS
+原⾞號：德安系統傳送住客資料、停⽤給廠商，住客資料
+的⾞號為修改前的資料
+新⾞號：德安系統傳送住客資料、啟⽤給廠商，住客資料
+的⾞號為修改後的資料
+修改退房⽇
+期 CHANGE_CKO_DATE_TIME 德安系統傳送住客資料、啟⽤給廠商，住客資料的結束⽇
+期以修改後退房⽇期及參數時間組合
+住客⾏⾞抵
+達停⾞場 CAR_ARRIVAL 廠商依⾞牌辨識及德安系統傳送有效資料判斷傳送德安系
+統
+德安系統傳送停⾞場廠商注意事項
+啟⽤有⾞號才會送資料、停⽤為清除⾞號或修改之原⾞號▸
+起始時間⼀律為凌晨零點  (00:00)▸
+結束時間依事件及參數判斷  (停⾞場參數)▸
+取消⼊住：依執⾏取消⼊住當下主機時間加參數「取消⼊住離場緩衝分鐘數」計算▸
+其他事件：以退房⽇期及參數「最晚離場時間」組合▸
+時間只傳送時、分資料，秒由串接廠商⾃⾏補上。▸
+起始⽇期參照C/I 日期▸
+結束⽇期參照C/O 日期或當日( 取消⼊住 CIX)▸
+夜間稽核
+執⾏夜核項⽬「 E1010: 第三⽅廠商資料傳送」觸發▸
+傳送滾房租⽇期當⽇預計⼊住但未⼊住之住客資料⾄停⾞場廠商▸
+⼀次傳送⼀筆資料，分次傳送▸
+夜核作業讀取住客資料  SQL▸
+ GUEST_MN CI_SER
+       GUEST_MN CAR_NOS
+       GUEST_MN ALT_NAM
+       ORDER_DT CI_DAT
+       ORDER_DT CO_DAT
+       GUEST_MN IKEY
+       GUEST_MN IKEY_SEQ_NOS
+       GUEST_MN ROOM_NOS
+   GUEST_MN
+   ORDER_DT
+     GUEST_MN ATHENA_ID  ORDER_DT ATHENA_ID
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+SELECT
+.
+,
+.
+,
+.
+,
+.
+,
+.
+,
+.
+,
+.
+,
+.
+FROM
+JOIN
+ON
+. =
+.
+
+===== PAGE 3 =====
+    GUEST_MN HOTEL_COD  ORDER_DT HOTEL_COD
+    GUEST_MN IKEY  ORDER_DT IKEY
+    GUEST_MN IKEY_SEQ_NOS  ORDER_DT IKEY_SEQ_NOS
+  GUEST_MN ATHENA_ID  德安代號
+    GUEST_MN HOTEL_COD  
+    ORDER_DT CI_DAT  滾房租日期
+    ORDER_DT ORDER_STA  
+    GUEST_MN CAR_NOS   
+    GUEST_MN GUEST_STA  
+    GUEST_MN MASTER_STA  
+    GUEST_MN SYSTEM_TYP  
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+⼊住、修改退房⽇期
+執⾏作業若住客資料若有⾞號，則執⾏傳送廠商即時有效期間資料▸
+讀取住客資料  SQL▸
+ CI_SER
+       CAR_NOS
+       ALT_NAM
+       CI_DAT
+       ACO_DAT
+   GUEST_MN
+  ATHENA_ID  德安代號
+    HOTEL_COD  
+    CI_SER  
+    CAR_NOS   
+    GUEST_STA     
+    GUEST_MN MASTER_STA  
+    GUEST_MN SYSTEM_TYP  
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+取消⼊住
+取消⼊住之住客若有⾞號，傳送啟⽤資料給廠商▸
+傳送之結束⽇期資料為執⾏取消⼊住當下主機時間加上參數「取消⼊住離場緩衝分鐘數」計算
+如執⾏取消⼊住時間為  2026/06/01 14:47 ，參數設定  60 分鐘，則傳送結束⽇期為  2026/06/01 15:47
+▸
+讀取住客資料  SQL▸
+ CI_SER
+       CAR_NOS
+       ALT_NAM
+   GUEST_MN
+  ATHENA_ID  德安代號
+    HOTEL_COD  
+1
+2
+3
+4
+5
+6
+7
+AND
+. =
+.
+AND
+. =
+.
+AND
+. =
+.
+WHERE
+. =
+AND
+. = ' 館別代號 '
+AND
+. =
+AND
+. = 'N'
+AND
+. IS NOT NULL
+AND
+. = 'E'
+AND
+. = 'G'
+AND
+. = 'HFD'
+;
+SELECT
+,
+,
+,
+,
+FROM
+WHERE =
+AND = ' 館別代號 '
+AND = ' 住客序號 '
+AND IS NOT NULL
+AND IN
+( 'K'
+, 'O'
+)
+AND
+. = 'G'
+AND
+. = 'HFD'
+;
+SELECT
+,
+,
+FROM
+WHERE =
+AND = ' 館別代號 '
+
+===== PAGE 4 =====
+    CI_SER  
+    CAR_NOS   
+    GUEST_STA  
+    GUEST_MN MASTER_STA  
+    GUEST_MN SYSTEM_TYP  
+8
+9
+10
+11
+綜合櫃檯增修⾞號
+清除住客⾞號資料或修改住客⾞號，傳送停⽤原⾞號給廠商▸
+新增住客⾞號資料或修改住客⾞號，傳送啟⽤新⾞號給廠商▸
+住客⾏⾞抵達停⾞場
+德安系統接收廠商傳送住客⾏⾞抵達停⾞場訊息時，判斷及寫⼊住客⾏⾞抵達記錄▸
+依傳送訊息住客資料是否已⼊住及第三⽅廠商設定明細檔參數設定內容判斷▸
+以下條件皆符合則寫⼊記錄條件：▸
+住客資料為滾房租⽇期當⽇⼊住但未⼊住▸
+第三⽅廠商設定明細檔參數設定設為需寫⼊記錄▸
+判斷接收訊息
+檢查傳送訊息必填欄位是否皆有值▸
+若皆有值則執⾏後續流程，並回覆廠商處理成功▸
+若任⼀必填欄位無值，則回覆廠商處理錯誤，且不執⾏後續流程▸
+住客是否當⽇⼊住但未⼊住
+依傳送訊息住客序號讀取資料，若讀取有資料則為當⽇⼊住但未⼊住住客，無資料則⾮此情形  ( 如已⼊住住
+客 )
+▸
+若讀取有資料，後續寫⼊住客⾏⾞抵達記錄依此讀取資料寫⼊▸
+接收廠商訊息讀取住客資料  SQL▸
+ GUEST_MN IKEY  
+       GUEST_MN IKEY_SEQ_NOS 
+   GUEST_MN
+   ORDER_DT
+     GUEST_MN ATHENA_ID  ORDER_DT ATHENA_ID
+    GUEST_MN HOTEL_COD  ORDER_DT HOTEL_COD
+    GUEST_MN IKEY  ORDER_DT IKEY
+    GUEST_MN IKEY_SEQ_NOS  ORDER_DT IKEY_SEQ_NOS
+  GUEST_MN ATHENA_ID  德安代號
+    GUEST_MN HOTEL_COD  
+    ORDER_DT CI_DAT  滾房租日期
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+AND = ' 住客序號 '
+AND IS NOT NULL
+AND = 'E'
+AND
+. = 'G'
+AND
+. = 'HFD'
+;
+SELECT
+.
+, -- 訂房卡號
+.
+-- 訂房卡明細序號
+FROM
+JOIN
+ON
+. =
+.
+AND
+. =
+.
+AND
+. =
+.
+AND
+. =
+.
+WHERE
+. =
+AND
+. = ' 館別代號 '
+AND
+. =
+
+===== PAGE 5 =====
+參數代號 參數設定值 備註說明
+ins_car_arrival_log
+Y: 是
+N: 否
+預設值 :N
+是否寫⼊住客⾏⾞抵達記錄
+若設定為  Y 才寫⼊記錄
+car_arrival_log_keep_day 預設值 :10 住客⾏⾞抵達記錄保留天數
+    ORDER_DT ORDER_STA     
+    GUEST_MN CI_SER  
+    GUEST_MN CAR_NOS   
+    GUEST_MN GUEST_STA  
+    GUEST_MN MASTER_STA  
+    GUEST_MN SYSTEM_TYP  
+13
+14
+15
+16
+17
+第三⽅廠商設定明細檔參數設定內容
+依廠商版本及明細檔動作讀取第三⽅廠商設定明細檔參數設定內容▸
+新增記錄
+資料表 : 住客⾏⾞抵達記錄 (hfd_car_arrival_log)▸
+讀取資料序號
+「資料檔取得系統編號程式󰏌」 ( 住客⾏⾞抵達記錄資料序號－ get_hfd_car_arrival_log_key_nos) 讀取資料
+序號
+德安代號：德安代號
+公司別： ‘NULL’ （字串 NULL)
+館別：館別代號
+系統別： HFD
+資料項鍵值： ‘HFD_CAR_ARRIVAL_LOG_KEY_NOS’
+資料⽇期： 2000/01/01
+取序號即  COMMIT
+流⽔號 1-9999999 (7 碼，循環使⽤ )
+▸
+保留⽇期
+依主機⽇期及「住客⾏⾞抵達記錄保留天數」設定值計算保留⽇期
+如⽇期為  2026/06/01 ，且設定值為  10 天，則保留⽇期為  2026/06/11
+▸
+新增記錄  SQL
+AND
+. IN
+( 'N'
+, 'I'
+)
+AND
+. = ' 住客序號 '
+AND
+. IS NOT NULL
+AND
+. = 'E'
+AND
+. = 'G'
+AND
+. = 'HFD'
+;
+
+===== PAGE 6 =====
+  HFD_CAR_ARRIVAL_LOG
+ ATHENA_ID
+  HOTEL_COD
+  KEY_NOS
+  IKEY
+  IKEY_SEQ_NOS
+  CI_SER
+  CI_DAT
+  ARRIVAL_TIM
+  CAR_NOS
+  READ_STA
+  KEEP_DAT
+  INS_DAT
+  INS_USR
+  UPD_DAT
+  UPD_USR 
+ 德安代號
+  
+  資料序號
+  
+  訂房卡明細序號
+  
+  滾房租日期
+  傳送資料抵達時間  
+   　
+  
+  保留日期
+  SYSDATE
+  
+  SYSDATE
+   
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+© 2026 Athena Information Systems. 。版權所有。  | Powered by Wiki.js
+INSERT INTO
+(
+,
+,
+,
+,
+,
+,
+,
+,
+,
+,
+,
+,
+,
+,
+)
+VALUES
+(
+,
+' 館別代號 '
+,
+,
+' 訂房卡號 '
+,
+,
+' 住客序號 '
+,
+,
+,
+-- 依廠商傳送資料轉換日期格式寫入
+' 傳送資料車號 '
+, -- 依廠商傳送資料寫入
+'N'
+,
+,
+,
+'BATCH'
+,
+,
+'BATCH'
+)
+;

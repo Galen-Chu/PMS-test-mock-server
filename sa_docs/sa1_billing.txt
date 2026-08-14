@@ -1,0 +1,72 @@
+┌─TABLE─┐
+ │ 德安資訊A7PMS房務入帳規格說明
+ │ 修訂歷程
+ │ 版本 │ 日期 │ 修訂者 │ 目的
+ │ 1.0 │ 2026/05/04 │ 蔡佳伶 │ 建立
+ │ 1.1 │ 2026/05/11 │ 蔡佳伶 │ URL 及 RequestBody 內容錯誤修正
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+└───────┘
+德安接收房務入帳 Ver: 1.1
+德安接收房務入帳
+URL，規格如下
+URL: external/vendor-sync-data/room-billing
+方法: POST
+Accept: application/Json
+Request 參數
+Header 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ athena │ Integer │ 飯店 ID
+ │ V │ hotel │ String │ 飯店代碼
+└───────┘
+URL 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ thirdParty │ String │ 第三方廠商代碼
+└───────┘
+Request Body
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ roomNos │ String │ 房號
+ │ N筆 │ items │  │ 
+ │ V │ seqNos │ number │ 序號, 從1開始
+ │ V │ productNos │ String │ 備品編號，在德安系統內需設定
+ │ V │ orderQuantity │ number │ 數量，需大於0
+└───────┘
+Response
+Response欄位說明
+┌─TABLE─┐
+ │ 必填 │ Json名稱 │ 型別 │ 說明
+ │ V │ code │ String │ 失敗訊息代碼
+ │ V │ message │ String │ 失敗訊息內容
+└───────┘
+說明:
+1.一次只傳送一個房號，這個房號的多個入帳品項
+範例：
+┌─TABLE─┐
+ │ { "roomNos": "2403", "items": [   {     "seqNos": 1,     "productNos": "1234567890",     "orderQuantity": 1   },   {     "seqNos": 2,     "productNos": "2223367890",     "orderQuantity": 1   }  ] }
+└───────┘
+回應格式範例：
+成功: HTTP Status Codes=200
+┌─TABLE─┐
+ │ 
+└───────┘
+失敗: HTTP Status Codes=417
+┌─TABLE─┐
+ │ { "code": "1001", "message": "此房間無住客" }
+└───────┘
+附註：失敗訊息代碼
+┌─TABLE─┐
+ │ 訊息代碼 │ 訊息內容
+ │ 1001 │ 無符合的住客資料
+ │ 1002 │ 此住客設定為不可掛帳
+ │ 1003 │ 無此品項 {傳入的品項代號}
+ │ 7001 │ {傳入參數}有誤
+ │ 9999 │ 非預期錯誤
+└───────┘

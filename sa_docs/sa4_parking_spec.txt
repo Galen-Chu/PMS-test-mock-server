@@ -1,0 +1,122 @@
+德安資訊A7PMS停車場規格說明
+Version 1.2
+┌─TABLE─┐
+ │ 修訂歷程
+ │ 版本 │ 日期 │ 修訂者 │ 目的
+ │ 1.0 │ 2026/03/09 │ 蔡佳伶 │ 建立
+ │ 1.1 │ 2026/03/09 │ 林彥志 │ 增加停車場傳送德安說明
+ │ 1.2 │ 2026/05/08 │ 林彥志 │ 異動停車場傳送德安參數athena及hotel處理方式
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+└───────┘
+一、德安傳送停車場
+停車場需提供 URL，規格如下
+URL: https://api.example.com/parking
+方法: POST
+格式: JSON 格式
+Request Body
+┌─TABLE─┐
+ │ 必填 │ Key │ Type │ Description
+ │ V │ guest_id │ String 21碼 │ 住客序號
+ │ V │ car_number │ String 30碼 │ 車號
+ │  │ guest_name │ String 30碼 │ 住客姓名
+ │ V │ start_date │ String │ 開始日期時間, 格式:yyyy/mm/dd hh:mm
+ │ V │ end_date │ String │ 結束日期期間 yyyy/mm/dd hh:mm
+ │ V │ is_enabled │ String │ 是否有效， Yes:有效,    No:失效
+└───────┘
+回應
+┌─TABLE─┐
+ │ 必填 │ Key │ Type │ Description
+ │ V │ code │ String 4碼 │ 訊息代碼: 0000:成功 其餘代碼 為失敗
+ │ V │ message │ String 200碼 │ 成功訊息: success 失敗:失敗原因
+└───────┘
+說明:
+1.一次傳送一筆
+2. 停車廠廠商自行決定要用車號 或住客序號做為資料唯一值的控管資料，接收到資料後，自行判斷要做新增或修改
+3.飯店業者跟停車廠廠商自行決定是否要顯示住客姓名
+4.結束日期的時間為固定時間，設定於德安系統參數
+5.傳送時機：入住時有車號、更改車號、更改C/O且有車號、取消入住且有車號
+範例：
+1. 傳送車號資料為有效
+(1) 在德安資訊飯店系統入住前已有車號，入住時傳送
+(2) 入住前沒給車號, 入住後才改車號，則入住時不會傳送資料，更改車號後傳送
+┌─TABLE─┐
+ │ { "guest_id": "202502210002001", "car_number": "AAA-1111", "guest_name": "陳彩燕", "start_date": "2025/06/01 00:00", "end_date": "2025/06/02 23:59", "is_enabled": "Yes" }
+└───────┘
+2.在德安資訊飯店系統入住後，更改退房日期，一樣是傳送資料為有效
+┌─TABLE─┐
+ │ { "guest_id": "202502210002001", "car_number": "AAA-1111", "guest_name": "陳彩燕", "start_date": "2025/06/01 00:00", "end_date": "2025/06/03 23:59", "is_enabled": "Yes" }
+└───────┘
+3. 在德安資訊飯店系統入住後，更改車號，傳送資料，原車號資料為失效，新車號為有效
+┌─TABLE─┐
+ │ { "guest_id": "202502210002001", "car_number": "AAA-1111", "guest_name": "陳彩燕", "start_date": "2025/06/01 00:00", "end_date": "2025/06/03 23:59", "is_enabled": "No" }
+└───────┘
+┌─TABLE─┐
+ │ { "guest_id": "202502210002001", "car_number": "DDD-2222", "guest_name": "陳彩燕", "start_date": "2025/06/01 00:00", "end_date": "2025/06/03 23:59", "is_enabled": "Yes" }
+└───────┘
+4. 傳送車號失效的資料的情況在德安資訊飯店系統入住後，原本有車號, 更改成無車號，則傳送原車號資料為失效
+┌─TABLE─┐
+ │ { "guest_id": "202502210004001", "car_number": "EEE-5555", "guest_name": "宋仁君", "start_date": "2025/06/01 00:00", "end_date": "2025/06/03 23:59", "is_enabled": "No" }
+└───────┘
+5. 入住後, 取消不住, 結束日為當日
+┌─TABLE─┐
+ │ { "guest_id": "202502210002001", "car_number": "AAA-1111", "guest_name": "陳彩燕", "start_date": "2025/06/01 00:00", "end_date": "2025/06/01 23:59", "is_enabled": "Yes" }
+└───────┘
+回應格式範例：
+成功:
+┌─TABLE─┐
+ │ { "code": "0000", "message": "success" }
+└───────┘
+失敗:
+┌─TABLE─┐
+ │ { "code": "1000", "message": "車牌格式不對" }
+└───────┘
+二、停車場傳送德安
+德安串接URL格式如下
+德安串接網址?thirdParty=TT
+實際串接URL於客戶環境準備好需測試時再提供
+Parameter:
+thirdParty:由德安提供廠商固定代號(必填)
+方法：POST
+格式：JSON
+Request Header 參數
+┌─TABLE─┐
+ │ 必填 │ 參數 │ 型別 │ 說明
+ │ V │ athena │ Integer │ 由德安提供客戶固定代號
+ │ V │ hotel │ String │ 由德安提供客戶固定代號
+└───────┘
+Request Body欄位說明
+┌─TABLE─┐
+ │ 必填 │ Key │ Type │ Description
+ │ V │ guest_id │ String 21碼 │ 住客序號
+ │ V │ car_number │ String 30碼 │ 車號
+ │  │ guest_name │ String 30碼 │ 住客姓名
+ │ V │ arrival_time │ String │ 抵達時間, 格式:yyyy/mm/dd hh:mm
+└───────┘
+回應
+Http Status 200 成功，417 處理失敗，回傳失敗原因
+┌─TABLE─┐
+ │ 必填 │ Key │ Type │ Description
+ │ V │ code │ String 4碼 │ 訊息代碼: 0000:成功 其餘代碼 為失敗
+ │ V │ message │ String 200碼 │ 成功訊息: success 失敗:失敗原因
+└───────┘
+說明:
+1.一次傳送一筆
+2.傳送時機：住客抵達停車場，且車號在有效車號名單內時
+範例：
+┌─TABLE─┐
+ │ POST /德安串接網址?thirdParty=TT Headers: athena:1 hotel:HOTEL01 Body: { "guest_id": "202502210002001", "car_number": "AAA-1111", "guest_name": "陳彩燕", "arrival_time": "2025/06/01 15:27", }
+└───────┘
+回應格式範例：
+成功:
+┌─TABLE─┐
+ │ { "code": "0000", "message": "success" }
+└───────┘
+失敗:
+┌─TABLE─┐
+ │ { "code": "1000", "message": "xxx is required" }
+└───────┘
