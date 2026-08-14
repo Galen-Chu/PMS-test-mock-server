@@ -59,9 +59,20 @@ def build_run_context(environment: str) -> RunContext:
     base = cfg["BASE_URL_EXTERNAL"]
     headers = dict(cfg["HEADERS"])
     params_parking = {
-        "bacchus-hotelcod": cfg["HOTEL_COD"],
-        "bacchus-athenaid": cfg["ATHENA_ID"],
+        # 💡 SA v1.2:car-arrival 的 URL 參數僅 thirdParty;athena/hotel 走 Header(headers_parking)。
+        # 舊制 bacchus-* query params 各廠商機制不同,註解保留:
+        # "bacchus-hotelcod": cfg["HOTEL_COD"],
+        # "bacchus-athenaid": cfg["ATHENA_ID"],
         "thirdParty": "SHIN_YEONG",
+    }
+    # 💡 新詠 SA v1.2(修訂重點):廠商→德安(car-arrival)鑑別 Header 為 athena/hotel。
+    # 舊制 bacchus-* 註解保留:
+    #   "bacchus-athenaid": cfg["ATHENA_ID"], "bacchus-hotelcod": cfg["HOTEL_COD"],
+    headers_parking = {
+        "athena": cfg["ATHENA_ID"],
+        "hotel": cfg["HOTEL_COD"],
+        "accept": "*/*",
+        "Content-Type": "application/json",
     }
     params_amenity = {
         # 💡 對齊 SA 公版住掛 v1.2:URL 參數僅 thirdParty(+各端點的 keyword/orderNos)。
@@ -102,6 +113,8 @@ def build_run_context(environment: str) -> RunContext:
         "change_checkout": f"{server_base}/pms-sync-data/change-checkout-datetime",
         "change_car_nos": f"{server_base}/pms-sync-data/change-car-nos",
         "check_in_cancel": f"{server_base}/pms-sync-data/check-in-cancel",
+        # 💡 SA v1.2 公版單一端點:德安所有停車事件皆以同一 schema 打到廠商唯一 URL
+        "parking_sync": f"{server_base}/parking/sync",
         "whitelist": f"{server_base}/parking/internal/whitelist",
         # PAYTRONEX 專屬路由（/parktron/hpms/services/roomer/*）
         "paytronex_add": f"{server_base}/parktron/hpms/services/roomer/add",
@@ -112,7 +125,7 @@ def build_run_context(environment: str) -> RunContext:
     }
     return RunContext(
         environment=environment, use_real=use_real, base_url=base,
-        headers=headers, headers_amenity=headers_amenity,
+        headers=headers, headers_amenity=headers_amenity, headers_parking=headers_parking,
         params_parking=params_parking, params_amenity=params_amenity,
         urls=urls,
     )

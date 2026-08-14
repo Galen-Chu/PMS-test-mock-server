@@ -35,7 +35,7 @@ def test_full_hotel_stay_scenario():
     
     # 斷言：廠商伺服器必須要成功收件並回傳 200
     assert response_1.status_code == 200
-    assert response_1.json()["status"] == "success"
+    assert response_1.json()["code"] == "0000"  # 💡 SA v1.2 回應格式
     print("-> 步驟 1 成功：外部廠商已成功為住客建立白名單。")
 
     # ----------------------------------------------------
@@ -56,5 +56,5 @@ def test_full_hotel_stay_scenario():
     
     # 斷言：PMS 必須成功收件
     assert response_2.status_code == 200
-    assert response_2.json()["status"] == "success"
+    assert response_2.json()["code"] == "0000"  # 💡 SA v1.2 回應格式
     print(f"-> 步驟 2 成功：車牌 [{shared_car_number}] 與住客狀態已在 PMS 完成閉環閉鎖！")

@@ -31,7 +31,7 @@ def test_car_arrival_success():
     response = requests.post(BASE_URL, json=payload, headers=headers)
 
     assert response.status_code == 200
-    assert response.json()["status"] == "success"
+    assert response.json()["code"] == "0000"  # 💡 SA v1.2 回應格式 {code, message}
 
 def test_car_arrival_unauthorized():
     """測試案例 2：故意帶入錯誤的 Token，預期被攔截 (401)"""

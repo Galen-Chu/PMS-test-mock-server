@@ -61,10 +61,11 @@ def receive_pms_checkin():
         }
         
         print(f"📥 [Webhook - CKI 入住] 新名單落庫 -> ID: {guest_id} | 車牌: {clean['car_number']} | 狀態: 【{clean['enabled']}】")
-        return jsonify({"status": "success", "message": "Check-in integrated successfully."}), 200
+        # 💡 SA v1.2 回應格式:{code, message}(0000=成功,其餘為失敗)
+        return jsonify({"code": "0000", "message": "success"}), 200
     except Exception as e:
         print(f"🚨 [CKI 異常]: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 400
+        return jsonify({"code": "1000", "message": str(e)}), 400
 
 # ====================================================================
 # 🚀 2. 修改/延長退房時間端點 (CHANGE_CKO_DATE_TIME)
@@ -106,10 +107,10 @@ def receive_pms_change_checkout():
             }
             print(f"⚠️ [Webhook - CKO 延長退房] 收到未在白名單之 ID: {guest_id}，自動補登建立狀態。")
             
-        return jsonify({"status": "success", "message": "Checkout extension timestamp updated."}), 200
+        return jsonify({"code": "0000", "message": "success"}), 200
     except Exception as e:
         print(f"🚨 [CKO 延長退房異常]: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 400
+        return jsonify({"code": "1000", "message": str(e)}), 400
 
 # ====================================================================
 # 🚀 3. 綜合櫃台車牌異動 (CHG_CAR_NOS - 支援新增/清除/更新三態)
@@ -150,10 +151,10 @@ def receive_change_car_nos():
             }
             print(f"⚠️ [Webhook - CHG_CAR_NOS] 發現未登錄主檔之 ID: {guest_id}，已完成防禦性補登。")
             
-        return jsonify({"status": "success", "message": "Car number status synchronised successfully."}), 200
+        return jsonify({"code": "0000", "message": "success"}), 200
     except Exception as e:
         print(f"🚨 [CHG_CAR_NOS 異常]: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 400
+        return jsonify({"code": "1000", "message": str(e)}), 400
 
 # ====================================================================
 # 🚀 4. 取消入住端點 (CIX - 完美保留車牌離廠版)
@@ -198,13 +199,52 @@ def receive_checkin_cancel():
             }
             print(f"⚠️ [Webhook - CIX] 收到未登錄主檔之 ID: {guest_id}，已完成車牌【{clean['car_number']}】之限時離場憑證補登。")
             
-        return jsonify({"status": "success", "message": "Check-in canceled. Exit validation token retained."}), 200
+        return jsonify({"code": "0000", "message": "success"}), 200
     except Exception as e:
         print(f"🚨 [CIX 異常]: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 400
+        return jsonify({"code": "1000", "message": str(e)}), 400
 
 # ====================================================================
-# 🌙 5. 夜核端點 (NIGHT_AUDIT) 夜核過天通知 (維持純粹：清空昨日過期快取)
+# 🚀 0. SA v1.2 公版單一端點:德安所有停車事件(CKI/CIX/CHG_CAR_NOS/
+#     CHANGE_CKO_DATE_TIME/夜核)皆以「同一 schema」打到廠商唯一 URL;
+#     廠商依 guest_id upsert、is_enabled("Yes"/"No")控啟停。
+#     (5 條事件專屬路由保留相容;公版情境改打此端點)
+# ====================================================================
+@parking_bp.route('/parking/sync', methods=['POST'])
+def parking_sync_canonical():
+    if not request.is_json:
+        return jsonify({"code": "1000", "message": "JSON expected."}), 415
+    data = request.get_json()
+
+    # 必填欄位檢查(SA v1.2:guest_id/car_number/start_date/end_date/is_enabled)
+    for field in ("guest_id", "car_number", "start_date", "end_date", "is_enabled"):
+        if data.get(field) in (None, ""):
+            return jsonify({"code": "1000", "message": f"{field} is required"}), 200
+    if str(data.get("is_enabled")) not in ("Yes", "No"):
+        return jsonify({"code": "1000", "message": "is_enabled 必須為 Yes 或 No"}), 200
+
+    try:
+        clean = shin_yeong_strategy.parse_pms_checkin(data)
+        guest_id = clean["guest_id"]
+        fallback_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        existing = mock_vendor_db.get(guest_id, {})
+        mock_vendor_db[guest_id] = {
+            "guest_id": guest_id,
+            "car_number": clean["car_number"],
+            "guest_name": clean["guest_name"],
+            "start_date": clean["start_date"] or existing.get("start_date") or fallback_time,
+            "end_date": clean["end_date"] or existing.get("end_date") or fallback_time,
+            "enabled": clean["enabled"],
+            "arrival_time": existing.get("arrival_time", fallback_time),
+        }
+        print(f"📥 [公版 /parking/sync] 住客 [{guest_id}] upsert | 車牌: 【{clean['car_number']}】 | is_enabled: 【{data.get('is_enabled')}】")
+        return jsonify({"code": "0000", "message": "success"}), 200
+    except Exception as e:
+        print(f"🚨 [公版 /parking/sync 異常]: {e}")
+        return jsonify({"code": "1000", "message": str(e)}), 200
+
+# ====================================================================
+# 🌙 5. 夜核端點 (NIGHT_AUDIT) 夜核過天通知 (維持純粹：清空���日過期快取)
 # ====================================================================
 @parking_bp.route('/pms-sync-data/night-audit', methods=['POST'])
 def receive_night_audit():
@@ -223,7 +263,7 @@ def receive_night_audit():
         # 💡 安全降級防禦：萬一德安突然傳了一筆空資料，不讓系統崩潰
         if not guest_id:
             print("⚠️ [NIGHT_AUDIT 警告] 收到夜核請求，但未包含有效 guest_id 欄位，維持現有白名單狀態。")
-            return jsonify({"status": "success", "message": "Signal accepted but empty data payload ignored."}), 200
+            return jsonify({"code": "0000", "message": "empty data payload ignored"}), 200
 
         # 2. 🎯 核心翻轉：廢除 clear()！實施動態字典累加覆寫機制（Upsert）
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -244,32 +284,46 @@ def receive_night_audit():
         
         # 3. 🎯 消除 TraceLog 報錯的核心：回傳 200 OK 與明確的完成狀態語意
         return jsonify({
-            "status": "success", 
-            "message": "Night audit data integrated successfully.",
+            "code": "0000",
+            "message": "success",
             "synchronized_id": guest_id
         }), 200
-        
+
     except Exception as e:
         # 拋出明確的 400 錯誤，讓 PMS 的 TraceLog 能精準捕捉到是廠商端哪裡解析失敗
         print(f"🚨 [NIGHT_AUDIT 異常]: {e}")
-        return jsonify({"status": "error", "message": f"Internal mapping failed: {str(e)}"}), 400
+        return jsonify({"code": "1000", "message": f"Internal mapping failed: {str(e)}"}), 400
 
 # ====================================================================
 # 🚗 🚀 路由 OUT：主動相機模擬端點 (當白天客人開車進場，由此發動逆向車辨轟炸)
 # ====================================================================
 @parking_bp.route('/external/vendor-sync-data/car-arrival', methods=['POST'])
 def car_arrival():
+    # 💡 SA v1.2(修訂重點):鑑別 Header 為 athena/hotel;舊 Authorization Token 閘門並存保留
     auth_header = request.headers.get('Authorization')
-    if not auth_header or (auth_header != config.CURRENT_TOKEN and auth_header != config.LOCAL_TOKEN):
+    auth_ok = auth_header in (config.CURRENT_TOKEN, config.LOCAL_TOKEN)
+    if not auth_ok:
+        athena_h = request.headers.get('athena')
+        hotel_h = request.headers.get('hotel')
+        if athena_h and hotel_h and str(athena_h) == str(config.active_cfg["ATHENA_ID"]) \
+                and str(hotel_h) == str(config.active_cfg["HOTEL_COD"]):
+            auth_ok = True
+    if not auth_ok:
         return jsonify({"error": "Unauthorized"}), 401
 
-    data = request.get_json()
+    data = request.get_json() or {}
     guest_id = str(data.get("guest_id") or "").strip()
     car_number = str(data.get("car_number") or "").strip()
+    arrival_time = str(data.get("arrival_time") or "").strip()
+
+    # 💡 SA v1.2:必填欄位任一無值 → 回錯誤(範例 "xxx is required"),不執行後續流程
+    for field, val in (("guest_id", guest_id), ("car_number", car_number), ("arrival_time", arrival_time)):
+        if not val:
+            return jsonify({"code": "1000", "message": f"{field} is required"}), 417
 
     if guest_id not in mock_vendor_db:
         print(f"🚨 [車辨失敗] 未知 Guest ID: {guest_id}，本地無名單，拒開！")
-        return jsonify({"status": "error", "message": "Guest ID not found."}), 404
+        return jsonify({"code": "1001", "message": "Guest ID not found"}), 417
 
     # ====================================================================
     # 🎯 SA 終極對齊優化：動態時間洗滌引擎 (Business Date Alignment)
@@ -277,9 +331,8 @@ def car_arrival():
     # ====================================================================
     local_guest = mock_vendor_db[guest_id]
     
-    # 🎯 修正點 1：對齊德安 Swagger 格式，時間字串必須為 YYYY/MM/DD HH:mm:ss (斜線)
-    # 優先嘗試將原本帶橫線的 start_date 轉換成斜線格式
-    matched_arrival_time = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+    # 💡 SA v1.2:時間格式 yyyy/mm/dd hh:mm(無秒);直接採用廠商傳入的 arrival_time
+    matched_arrival_time = arrival_time
 
     mock_vendor_db[guest_id]["car_number"] = car_number
     mock_vendor_db[guest_id]["arrival_time"] = matched_arrival_time
@@ -296,11 +349,14 @@ def car_arrival():
     print(f"📦 抵達時間: {matched_arrival_time}")
     print(f"📦 [Payload 對齊驗證]: {pms_car_payload}")
 
-    # 🎯 修正點 3：依據 Swagger 成功範例，移除 Authorization Header
+    # 💡 SA v1.2(修訂重點):出站 Header 為 athena/hotel。
+    # 舊制 bacchus-* header 各廠商機制不同,註解保留:
+    #   "bacchus-athenaid": str(config.active_cfg["ATHENA_ID"]),
+    #   "bacchus-hotelcod": str(config.active_cfg["HOTEL_COD"]),
     api_headers = {
         "accept": "*/*",
-        "bacchus-athenaid": str(config.active_cfg["ATHENA_ID"]),
-        "bacchus-hotelcod": str(config.active_cfg["HOTEL_COD"]),
+        "athena": str(config.active_cfg["ATHENA_ID"]),
+        "hotel": str(config.active_cfg["HOTEL_COD"]),
         "Content-Type": "application/json",
     }
 
@@ -310,7 +366,8 @@ def car_arrival():
     if config.ENV_SWITCH == "LOCAL_OFFLINE":
         print(f"🔒 [閉環模式] 已攔截出站請求，僅回傳組裝結果供規格比對 -> {target_url}")
         return jsonify({
-            "status": "success",
+            "code": "0000",
+            "message": "success",
             "mode": "OFFLINE_SPEC_CHECK",
             "would_call": target_url,
             "would_send_headers": api_headers,
@@ -325,10 +382,10 @@ def car_arrival():
             timeout=5
         )
         print(f"📡 【真實雲端回應】狀態碼: {response.status_code} | 內容: {response.text}")
-        return jsonify({"status": "success", "pms_response": response.text}), 200
+        return jsonify({"code": "0000", "message": "success", "pms_response": response.text}), 200
     except Exception as e:
         print(f"❌ [逆向傳送失敗]: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"code": "1000", "message": str(e)}), 500
 
 # ====================================================================
 # 🔓 🚀 路由 CROSS：內部除錯對齊端點 (專門讓相機模擬腳本拿走完整的白名單字典)

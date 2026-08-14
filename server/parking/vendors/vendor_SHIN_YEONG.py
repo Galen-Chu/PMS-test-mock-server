@@ -37,10 +37,11 @@ class VendorShinYeongStrategy(BaseParkingVendorStrategy):
         
         start_date = data.get("start_date") or sync_data.get("ciDat") or sync_data.get("ciDate")
         end_date = data.get("end_date") or sync_data.get("coDat") or sync_data.get("coDate")
-        
-        pms_enabled = sync_data.get("enabled", True)
+
+        # 💡 SA v1.2:欄位為 is_enabled("Yes"/"No");舊 key "enabled"(True/"Yes"/"Y")保留相容
+        pms_enabled = sync_data.get("is_enabled", sync_data.get("enabled", True))
         is_enabled = True if pms_enabled in [True, "Yes", "Y"] else False
-        
+
         return {
             "guest_id": guest_id,
             "car_number": car_number,
@@ -63,7 +64,8 @@ class VendorShinYeongStrategy(BaseParkingVendorStrategy):
         
         # 備用提取，若有傳送則一併更新
         car_number = str(data.get("car_number") or sync_data.get("carNos") or "").strip()
-        pms_enabled = sync_data.get("enabled", True)
+        # 💡 SA v1.2:is_enabled("Yes"/"No");舊 key "enabled" 保留相容
+        pms_enabled = sync_data.get("is_enabled", sync_data.get("enabled", True))
         is_enabled = True if pms_enabled in [True, "Yes", "Y"] else False
         
         return {
@@ -77,17 +79,19 @@ class VendorShinYeongStrategy(BaseParkingVendorStrategy):
         """🎯 實作微調：精準捕捉櫃檯車牌三態 (新增/清除/更新) 傳送過來的車牌與啟用狀態"""
         guest_id = data.get("guest_id")
         car_number = data.get("car_number")
-        pms_enabled = True
-        
+        # 💡 SA v1.2:flat payload 亦帶 is_enabled("Yes"/"No");舊版 flat 分支未讀狀態(恆為啟用)已修正。
+        # 舊 key "enabled" 保留相容。
+        pms_enabled = data.get("is_enabled", data.get("enabled", True))
+
         if "parkingSyncDataList" in data and len(data["parkingSyncDataList"]) > 0:
             nested_data = data["parkingSyncDataList"][0]
             guest_id = nested_data.get("ciSer") or nested_data.get("ciSerial")
             car_number = nested_data.get("carNos")
-            pms_enabled = nested_data.get("enabled", True)
-            
+            pms_enabled = nested_data.get("is_enabled", nested_data.get("enabled", True))
+
         guest_id = str(guest_id or "").strip()
         car_number = str(car_number or "").strip()
-        
+
         # 🔑 三態分流核心：將德安傳過來的狀態（包含 Y/N, Yes/No, True/False）對齊
         is_enabled = True if pms_enabled in [True, "Yes", "Y"] else False
         
@@ -104,22 +108,28 @@ class VendorShinYeongStrategy(BaseParkingVendorStrategy):
             sync_data = data["parkingSyncDataList"][0]
             
         guest_id = str(data.get("guest_id") or sync_data.get("ciSer") or "").strip()
-        
+
         # 🎯 核心補齊：精準撈取取消入住時，PMS 同步送過來的原車牌
         car_number = str(data.get("car_number") or sync_data.get("carNos") or "").strip()
-        
-        pms_enabled = sync_data.get("enabled", True)
+
+        # 💡 SA v1.2:is_enabled("Yes"/"No");舊 key "enabled" 保留相容
+        pms_enabled = sync_data.get("is_enabled", sync_data.get("enabled", True))
         is_enabled = True if pms_enabled in [True, "Yes", "Y"] else False
-        
-        # 逃生緩衝截止線計算 (依據全域 config 緩衝時間，預設 30 分鐘)
-        import config
-        buffer_mins = getattr(config, 'CIX_BUFFER_MINUTES', 30)
-        calculated_end_date = (datetime.now() + timedelta(minutes=buffer_mins)).strftime("%Y-%m-%d %H:%M:%S")
-        
+
+        # 💡 SA v1.2 範例 5:取消入住的結束時間由德安 PMS 計算後傳入(當日最晚離場時間)，
+        # 廠商應採用傳入值。未帶時才以「取消入住離場緩衝分鐘數」自行補算(舊行為降級為 fallback)。
+        end_date = data.get("end_date") or sync_data.get("coDat") or sync_data.get("coDate")
+        if end_date:
+            final_end_date = self._normalize_datetime(end_date)
+        else:
+            import config
+            buffer_mins = getattr(config, 'CIX_BUFFER_MINUTES', 30)
+            final_end_date = (datetime.now() + timedelta(minutes=buffer_mins)).strftime("%Y-%m-%d %H:%M:%S")
+
         return {
             "guest_id": guest_id,
             "car_number": car_number,  # 守住車牌！
-            "end_date": calculated_end_date,
+            "end_date": final_end_date,
             "enabled": is_enabled
         }
 
@@ -131,7 +141,8 @@ class VendorShinYeongStrategy(BaseParkingVendorStrategy):
         start_date = str(data.get("start_date") or "").strip()
         end_date = str(data.get("end_date") or "").strip()
         
-        pms_enabled = data.get("is_enabled", "Yes")
+        # 💡 is_enabled 為 SA v1.2 欄位;舊 key "enabled" 保留相容
+        pms_enabled = data.get("is_enabled", data.get("enabled", "Yes"))
         is_enabled = True if pms_enabled in ["Yes", "Y", True] else False
         
         return {

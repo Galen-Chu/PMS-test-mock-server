@@ -29,13 +29,15 @@ def test_registry_completeness():
     assert {"room_nos_query_notfound", "mifare_query_notfound", "amenity_billing_notfound",
             "amenity_pay_duplicate", "amenity_cancel_notfound"} <= amenity_ids
     parking = by_mod["parking"]
-    assert len(parking) == 9  # SHIN_YEONG 7 + PAYTRONEX 2
+    assert len(parking) == 15  # SHIN_YEONG 13(7 事件路由 + 6 SA 公版) + PAYTRONEX 2
     parking_vendors = {s.vendor for s in parking}
     assert parking_vendors == {"SHIN_YEONG", "PAYTRONEX"}
     parking_ids = {s.id for s in parking}
-    # 新詠 6 條串接 API 都要有 runner（含本次 3 條新補）
-    assert {"change_checkout", "change_car_nos", "check_in_cancel"} <= parking_ids
-    assert all(s.implemented for s in parking), "parking 9 案例應都已實作"
+    # 新詠 6 條串接 API 都要有 runner（含 3 條新補 + SA v1.2 公版 6 情境）
+    assert {"change_checkout", "change_car_nos", "check_in_cancel",
+            "parking_sync_checkin", "parking_sync_change_car", "parking_sync_disable",
+            "parking_sync_cancel", "parking_sync_invalid", "car_arrival_missing_field"} <= parking_ids
+    assert all(s.implemented for s in parking), "parking 15 案例應都已實作"
     keycard = by_mod["keycard"]
     assert len(keycard) == 5  # WAFERLOCK 4 + LIVEAM 1
     keycard_vendors = {s.vendor for s in keycard}
@@ -113,6 +115,30 @@ def test_start_run_unknown_scenario_id_in_list():
     statuses = {c.case_id: c.status for c in run.cases}
     assert statuses["room_nos_query"] in (models.CASE_PASS, models.CASE_FAIL)
     assert statuses["__nope__"] == models.CASE_FAIL
+
+
+def test_shin_yeong_sa_is_enabled_parsing():
+    """新詠解析器對齊 SA v1.2:is_enabled(Yes/No)讀取、change_car_nos flat 狀態、cancel end_date 直通。"""
+    from server.parking.vendors.vendor_SHIN_YEONG import VendorShinYeongStrategy
+    s = VendorShinYeongStrategy()
+
+    base = {"guest_id": "G1", "car_number": "A-1", "guest_name": "測試客",
+            "start_date": "2026/08/14 15:00", "end_date": "2026/08/15 11:00"}
+    assert s.parse_pms_checkin({**base, "is_enabled": "Yes"})["enabled"] is True
+    assert s.parse_pms_checkin({**base, "is_enabled": "No"})["enabled"] is False
+    # 舊 key "enabled" 保留相容
+    assert s.parse_pms_checkin({**base, "enabled": "Y"})["enabled"] is True
+
+    # 舊版 flat 分支未讀狀態(恆為啟用)的回歸守護:停用必須被正確解析
+    assert s.parse_pms_change_car_nos({"guest_id": "G1", "car_number": "NEW-1", "is_enabled": "No"})["enabled"] is False
+
+    # SA v1.2 範例 5:取消入住採用 PMS 傳入的 end_date(緩衝計算降為 fallback)
+    cix = s.parse_pms_cancel_checkin({"guest_id": "G1", "car_number": "A-1",
+                                      "end_date": "2026/08/14 23:59", "is_enabled": "Yes"})
+    assert cix["end_date"] == "2026-08-14 23:59:00"
+    assert cix["enabled"] is True
+
+    assert s.parse_pms_night_audit({"guest_id": "G2", "is_enabled": "No"})["enabled"] is False
 
 
 def test_execute_for_ctx_records_steps(monkeypatch):

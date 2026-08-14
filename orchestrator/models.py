@@ -28,6 +28,7 @@ class RunContext:
     base_url: str                    # 該環境對外的基底 URL（LOCAL 時為 ngrok）
     headers: dict                    # 該環境的鑑別/內容 header
     headers_amenity: dict            # 小美犀(BR)專用：SA 規格 athena/hotel header（其他廠商仍用 headers）
+    headers_parking: dict            # 新詠(SHIN_YEONG) SA v1.2:car-arrival 出站 athena/hotel header
     params_parking: dict             # 停車模組的 query params（含 thirdParty）
     params_amenity: dict             # 房務模組的 query params（含 thirdParty）
     # 預先解析好的端點 URL，runner 直接取用，避免各自重算

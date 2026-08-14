@@ -337,14 +337,16 @@ def run_car_arrival(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("car_arrival")
     ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now().strftime("%Y/%m/%d %H:%M")  # 💡 SA v1.2:yyyy/mm/dd hh:mm(無秒)
     guest_id, car = f"G-{ts}", f"ABC-{ts}"
-    # 先 check-in 落庫（car_arrival 路由會查 mock_vendor_db，無此 guest 會 404）
+    # 先 check-in 落庫（car_arrival 路由會查 mock_vendor_db，無此 guest 會 417）
     execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
-        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator", "start_date": now, "end_date": now})
+        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
+        "start_date": now, "end_date": now, "is_enabled": "Yes"})
     payload = {"guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator", "arrival_time": now}
     t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"], params=ctx.params_parking, json_body=payload)
+    # 💡 SA v1.2:出站帶 athena/hotel headers、query 僅 thirdParty
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"], params=ctx.params_parking, headers=ctx.headers_parking, json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
     if err or res is None:
         return _fail("car_arrival", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
@@ -367,10 +369,11 @@ def run_checkin_sync(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("checkin_sync")
     ts = datetime.now().strftime("%m%d%H%M")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now().strftime("%Y/%m/%d %H:%M")  # 💡 SA v1.2:yyyy/mm/dd hh:mm(無秒)
     payload = {
         "guest_id": f"G-{ts}", "car_number": f"ABC-{ts}",
         "guest_name": "Orchestrator", "start_date": now, "end_date": now,
+        "is_enabled": "Yes",  # 💡 SA v1.2 欄位(值域 Yes/No)
     }
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body=payload)
@@ -419,10 +422,11 @@ def run_night_audit(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("night_audit")
     ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now().strftime("%Y/%m/%d %H:%M")  # 💡 SA v1.2:yyyy/mm/dd hh:mm(無秒)
     payload = {
         "guest_id": f"G-AUDIT-{ts}", "car_number": f"AUD-{ts}",
         "guest_name": "NightAudit", "start_date": now, "end_date": now,
+        "is_enabled": "Yes",
     }
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["night_audit"], json_body=payload)
@@ -450,12 +454,12 @@ def run_change_checkout(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("change_checkout")
     ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now().strftime("%Y/%m/%d %H:%M")
     guest_id, car = f"G-CKO-{ts}", f"CKO-{ts}"
     execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
         "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
-        "start_date": now, "end_date": now})
-    payload = {"guest_id": guest_id, "end_date": "2026-12-31 12:00:00", "car_number": car, "enabled": "Y"}
+        "start_date": now, "end_date": now, "is_enabled": "Yes"})
+    payload = {"guest_id": guest_id, "end_date": "2026/12/31 12:00", "car_number": car, "is_enabled": "Yes"}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["change_checkout"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -480,12 +484,12 @@ def run_change_car_nos(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("change_car_nos")
     ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now().strftime("%Y/%m/%d %H:%M")
     guest_id, car = f"G-CHG-{ts}", f"OLD-{ts}"
     execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
         "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
-        "start_date": now, "end_date": now})
-    payload = {"guest_id": guest_id, "car_number": f"NEW-{ts}", "enabled": "Y"}
+        "start_date": now, "end_date": now, "is_enabled": "Yes"})
+    payload = {"guest_id": guest_id, "car_number": f"NEW-{ts}", "is_enabled": "Yes"}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["change_car_nos"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -510,12 +514,12 @@ def run_check_in_cancel(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("check_in_cancel")
     ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now().strftime("%Y/%m/%d %H:%M")
     guest_id, car = f"G-CIX-{ts}", f"CIX-{ts}"
     execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
         "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
-        "start_date": now, "end_date": now})
-    payload = {"guest_id": guest_id, "car_number": car, "end_date": now, "enabled": "Y"}
+        "start_date": now, "end_date": now, "is_enabled": "Yes"})
+    payload = {"guest_id": guest_id, "car_number": car, "end_date": now, "is_enabled": "Yes"}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["check_in_cancel"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -529,6 +533,154 @@ def run_check_in_cancel(ctx: RunContext) -> CaseResult:
     if res.status_code == 200:
         return _ok("check_in_cancel", "", scenario, dur, request_payload=payload, response_payload=body)
     return _fail("check_in_cancel", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+# ====================================================================
+# 🚗 新詠 SA v1.2 公版單一端點情境(POST /parking/sync)
+# 德安所有停車事件(入住/改車號/改C-O/取消入住/夜核)皆以「同一 schema」打到廠商唯一 URL,
+# is_enabled("Yes"/"No")控啟停;回應 {code, message}(0000=成功,其餘失敗)。
+# ====================================================================
+def _sync_expect(case_id, scenario, dur, payload, res, expect_code="0000"):
+    """公版單一端點共用判定:HTTP 200 且 body.code 相符 → PASS。"""
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {}
+    if res.status_code == 200 and body.get("code") == expect_code:
+        return _ok(case_id, "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+def _sa_sync_payload(guest_id, car, enabled="Yes", start=None, end=None):
+    """組 SA v1.2 公版 schema payload(時間 yyyy/mm/dd hh:mm 無秒)。"""
+    now_sa = datetime.now().strftime("%Y/%m/%d %H:%M")
+    return {
+        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
+        "start_date": start or now_sa, "end_date": end or now_sa,
+        "is_enabled": enabled,
+    }
+
+
+@register_scenario(
+    "parking_sync_checkin", module="parking", vendor="SHIN_YEONG",
+    name="公版入住啟用", endpoint="/parking/sync",
+)
+def run_parking_sync_checkin(ctx: RunContext) -> CaseResult:
+    """SA 公版:入住且有車號 → 傳送啟用(Yes),廠商 upsert。"""
+    import time as _t
+    scenario = registry.get("parking_sync_checkin")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    payload = _sa_sync_payload(f"G-SYNC-{ts}", f"SY-{ts}", "Yes")
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("parking_sync_checkin", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    return _sync_expect("parking_sync_checkin", scenario, dur, payload, res)
+
+
+@register_scenario(
+    "parking_sync_change_car", module="parking", vendor="SHIN_YEONG",
+    name="公版換車號(舊停用+新啟用兩筆)", endpoint="/parking/sync",
+)
+def run_parking_sync_change_car(ctx: RunContext) -> CaseResult:
+    """SA 公版範例 3:更改車號 → 兩筆連發(原車號 No + 新車號 Yes),兩筆皆應 0000。"""
+    import time as _t
+    scenario = registry.get("parking_sync_change_car")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    guest_id, old_car, new_car = f"G-CHC-{ts}", f"OLD-{ts}", f"NEW-{ts}"
+    t0 = _t.perf_counter()
+    payload_old = _sa_sync_payload(guest_id, old_car, "No")
+    res1, err1 = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload_old)
+    payload_new = _sa_sync_payload(guest_id, new_car, "Yes")
+    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload_new)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    summary = {"disable_old": payload_old, "enable_new": payload_new}
+    if err1 or res1 is None or err2 or res2 is None:
+        return _fail("parking_sync_change_car", "", scenario, dur, request_payload=summary,
+                     response_payload={"__error__": err1 or err2 or "no response"})
+    try:
+        codes = {"disable_old_code": res1.json().get("code"), "enable_new_code": res2.json().get("code")}
+    except Exception:
+        codes = {"disable_old_code": None, "enable_new_code": None}
+    if res1.status_code == 200 and res2.status_code == 200 \
+            and codes["disable_old_code"] == "0000" and codes["enable_new_code"] == "0000":
+        return _ok("parking_sync_change_car", "", scenario, dur, request_payload=summary, response_payload=codes)
+    return _fail("parking_sync_change_car", "", scenario, dur, request_payload=summary, response_payload=codes)
+
+
+@register_scenario(
+    "parking_sync_disable", module="parking", vendor="SHIN_YEONG",
+    name="公版清除車號(停用)", endpoint="/parking/sync",
+)
+def run_parking_sync_disable(ctx: RunContext) -> CaseResult:
+    """SA 公版範例 4:清除車號 → 傳送原車號停用(No)。"""
+    import time as _t
+    scenario = registry.get("parking_sync_disable")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    payload = _sa_sync_payload(f"G-DIS-{ts}", f"DIS-{ts}", "No")
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("parking_sync_disable", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    return _sync_expect("parking_sync_disable", scenario, dur, payload, res)
+
+
+@register_scenario(
+    "parking_sync_cancel", module="parking", vendor="SHIN_YEONG",
+    name="公版取消入住(當日結束)", endpoint="/parking/sync",
+)
+def run_parking_sync_cancel(ctx: RunContext) -> CaseResult:
+    """SA 公版範例 5:取消入住 → is_enabled Yes、結束日為當日最晚(23:59)。"""
+    import time as _t
+    scenario = registry.get("parking_sync_cancel")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    today = datetime.now().strftime("%Y/%m/%d")
+    payload = _sa_sync_payload(f"G-CXL-{ts}", f"CXL-{ts}", "Yes", end=f"{today} 23:59")
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("parking_sync_cancel", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    return _sync_expect("parking_sync_cancel", scenario, dur, payload, res)
+
+
+@register_scenario(
+    "parking_sync_invalid", module="parking", vendor="SHIN_YEONG",
+    name="公版參數錯誤(is_enabled 非法)", endpoint="/parking/sync",
+)
+def run_parking_sync_invalid(ctx: RunContext) -> CaseResult:
+    """SA 公版負面:is_enabled 非 Yes/No → code 1000(反向斷言)。"""
+    import time as _t
+    scenario = registry.get("parking_sync_invalid")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    payload = _sa_sync_payload(f"G-INV-{ts}", f"INV-{ts}", "X")  # 非法值
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("parking_sync_invalid", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    return _sync_expect("parking_sync_invalid", scenario, dur, payload, res, expect_code="1000")
+
+
+@register_scenario(
+    "car_arrival_missing_field", module="parking", vendor="SHIN_YEONG",
+    name="車輛抵達缺必填(417/1000)", endpoint="/external/vendor-sync-data/car-arrival",
+)
+def run_car_arrival_missing_field(ctx: RunContext) -> CaseResult:
+    """SA v1.2 負面:必填欄位缺值(car_number)→ 417 + code 1000 "xxx is required"。"""
+    import time as _t
+    scenario = registry.get("car_arrival_missing_field")
+    payload = {"guest_id": "G-NEVER-EXIST", "arrival_time": datetime.now().strftime("%Y/%m/%d %H:%M")}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"],
+                               params=ctx.params_parking, headers=ctx.headers_parking, json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err:
+        return _fail("car_arrival_missing_field", "", scenario, dur, request_payload=payload, response_payload={"__error__": err})
+    return _expect_417("car_arrival_missing_field", scenario, dur, payload, res, "1000")
 
 
 # ====================================================================
