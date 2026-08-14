@@ -12,6 +12,6 @@ offline-unit-tests:
   stage: test
   image: python:3.12-slim
   before_script:
-    - pip install --no-cache-dir pytest requests
+    - pip install --no-cache-dir pytest requests responses
   script:
-    - pytest tests_localFullStackClose/test_local_sandbox.py tests_localFullStackClose/test_orchestrator.py -v
+    - pytest tests_localFullStackClose/test_local_sandbox.py tests_localFullStackClose/test_mock.py tests_localFullStackClose/test_orchestrator.py -v

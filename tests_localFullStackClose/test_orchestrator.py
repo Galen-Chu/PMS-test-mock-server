@@ -26,10 +26,13 @@ def test_registry_completeness():
     assert len(amenity) == 5
     assert all(s.implemented for s in amenity)
     parking = by_mod["parking"]
-    assert len(parking) == 6  # SHIN_YEONG 4 + PAYTRONEX 2
+    assert len(parking) == 9  # SHIN_YEONG 7 + PAYTRONEX 2
     parking_vendors = {s.vendor for s in parking}
     assert parking_vendors == {"SHIN_YEONG", "PAYTRONEX"}
-    assert all(s.implemented for s in parking), "parking 6 案例應都已實作"
+    parking_ids = {s.id for s in parking}
+    # 新詠 6 條串接 API 都要有 runner（含本次 3 條新補）
+    assert {"change_checkout", "change_car_nos", "check_in_cancel"} <= parking_ids
+    assert all(s.implemented for s in parking), "parking 9 案例應都已實作"
     keycard = by_mod["keycard"]
     assert len(keycard) == 5  # WAFERLOCK 4 + LIVEAM 1
     keycard_vendors = {s.vendor for s in keycard}
@@ -87,6 +90,10 @@ def test_run_context_built_for_all_envs():
         ctx = engine.build_run_context(env)
         assert ctx.environment == env
         assert "room_nos" in ctx.urls
+        assert "change_checkout" in ctx.urls      # 新詠 3 條新補 URL
+        assert "change_car_nos" in ctx.urls
+        assert "check_in_cancel" in ctx.urls
+        assert isinstance(ctx.recorder, list)      # 逐步錄製槽存在
 
 
 def test_start_run_unknown_scenario_marked_fail():
@@ -103,3 +110,33 @@ def test_start_run_unknown_scenario_id_in_list():
     statuses = {c.case_id: c.status for c in run.cases}
     assert statuses["room_nos_query"] in (models.CASE_PASS, models.CASE_FAIL)
     assert statuses["__nope__"] == models.CASE_FAIL
+
+
+def test_execute_for_ctx_records_steps(monkeypatch):
+    """execute_for_ctx 應把每筆 HTTP 交易錄進 ctx.recorder（以 mock 假造回應，離線可跑）。"""
+    import types as _types
+    from unittest.mock import MagicMock
+    from hardware.simulate_speaker import execute_for_ctx
+    import hardware.simulate_speaker as ss
+
+    def _resp(status, body):
+        m = MagicMock(status_code=status, headers={"Content-Type": "application/json"})
+        m.json.return_value = body
+        return m
+
+    monkeypatch.setattr(ss.requests, "get", lambda *a, **k: _resp(200, {"ok": True}))
+    monkeypatch.setattr(ss.requests, "post", lambda *a, **k: _resp(417, {"err": "no guest"}))
+
+    ctx = _types.SimpleNamespace(headers={"Authorization": "t"}, recorder=[])
+    execute_for_ctx(ctx, "GET", "http://mock/room-nos", params={"keyword": "11101"})
+    execute_for_ctx(ctx, "POST", "http://mock/pay", json_body={"roomNos": "11101"})
+
+    assert len(ctx.recorder) == 2
+    assert ctx.recorder[0]["method"] == "GET"
+    assert ctx.recorder[0]["status_code"] == 200
+    assert ctx.recorder[0]["response_body"] == {"ok": True}
+    assert ctx.recorder[0]["request_params"] == {"keyword": "11101"}
+    assert ctx.recorder[1]["status_code"] == 417
+    # classify 應能從 steps 判定 STATUS_CODE（非 2xx）
+    cr = models.CaseResult("c", "r", "amenity", "BR", "n", "/e", status=models.CASE_FAIL, steps=ctx.recorder)
+    assert classify.classify(cr) == classify.STATUS_CODE

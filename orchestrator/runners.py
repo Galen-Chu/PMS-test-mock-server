@@ -306,6 +306,98 @@ def run_night_audit(ctx: RunContext) -> CaseResult:
     return _fail("night_audit", "", scenario, dur, request_payload=payload, response_payload=body)
 
 
+# ---- 新詠(SHIN_YEONG)PMS→廠商方向剩餘 3 條串接 API(路由+解析器早已存在,補 runner) ----
+# 模式同 car_arrival：先 check-in 落庫白名單，再打目��路由；這些 /pms-sync-data/* 無 auth gate。
+@register_scenario(
+    "change_checkout", module="parking", vendor="SHIN_YEONG",
+    name="延長/修改退房", endpoint="/pms-sync-data/change-checkout-datetime",
+)
+def run_change_checkout(ctx: RunContext) -> CaseResult:
+    """PMS→廠商:綜合櫃台延長/修改退房時間(CHANGE_CKO_DATE_TIME)。"""
+    import time as _t
+    scenario = registry.get("change_checkout")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    guest_id, car = f"G-CKO-{ts}", f"CKO-{ts}"
+    execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
+        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
+        "start_date": now, "end_date": now})
+    payload = {"guest_id": guest_id, "end_date": "2026-12-31 12:00:00", "car_number": car, "enabled": "Y"}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["change_checkout"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("change_checkout", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code == 200:
+        return _ok("change_checkout", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("change_checkout", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+@register_scenario(
+    "change_car_nos", module="parking", vendor="SHIN_YEONG",
+    name="車牌三態異動", endpoint="/pms-sync-data/change-car-nos",
+)
+def run_change_car_nos(ctx: RunContext) -> CaseResult:
+    """PMS→廠商:綜合櫃台車牌異動(CHG_CAR_NOS,新增/清除/更新三態)。"""
+    import time as _t
+    scenario = registry.get("change_car_nos")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    guest_id, car = f"G-CHG-{ts}", f"OLD-{ts}"
+    execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
+        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
+        "start_date": now, "end_date": now})
+    payload = {"guest_id": guest_id, "car_number": f"NEW-{ts}", "enabled": "Y"}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["change_car_nos"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("change_car_nos", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code == 200:
+        return _ok("change_car_nos", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("change_car_nos", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+@register_scenario(
+    "check_in_cancel", module="parking", vendor="SHIN_YEONG",
+    name="取消入住", endpoint="/pms-sync-data/check-in-cancel",
+)
+def run_check_in_cancel(ctx: RunContext) -> CaseResult:
+    """PMS→廠商:取消入住(CIX),廠商保留車牌供離場驗證。"""
+    import time as _t
+    scenario = registry.get("check_in_cancel")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    guest_id, car = f"G-CIX-{ts}", f"CIX-{ts}"
+    execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
+        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
+        "start_date": now, "end_date": now})
+    payload = {"guest_id": guest_id, "car_number": car, "end_date": now, "enabled": "Y"}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["check_in_cancel"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("check_in_cancel", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code == 200:
+        return _ok("check_in_cancel", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("check_in_cancel", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
 # ====================================================================
 # 🚗 停車車辨（parking / PAYTRONEX）—— 博辰專屬路由(/parktron/hpms/services/roomer/*)
 # 注意:PAYTRONEX 與 SHIN_YEONG 的 API 合約不同(endpoint + payload shape),故獨立 runner。

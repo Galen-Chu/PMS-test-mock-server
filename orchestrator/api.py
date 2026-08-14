@@ -15,6 +15,7 @@ from flask import Blueprint, request, jsonify
 import config
 from .registry import registry
 from . import engine
+from .classify import remediation, first_failure
 
 orchestrator_bp = Blueprint('orchestrator', __name__)
 
@@ -118,4 +119,7 @@ def _case_dict(c):
         "expected_payload": c.expected_payload,
         "diff": c.diff,
         "error_category": c.error_category,
+        "steps": c.steps,                                  # 逐步 HTTP 交易（HTTP 稽核）
+        "remediation": remediation(c.error_category),      # 錯誤除錯建議（錯誤分析）
+        "failing_step": first_failure(c),                  # 第一個失敗的 step（錯誤分析）
     }

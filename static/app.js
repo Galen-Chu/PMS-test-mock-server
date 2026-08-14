@@ -36,6 +36,8 @@ const state = {
   caseResults: [],         // CaseResult[]
   runId: null,
   resultsView: 'summary',
+  selectedCase: null,      // 結果頁「案例檢視」選中的 case_id
+  caseDetailTab: 'http',   // 案例明細內部分頁:http / json / error / snapshot
   pollTimer: null,
   launchMsg: null,
 };
@@ -321,7 +323,8 @@ function stepColor(step) {
 // ---- ③ 結果分析頁（5 子檢視） ----
 function renderResults() {
   const page = el('div', { class: 'page' });
-  const tabs = [['summary', '摘要'], ['steps', '逐步紀錄'], ['diff', 'Diff 比對'], ['timeline', '時序圖'], ['category', '失敗歸類']];
+  // 頂層分頁:摘要 | 案例檢視(主從明細) | 時序圖 | 失敗歸類
+  const tabs = [['summary', '摘要'], ['cases', '案例��視'], ['timeline', '時序圖'], ['category', '失敗歸類']];
   const tabRow = el('div', { class: 'result-tabs' });
   for (const [id, label] of tabs) {
     tabRow.appendChild(el('div', {
@@ -336,78 +339,278 @@ function renderResults() {
     page.appendChild(el('div', { class: 'empty', text: '尚無測試結果，請先啟動一次測試' }));
     return page;
   }
+  if (state.resultsView === 'summary') page.appendChild(renderSummary());
+  else if (state.resultsView === 'cases') page.appendChild(renderCaseBrowser());
+  else if (state.resultsView === 'timeline') page.appendChild(renderTimeline());
+  else page.appendChild(renderCategory());
+  return page;
+}
 
+// ---- ���要:統計卡 + 整批快照下載 ----
+function renderSummary() {
   const passed = state.caseResults.filter(c => c.status === 'PASS').length;
   const failed = state.caseResults.filter(c => c.status === 'FAIL').length;
   const totalDur = state.caseResults.reduce((a, c) => a + (c.duration_ms || 0), 0);
-  const failCase = state.caseResults.find(c => c.status === 'FAIL');
-
-  if (state.resultsView === 'summary') {
-    page.appendChild(el('div', { class: 'summary-cards' },
+  return el('div', {},
+    el('div', { class: 'summary-cards' },
       statCard('總案例數', state.caseResults.length, ''),
       statCard('Passed', passed, 'pass'),
       statCard('Failed', failed, 'fail'),
       statCard('總耗時', (totalDur / 1000).toFixed(1) + 's', ''),
+    ),
+    el('div', { style: 'margin-top:14px' },
+      el('button', { class: 'btn-secondary', text: '📥 下載整批快照 (JSON)', onclick: () =>
+        downloadJson(`run-${state.runId || 'snapshot'}.json`, {
+          run_id: state.runId, environment: state.env, triggered_at: null, cases: state.caseResults,
+        }) }),
+    ),
+  );
+}
+
+// ---- 時序圖 ----
+function renderTimeline() {
+  const max = Math.max(1, ...state.caseResults.map(c => c.duration_ms || 0));
+  const list = el('div', { class: 'list-stack' });
+  for (const c of state.caseResults) {
+    const pct = Math.round(((c.duration_ms || 0) / max) * 100);
+    const color = c.status === 'FAIL' ? '#ff5f56' : '#35d399';
+    list.appendChild(el('div', { class: 'timeline-row' },
+      el('span', { class: 'tname', text: c.scenario_name }),
+      el('div', { class: 'timeline-track' }, el('div', { class: 'timeline-fill', style: `width:${pct}%;background:${color}` })),
+      el('span', { class: 'tdur', text: c.duration_ms ? c.duration_ms + 'ms' : '—' }),
     ));
-  } else if (state.resultsView === 'steps') {
-    const list = el('div', { class: 'list-stack' });
-    for (const c of state.caseResults) {
-      list.appendChild(el('div', { class: 'case-row' },
-        el('span', { class: 'st st-' + c.status, text: c.status }),
-        el('span', { class: 'name', text: `${moduleLabel(c.module)} / ${c.vendor} / ${c.scenario_name}` }),
-        el('span', { class: 'ep', text: c.endpoint }),
-        el('span', { class: 'dur', text: c.duration_ms ? c.duration_ms + 'ms' : '—' }),
-      ));
-    }
-    page.appendChild(list);
-  } else if (state.resultsView === 'diff') {
-    if (!failCase) {
-      page.appendChild(el('div', { class: 'empty', text: '本次執行沒有失敗案例，無 Diff 可比對' }));
-    } else {
-      const box = el('div', { class: 'diff-box' },
-        el('div', { class: 'diff-title', text: `🛑 ${failCase.scenario_name}（${failCase.endpoint}）` }),
-      );
-      const rows = (failCase.diff && failCase.diff.length) ? failCase.diff : autoDiff(failCase);
-      for (const d of rows) {
-        box.appendChild(el('div', { class: 'diff-row' },
-          el('span', { class: 'f', text: d.field }),
-          el('span', { class: 'e', text: `期望 ${fmtVal(d.expected)}` }),
-          el('span', { class: 'a', text: `實際 ${fmtVal(d.actual)}` }),
-        ));
-      }
-      page.appendChild(box);
-    }
-  } else if (state.resultsView === 'timeline') {
-    const max = Math.max(1, ...state.caseResults.map(c => c.duration_ms || 0));
-    const list = el('div', { class: 'list-stack' });
-    for (const c of state.caseResults) {
-      const pct = Math.round(((c.duration_ms || 0) / max) * 100);
-      const color = c.status === 'FAIL' ? '#ff5f56' : '#35d399';
-      list.appendChild(el('div', { class: 'timeline-row' },
-        el('span', { class: 'tname', text: c.scenario_name }),
-        el('div', { class: 'timeline-track' }, el('div', { class: 'timeline-fill', style: `width:${pct}%;background:${color}` })),
-        el('span', { class: 'tdur', text: c.duration_ms ? c.duration_ms + 'ms' : '—' }),
-      ));
-    }
-    page.appendChild(list);
-  } else if (state.resultsView === 'category') {
-    if (!failCase) {
-      page.appendChild(el('div', { class: 'empty', text: '本次執行沒有失敗案例' }));
-    } else {
-      const cats = {};
-      for (const c of state.caseResults.filter(x => x.status === 'FAIL')) {
-        const k = c.error_category || 'UNKNOWN';
-        (cats[k] = cats[k] || []).push(c);
-      }
-      for (const [cat, cases] of Object.entries(cats)) {
-        page.appendChild(el('div', { class: 'cat-box' },
-          el('div', { class: 'diff-title', text: `${categoryLabel(cat)}（${cases.length} 案例）` }),
-          el('div', { class: 'nt-body', text: cases.map(c => c.scenario_name).join('、') }),
-        ));
-      }
-    }
   }
-  return page;
+  return list;
+}
+
+// ---- 失敗歸類 ----
+function renderCategory() {
+  const fails = state.caseResults.filter(x => x.status === 'FAIL');
+  if (!fails.length) return el('div', { class: 'empty', text: '本次執行沒有失敗案例' });
+  const cats = {};
+  for (const c of fails) { const k = c.error_category || 'UNKNOWN'; (cats[k] = cats[k] || []).push(c); }
+  const wrap = el('div', { class: 'list-stack' });
+  for (const [cat, cases] of Object.entries(cats)) {
+    wrap.appendChild(el('div', { class: 'cat-box' },
+      el('div', { class: 'diff-title', text: `${categoryLabel(cat)}（${cases.length} 案例）` }),
+      el('div', { class: 'nt-body', text: cases.map(c => c.scenario_name).join('、') }),
+    ));
+  }
+  return wrap;
+}
+
+// ---- 案例檢視:左案例清單 + 右明細(HTTP/JSON/錯誤/快照) ----
+function renderCaseBrowser() {
+  const selected = state.caseResults.find(c => c.case_id === state.selectedCase) || state.caseResults[0];
+  state.selectedCase = selected.case_id;
+  const innerTabs = [['http', 'HTTP 稽核'], ['json', 'JSON 稽核'], ['error', '錯誤分析'], ['snapshot', '📥 快照']];
+  const tabRow = el('div', { class: 'result-tabs sub' });
+  for (const [id, label] of innerTabs) {
+    tabRow.appendChild(el('div', {
+      class: 'result-tab ' + (state.caseDetailTab === id ? 'active' : ''),
+      onclick: () => { state.caseDetailTab = id; render(); },
+      text: label,
+    }));
+  }
+  const list = el('div', { class: 'case-list' });
+  for (const c of state.caseResults) {
+    list.appendChild(el('div', {
+      class: 'case-row' + (c.case_id === state.selectedCase ? ' selected' : ''),
+      onclick: () => { state.selectedCase = c.case_id; render(); },
+    },
+      el('span', { class: 'st st-' + c.status, text: c.status }),
+      el('span', { class: 'name', text: `${moduleLabel(c.module)}/${c.vendor} ${c.scenario_name}` }),
+    ));
+  }
+  const detail = el('div', { class: 'case-detail' },
+    el('div', { class: 'detail-head' },
+      el('span', { class: 'st st-' + selected.status, text: selected.status }),
+      el('span', { class: 'detail-title', text: `${moduleLabel(selected.module)} / ${selected.vendor} / ${selected.scenario_name}` }),
+      el('span', { class: 'ep', text: selected.endpoint }),
+    ),
+    tabRow,
+  );
+  if (state.caseDetailTab === 'http') detail.appendChild(renderHttpAudit(selected));
+  else if (state.caseDetailTab === 'json') detail.appendChild(renderJsonAudit(selected));
+  else if (state.caseDetailTab === 'error') detail.appendChild(renderErrorAnalysis(selected));
+  else detail.appendChild(renderSnapshot(selected));
+  return el('div', { class: 'browser' }, list, detail);
+}
+
+// HTTP 稽核:逐步 HTTP 交易(可折疊)
+function renderHttpAudit(c) {
+  const steps = c.steps || [];
+  if (!steps.length) return el('div', { class: 'empty', text: '本案例無逐步 HTTP 紀錄' });
+  const wrap = el('div', { class: 'list-stack' });
+  steps.forEach((st, i) => {
+    const ok = !st.error && typeof st.status_code === 'number' && st.status_code >= 200 && st.status_code < 300;
+    wrap.appendChild(el('div', { class: 'http-step' },
+      el('div', { class: 'http-head', onclick: toggleStep },
+        el('span', { class: 'http-seq', text: '#' + (i + 1) }),
+        el('span', { class: 'http-method', text: st.method }),
+        el('span', { class: 'http-url', text: st.url }),
+        st.error
+          ? el('span', { class: 'http-status fail', text: 'ERROR' })
+          : el('span', { class: 'http-status ' + (ok ? 'pass' : 'fail'), text: String(st.status_code) }),
+        el('span', { class: 'http-dur', text: st.duration_ms != null ? st.duration_ms + 'ms' : '' }),
+        el('span', { class: 'http-twisty', text: '▼' }),
+      ),
+      el('div', { class: 'http-body' },
+        el('div', { class: 'http-col' },
+          el('div', { class: 'http-lbl', text: 'Request' }),
+          kv('params', st.request_params),
+          kv('headers', st.request_headers),
+          kv('body', st.request_body),
+        ),
+        el('div', { class: 'http-col' },
+          el('div', { class: 'http-lbl', text: 'Response' }),
+          st.error ? el('pre', { class: 'json error', text: st.error }) : null,
+          !st.error ? kv('status', st.status_code) : null,
+          !st.error ? kv('headers', st.response_headers) : null,
+          !st.error ? kv('body', st.response_body) : null,
+        ),
+      ),
+    ));
+  });
+  return wrap;
+}
+
+// JSON 稽核:請求/回應並排 + 期望值 + 欄位 Diff
+function renderJsonAudit(c) {
+  const wrap = el('div', { class: 'json-audit' });
+  wrap.appendChild(el('div', { class: 'json-pair' },
+    el('div', { class: 'json-col' },
+      el('div', { class: 'http-lbl', text: 'Request payload' }),
+      renderJson(c.request_payload),
+    ),
+    el('div', { class: 'json-col' },
+      el('div', { class: 'http-lbl', text: 'Response payload' }),
+      renderJson(c.response_payload),
+    ),
+  ));
+  if (c.expected_payload) {
+    wrap.appendChild(el('div', { class: 'json-col', style: 'margin-top:12px' },
+      el('div', { class: 'http-lbl', text: 'Expected payload（通關種子）' }),
+      renderJson(c.expected_payload),
+    ));
+  }
+  const rows = (c.diff && c.diff.length) ? c.diff : [];
+  if (rows.length) {
+    const box = el('div', { class: 'diff-box', style: 'margin-top:12px' },
+      el('div', { class: 'diff-title', text: `欄位 Diff 比對（${rows.length} 項）` }),
+      el('div', { class: 'diff-row' },
+        el('span', { class: 'f', text: '欄位' }), el('span', { class: 'e', text: '期望' }), el('span', { class: 'a', text: '實際' }),
+      ),
+    );
+    for (const d of rows) {
+      box.appendChild(el('div', { class: 'diff-row' },
+        el('span', { class: 'f', text: d.field }),
+        el('span', { class: 'e', text: fmtVal(d.expected) }),
+        el('span', { class: 'a', text: fmtVal(d.actual) }),
+      ));
+    }
+    wrap.appendChild(box);
+  } else if (c.status === 'FAIL') {
+    wrap.appendChild(el('div', { class: 'empty', style: 'margin-top:12px', text: '無欄位級 Diff（失敗可能源於狀態碼或連線，見「錯誤分析」）' }));
+  }
+  return wrap;
+}
+
+// 錯誤分析:分類 + 除錯建議 + 失敗步回應 + 例外訊息
+function renderErrorAnalysis(c) {
+  if (c.status !== 'FAIL') return el('div', { class: 'empty', text: '本案例通過，無錯誤可分析' });
+  const wrap = el('div', { class: 'list-stack' });
+  wrap.appendChild(el('div', { class: 'cat-box' },
+    el('div', { class: 'diff-title', text: '錯誤分類:' + categoryLabel(c.error_category) }),
+    el('div', { class: 'nt-body', text: '💡 ' + (c.remediation || '—') }),
+  ));
+  if (c.failing_step) {
+    const fs = c.failing_step;
+    wrap.appendChild(el('div', { class: 'http-step open' },
+      el('div', { class: 'http-head' },
+        el('span', { class: 'http-method', text: fs.method }),
+        el('span', { class: 'http-url', text: fs.url }),
+        fs.error
+          ? el('span', { class: 'http-status fail', text: 'ERROR' })
+          : el('span', { class: 'http-status fail', text: String(fs.status_code) }),
+      ),
+      el('div', { class: 'http-body' },
+        el('div', { class: 'http-col' },
+          el('div', { class: 'http-lbl', text: '回應內容(常含雲端錯誤訊息)' }),
+          renderJson(fs.error ? { error: fs.error } : fs.response_body),
+        ),
+      ),
+    ));
+  }
+  const errPayload = (c.response_payload && typeof c.response_payload === 'object' && c.response_payload.__error__) ? c.response_payload.__error__ : null;
+  if (errPayload) {
+    wrap.appendChild(el('div', { class: 'json-col' },
+      el('div', { class: 'http-lbl', text: '例外訊息' }),
+      el('pre', { class: 'json error', text: String(errPayload) }),
+    ));
+  }
+  return wrap;
+}
+
+// 快照:下載本案例完整 JSON + 預覽
+function renderSnapshot(c) {
+  const detail = {
+    case_id: c.case_id, module: c.module, vendor: c.vendor, scenario_name: c.scenario_name,
+    endpoint: c.endpoint, status: c.status, duration_ms: c.duration_ms,
+    error_category: c.error_category, remediation: c.remediation,
+    request_payload: c.request_payload, response_payload: c.response_payload,
+    expected_payload: c.expected_payload, diff: c.diff, steps: c.steps || [],
+  };
+  return el('div', { class: 'list-stack' },
+    el('div', { class: 'cat-box' },
+      el('div', { class: 'nt-body', text: `案例 ${c.case_id} 的完整 HTTP 交易與結果快照（${(c.steps || []).length} 步交易）。` }),
+      el('button', { class: 'btn-secondary', text: '📥 下載本案例快照 (JSON)', style: 'margin-top:10px',
+        onclick: () => downloadJson(`snapshot-${c.case_id}.json`, detail) }),
+    ),
+    el('div', { class: 'json-col' }, el('div', { class: 'http-lbl', text: '快照預覽' }), renderJson(detail)),
+  );
+}
+
+// ---- 共用工具 ----
+function toggleStep(e) {
+  const head = e.currentTarget, step = head.parentNode;
+  if (step) step.classList.toggle('open');
+}
+
+function kv(label, val) {
+  if (val == null || (typeof val === 'object' && Object.keys(val).length === 0)) return null;
+  return el('div', { class: 'kv' },
+    el('span', { class: 'kv-k', text: label }),
+    el('div', { class: 'kv-v' }, renderJson(val)),
+  );
+}
+
+function renderJson(val) {
+  const txt = val == null ? 'null'
+    : (typeof val === 'string' ? JSON.stringify(val) : JSON.stringify(val, null, 2));
+  // 先 HTML 跳避再做語法高亮(安全):只注入 <span class>
+  const esc = txt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = esc.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+    (m) => {
+      let cls = 'json-num';
+      if (/^"/.test(m)) cls = /:\s*$/.test(m) ? 'json-key' : 'json-str';
+      else if (/true|false/.test(m)) cls = 'json-bool';
+      else if (/null/.test(m)) cls = 'json-null';
+      return `<span class="${cls}">${m}</span>`;
+    });
+  const pre = el('pre', { class: 'json' });
+  pre.innerHTML = html;
+  return pre;
+}
+
+function downloadJson(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 function statCard(label, val, cls) {

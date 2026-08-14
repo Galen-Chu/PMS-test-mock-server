@@ -177,3 +177,66 @@ a { color: var(--link); } a:hover { color: var(--link-hover); }
 .list-stack { display: flex; flex-direction: column; gap: 6px; }
 .gap18 > * + * { margin-top: 0; }
 .error-banner { padding: 10px 14px; border-radius: 8px; background: rgba(255,95,86,.12); border: 1px solid rgba(255,95,86,.35); font: 12px 'Space Grotesk'; color: var(--fail); }
+
+/* ---- ③ 結果分析:案例檢視主從明細 + HTTP/JSON 稽核 + 快照 ---- */
+.btn-secondary {
+  cursor: pointer; border: 1px solid var(--border); padding: 9px 16px; border-radius: 8px;
+  background: rgba(255,255,255,.04); color: var(--text); font: 600 12.5px 'Space Grotesk';
+}
+.btn-secondary:hover { border-color: var(--accent); color: #fff; }
+
+.browser { display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: start; }
+.case-list {
+  display: flex; flex-direction: column; gap: 6px; max-height: 70vh; overflow: auto; padding-right: 4px;
+}
+.case-list .case-row { cursor: pointer; }
+.case-row.selected { border-color: var(--accent); background: rgba(255,138,61,.1); }
+.case-detail { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 16px; min-width: 0; }
+.detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.detail-head .detail-title { font: 600 13px 'Space Grotesk'; color: #fff; flex: 1; min-width: 0; }
+.detail-head .ep { font: 11px 'JetBrains Mono'; color: var(--text-dim); }
+.result-tabs.sub { margin-bottom: 14px; }
+
+/* HTTP 逐步交易卡(可折疊) */
+.http-step { border: 1px solid var(--border-soft); border-radius: 8px; background: rgba(0,0,0,.15); overflow: hidden; }
+.http-head { cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.http-seq { font: 10px 'JetBrains Mono'; color: var(--text-dim); }
+.http-method { font: 700 10.5px 'JetBrains Mono'; color: #fff; background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 4px; }
+.http-url { flex: 1; font: 11px 'JetBrains Mono'; color: var(--text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.http-status { font: 700 11px 'JetBrains Mono'; }
+.http-status.pass { color: var(--pass); }
+.http-status.fail { color: var(--fail); }
+.http-dur { font: 11px 'JetBrains Mono'; color: var(--text-dim); }
+.http-twisty { font: 10px; color: var(--text-dim); }
+.http-body { display: none; padding: 0 12px 12px; gap: 16px; }
+.http-step.open .http-body { display: flex; }
+.http-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.http-lbl { font: 600 11px 'Space Grotesk'; color: var(--text-dim); letter-spacing: .03em; }
+
+/* key-value 列(label + JSON) */
+.kv { display: flex; flex-direction: column; gap: 4px; }
+.kv .kv-k { font: 10.5px 'JetBrains Mono'; color: var(--text-dim); }
+
+/* JSON 呈現 + 語法高亮 */
+pre.json {
+  margin: 0; padding: 10px 12px; border-radius: 6px; background: rgba(0,0,0,.3);
+  font: 11px/1.55 'JetBrains Mono'; color: #c7cbd4; white-space: pre-wrap; word-break: break-word;
+  max-height: 320px; overflow: auto;
+}
+pre.json.error { color: var(--fail); }
+.json-key { color: #4da3ff; }
+.json-str { color: #35d399; }
+.json-num { color: #ff8a3d; }
+.json-bool { color: #c084fc; }
+.json-null { color: var(--text-dim); }
+
+/* JSON 稽核並排 */
+.json-audit { display: flex; flex-direction: column; gap: 4px; }
+.json-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.json-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+@media (max-width: 760px) {
+  .browser { grid-template-columns: 1fr; }
+  .json-pair { grid-template-columns: 1fr; }
+  .http-step.open .http-body { flex-direction: column; }
+}

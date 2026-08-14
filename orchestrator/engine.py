@@ -88,6 +88,9 @@ def build_run_context(environment: str) -> RunContext:
         # 非 vendor-sync 路由（停車的 PMS→廠商方向與內部端點）
         "check_in": f"{server_base}/pms-sync-data/check-in",
         "night_audit": f"{server_base}/pms-sync-data/night-audit",
+        "change_checkout": f"{server_base}/pms-sync-data/change-checkout-datetime",
+        "change_car_nos": f"{server_base}/pms-sync-data/change-car-nos",
+        "check_in_cancel": f"{server_base}/pms-sync-data/check-in-cancel",
         "whitelist": f"{server_base}/parking/internal/whitelist",
         # PAYTRONEX 專屬路由（/parktron/hpms/services/roomer/*）
         "paytronex_add": f"{server_base}/parktron/hpms/services/roomer/add",
@@ -124,6 +127,7 @@ def _execute_run(run, scenario_ids, ctx):
     """背景執行緒主體：逐案例執行，每案完成即 append + recompute（鎖保護 cases list）。"""
     run_id = run.run_id
     for sid in scenario_ids:
+        ctx.recorder = []  # 逐步錄製槽每案重置（ctx 跨案例共用）
         sc = registry.get(sid)
         if sc is None:
             cr = CaseResult(
@@ -151,9 +155,16 @@ def _execute_run(run, scenario_ids, ctx):
                     sid, run_id, sc, CASE_FAIL, dur,
                     response_payload={"__error__": f"{type(e).__name__}: {e}"},
                 )
+        cr.steps = list(ctx.recorder)  # 把本案例逐步 HTTP 交易錄進結果（UI「HTTP 稽核」來源）
         with _RUNS_LOCK:
             run.cases.append(cr)
             run.recompute()
+
+    # 全部案例跑完才定終局狀態：執行緒在這裡把 status 從 RUNNING 翻成 DONE / PARTIAL_FAIL。
+    # 若在逐案途中就翻成 DONE，UI 第一次 polling 即會誤判完成並停止，後續案例結果永遠進不來。
+    with _RUNS_LOCK:
+        run.recompute()
+        run.finalize_status()
 
 
 def _new_run(environment: str) -> Run:

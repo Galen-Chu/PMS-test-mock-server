@@ -90,17 +90,39 @@ def execute_request(method, url, params=None, json_body=None):
         return None
 
 
+def _safe_body(res, limit=8192):
+    """把 requests.Response 的 body 安全序列化：優先 JSON，失敗退回截斷文字。"""
+    try:
+        return res.json()
+    except Exception:
+        pass
+    try:
+        text = res.text or ""
+    except Exception:
+        text = ""
+    if len(text) > limit:
+        return text[:limit] + f"\n…[truncated {len(text) - limit} chars]"
+    return text
+
+
 def execute_for_ctx(ctx, method, url, params=None, json_body=None, headers=None):
-    """編排層專用發射引擎：直接用 RunContext 的 headers/params，不碰模組全域變數。
+    """編排層專用發射��擎：直接用 RunContext 的 headers/params，不碰模組全域變數。
 
     與 execute_request 的差異：環境隔離（兩個並行 run 用不同環境不會互踩），
     並把 timeout 統一為 10s。headers 可覆寫（keycard 製卡路由需 LOCAL_TOKEN 鑑別）。
     回傳 (response_or_None, error_msg_or_None)。
+
+    💡 逐步錄製：若 ctx 帶有 recorder list，每筆 HTTP 交易（成功或失敗）都會 append
+    一個 step dict 供 CaseResult.steps → UI「HTTP 稽核」檢視。runner 不需做任何事。
     """
     if headers is None:
         headers = dict(getattr(ctx, "headers", {}) or {})
+    rec = getattr(ctx, "recorder", None)
+    step = {"method": str(method).upper(), "url": url,
+            "request_params": params, "request_headers": headers, "request_body": json_body}
+    t0 = time.perf_counter() if rec is not None else None
     try:
-        m = method.upper()
+        m = str(method).upper()
         if m == "GET":
             res = requests.get(url, params=params, headers=headers, timeout=10)
         elif m == "POST":
@@ -110,10 +132,26 @@ def execute_for_ctx(ctx, method, url, params=None, json_body=None, headers=None)
         elif m == "DELETE":
             res = requests.delete(url, params=params, json=json_body, headers=headers, timeout=10)
         else:
-            return None, f"Unsupported method: {method}"
+            err = f"Unsupported method: {method}"
+            if rec is not None:
+                step["duration_ms"] = int((time.perf_counter() - t0) * 1000)
+                step["error"] = err
+                rec.append(step)
+            return None, err
+        if rec is not None:
+            step["duration_ms"] = int((time.perf_counter() - t0) * 1000)
+            step["status_code"] = res.status_code
+            step["response_headers"] = dict(res.headers)
+            step["response_body"] = _safe_body(res)
+            rec.append(step)
         return res, None
     except Exception as e:
-        return None, f"{type(e).__name__}: {e}"
+        err = f"{type(e).__name__}: {e}"
+        if rec is not None:
+            step["duration_ms"] = int((time.perf_counter() - t0) * 1000) if t0 is not None else 0
+            step["error"] = err
+            rec.append(step)
+        return None, err
 
 # ====================================================================
 # 🔄 環境即時同步：Dashboard 動態切換環境後會改寫 config 模組變數；
