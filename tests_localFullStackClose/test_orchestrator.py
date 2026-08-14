@@ -23,8 +23,11 @@ def test_registry_completeness():
     by_mod = registry.by_module()
     assert set(by_mod.keys()) >= {"parking", "amenity", "keycard"}
     amenity = by_mod["amenity"]
-    assert len(amenity) == 5
+    assert len(amenity) == 10  # 5 happy path + 5 SA 負面路徑(417 錯誤碼)
     assert all(s.implemented for s in amenity)
+    amenity_ids = {s.id for s in amenity}
+    assert {"room_nos_query_notfound", "mifare_query_notfound", "amenity_billing_notfound",
+            "amenity_pay_duplicate", "amenity_cancel_notfound"} <= amenity_ids
     parking = by_mod["parking"]
     assert len(parking) == 9  # SHIN_YEONG 7 + PAYTRONEX 2
     parking_vendors = {s.vendor for s in parking}

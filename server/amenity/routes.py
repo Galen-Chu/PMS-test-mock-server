@@ -36,7 +36,13 @@ def initialize_room_sandbox_node(room_nos: str) -> dict:
         "preCreditAmount": 0,
         "groupNos": "Galen",
         "chargeInfo": "",
-        
+
+        # --- SA 公版住掛 v1.1/v1.2 新增回傳欄位 ---
+        "ciDate": "2026/08/14",
+        "coDate": "2026/08/15",
+        "ikey": "IK20260814001",
+        "sexType": "M",
+
         # --- 預留儲存空間：依據 POST /room-pay Request Body 結構微整型 ---
         "roomPayMain": None,
         "roomPayDetail": [],
@@ -71,6 +77,10 @@ def query_guest_by_room_nos():
     room_key = str(g.keyword).strip()
     logger.info(f"📥 [沙盒流量] 房號身分拉取 ➔ 關鍵字: 【{room_key}】")
 
+    # 🎯 SA 負面路徑:特定房號模擬「查無此房號」→ 417 / code 1001(對齊 SA 錯誤碼表)
+    if room_key == "9999":
+        return jsonify({"code": "1001", "message": "查無此房號"}), 417
+
     # 🎯 規則要求：GET 方法一開始無條件初始化該房號的暫存資料結構
     mock_inhouse_db[room_key] = initialize_room_sandbox_node(room_key)
 
@@ -87,9 +97,12 @@ def query_guest_by_mifare_nos():
 
     # 🎯 接收發射端傳過來的 8 碼動態大寫英數卡號
     card_key = str(g.keyword).strip() if g.keyword else "A1B2C3D4"
-    
-    # 如果 mock_card_mapping_db 查不到，就動態綁定到 101 房，確保測試暢行無阻
-    mapped_room = mock_card_mapping_db.get(card_key, "101")
+
+    # 💡 舊版行為:查無卡號動態綁 101 房。已對齊 SA:查無 → 417 / code 1001。
+    # (跨模組 keycard 製卡會事先寫入 mock_card_mapping_db,故卡片閉環案例不受影響)
+    if card_key not in mock_card_mapping_db:
+        return jsonify({"code": "1001", "message": "查無此房卡卡號"}), 417
+    mapped_room = mock_card_mapping_db[card_key]
     logger.info(f"📥 [沙盒流量] 房卡卡號逆查 ➔ 動態卡號: 【{card_key}】 ➔ 動態映射房號: 【{mapped_room}】")
 
     # 執行初始化
@@ -115,6 +128,13 @@ def receive_room_pay_settlement():
         order_nos = clean_pay['orderNos']
         
         logger.info(f"📥 [沙盒流量] 接收餐廳掛帳 ➔ 房號: 【{room_nos}】| 單號: 【{order_nos}】| 金額: ${clean_pay['payAmount']}")
+
+        # 🎯 SA 負面路徑:重複掛帳(同單號已入帳)→ 417 / code 1010
+        for node in mock_inhouse_db.values():
+            if node.get("roomPayMain") and node["roomPayMain"].get("orderNos") == order_nos \
+                    and node.get("transactionStatus") == "SETTLED":
+                return jsonify({"code": "1010", "message": "此單號已掛帳，不可重複掛帳"}), 417
+
 
         # 🚀 健壯性防禦：如果先前提哨沒打（例如沒跑 GET 就跑 POST），則自動補初始化
         if room_nos not in mock_inhouse_db:
@@ -150,7 +170,8 @@ def receive_room_pay_cancel():
             break
 
     if not target_room:
-        return jsonify({"code": "2007", "message": "查無此入帳單號"}), 417
+        # 💡 對齊 SA 錯誤碼表:查無掛帳資料 = 2001(2007 是「客房已結帳」)
+        return jsonify({"code": "2001", "message": "掛帳資料找不到"}), 417
         
     # 變更狀態為已沖正作廢
     mock_inhouse_db[target_room]["transactionStatus"] = "CANCELED"
@@ -169,6 +190,9 @@ def receive_room_billing_settlement():
     
     try:
         clean_billing = vendor_strategy.parse_pms_room_billing(data)
+        # 🎯 SA 負面路徑:模擬「此房間無住客」→ 417 / code 1001(對齊 SA 範例)
+        if clean_billing['roomNos'] == "9999":
+            return jsonify({"code": "1001", "message": "此房間無住客"}), 417
         logger.info(f"📥 [沙盒流量] 接收備品扣款 ➔ 房號: 【{clean_billing['roomNos']}】| 品項數: {len(clean_billing['items'])} 筆")
         return jsonify({}), 200
     except Exception as e:

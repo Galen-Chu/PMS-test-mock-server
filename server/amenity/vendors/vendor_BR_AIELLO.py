@@ -5,11 +5,15 @@ class VendorBRAielloStrategy(BaseAmenityVendorStrategy):
     """小美犀策略層：全面仿照德安官方 API 規格。實現單一情境（即用即拋）的傳輸資料處理，取消無謂的欄位轉換。"""
     
     def transform_room_nos_query_response(self, sandbox_guest_dict):
-        """🎯 單筆應對單筆：直接收取仿照 API 規格的內部 Dict，包裝 resultCode 外殼吐回"""
+        """🎯 對齊 SA 公版住掛 v1.2:成功回應為「裸陣列」[ {住客}, ... ]，不再包 resultCode/data 外殼。
+
+        💡 舊版曾回 {"resultCode":"0000","data":{"data":[...]}} — SA 文件範例為裸陣列，
+        包裹外殼已移除；呼叫端(runner / simulate_speaker)解析已同步改為 body[0]。
+        """
         guest = sandbox_guest_dict if isinstance(sandbox_guest_dict, dict) else {}
         if not guest:
-            return {"resultCode": "0000", "data": []}
-            
+            return []
+
         # 💡 本質歸位：欄位名稱 100% 仿照德安標準 Response 規格
         vendor_node = {
             "guestStatus": str(guest.get("guestStatus", "O")),
@@ -23,12 +27,14 @@ class VendorBRAielloStrategy(BaseAmenityVendorStrategy):
             "sumAdvcTotal": int(guest.get("sumAdvcTotal", 0)),
             "preCreditAmount": int(guest.get("preCreditAmount", 0)),
             "groupNos": str(guest.get("groupNos", "")),
-            "chargeInfo": str(guest.get("chargeInfo", ""))
+            "chargeInfo": str(guest.get("chargeInfo", "")),
+            # --- SA v1.1/v1.2 新增欄位 ---
+            "ciDate": str(guest.get("ciDate", "")),
+            "coDate": str(guest.get("coDate", "")),
+            "ikey": str(guest.get("ikey", "")),
+            "sexType": str(guest.get("sexType", "U")),
         }
-        return {
-            "resultCode": "0000",
-            "data": {"data": [vendor_node]}
-        }
+        return [vendor_node]
 
     def transform_mifare_nos_query_response(self, sandbox_guest_dict):
         return self.transform_room_nos_query_response(sandbox_guest_dict)

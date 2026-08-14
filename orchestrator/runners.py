@@ -33,15 +33,15 @@ def _fail(case_id, run_id, scenario, duration_ms, request_payload=None, response
 
 
 def _extract_ci_serial(res):
-    """從 GET /room-nos 或 /mifare-nos 回應扒出 checkInSerial（對齊真實雲端 data.data[0]）。"""
+    """從 GET /room-nos 或 /mifare-nos 回應扒出 checkInSerial（SA 規格:回應為裸陣列 body[0]）。"""
     body = res.json()
-    return body["data"]["data"][0]["checkInSerial"]
+    return body[0]["checkInSerial"]
 
 
 def _extract_room_nos(res):
-    """從 GET /mifare-nos 回應扒出歸屬房號（B 閉環斷言用）。"""
+    """從 GET /mifare-nos 回應扒出歸屬房號（B 閉環斷言用,裸陣列 body[0]）。"""
     body = res.json()
-    return body["data"]["data"][0]["roomNos"]
+    return body[0]["roomNos"]
 
 
 # ====================================================================
@@ -57,7 +57,7 @@ def run_room_nos_query(ctx: RunContext) -> CaseResult:
     scenario = registry.get("room_nos_query")
     params = {**ctx.params_amenity, "keyword": "11101"}
     t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params=params)
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params=params, headers=ctx.headers_amenity)
     dur = int((_t.perf_counter() - t0) * 1000)
     if err:
         return _fail("room_nos_query", "", scenario, dur, response_payload={"__error__": err})
@@ -76,7 +76,7 @@ def run_mifare_query(ctx: RunContext) -> CaseResult:
     scenario = registry.get("mifare_query")
     params = {**ctx.params_amenity, "keyword": "1A2B3C"}
     t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "GET", ctx.urls["mifare_nos"], params=params)
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["mifare_nos"], params=params, headers=ctx.headers_amenity)
     dur = int((_t.perf_counter() - t0) * 1000)
     if err:
         return _fail("mifare_query", "", scenario, dur, response_payload={"__error__": err})
@@ -97,7 +97,7 @@ def run_amenity_charge(ctx: RunContext) -> CaseResult:
     scenario = registry.get("amenity_charge")
     t0 = _t.perf_counter()
     # Phase 1: GET room-nos 取 ciSerial
-    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"})
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"}, headers=ctx.headers_amenity)
     if err or res is None or res.status_code != 200:
         dur = int((_t.perf_counter() - t0) * 1000)
         return _fail("amenity_charge", "", scenario, dur, response_payload={"__error__": err or f"GET room-nos {getattr(res,'status_code',None)}"})
@@ -105,7 +105,7 @@ def run_amenity_charge(ctx: RunContext) -> CaseResult:
 
     # Phase 2: POST room-billing
     payload = {"roomNos": "11101", "items": [{"seqNos": 1, "productNos": load_product_from_pool("M001"), "orderQuantity": 1}]}
-    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_billing"], params=ctx.params_amenity, json_body=payload)
+    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_billing"], params=ctx.params_amenity, json_body=payload, headers=ctx.headers_amenity)
     dur = int((_t.perf_counter() - t0) * 1000)
     if err2 or res2 is None or res2.status_code not in (200, 204):
         return _fail("amenity_charge", "", scenario, dur, request_payload=payload, response_payload={"__error__": err2 or f"POST billing {getattr(res2,'status_code',None)}"})
@@ -127,7 +127,7 @@ def run_amenity_cancel(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("amenity_cancel")
     t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"})
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"}, headers=ctx.headers_amenity)
     if err or res is None or res.status_code != 200:
         dur = int((_t.perf_counter() - t0) * 1000)
         return _fail("amenity_cancel", "", scenario, dur, response_payload={"__error__": err or "GET room-nos failed"})
@@ -140,12 +140,12 @@ def run_amenity_cancel(ctx: RunContext) -> CaseResult:
         "mTimeCode": "LCH", "mTimeName": "午餐", "deskNos": "A01",
         "payAmount": 120, "acuAmount": 0, "precreditTotal": 0, "custType": "5",
     }, "roomPayDetail": [{"sequenceNos": 1, "productName": "特製飲品", "orderQuantity": 1, "specialAmount": 120, "precreditAmount": 0}]}
-    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay"], params=ctx.params_amenity, json_body=pay_payload)
+    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay"], params=ctx.params_amenity, json_body=pay_payload, headers=ctx.headers_amenity)
     if err2 or res2 is None or res2.status_code not in (200, 204):
         dur = int((_t.perf_counter() - t0) * 1000)
         return _fail("amenity_cancel", "", scenario, dur, request_payload=pay_payload, response_payload={"__error__": err2 or "POST room-pay failed"})
 
-    res3, err3 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay_cancel"], params={**ctx.params_amenity, "orderNos": order_nos})
+    res3, err3 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay_cancel"], params={**ctx.params_amenity, "orderNos": order_nos}, headers=ctx.headers_amenity)
     dur = int((_t.perf_counter() - t0) * 1000)
     if err3 or res3 is None or res3.status_code not in (200, 204):
         return _fail("amenity_cancel", "", scenario, dur, request_payload={"cancelledOrderNos": order_nos}, response_payload={"__error__": err3 or f"cancel {getattr(res3,'status_code',None)}"})
@@ -167,7 +167,7 @@ def run_billing_sync(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("billing_sync")
     t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"})
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"}, headers=ctx.headers_amenity)
     if err or res is None or res.status_code != 200:
         dur = int((_t.perf_counter() - t0) * 1000)
         return _fail("billing_sync", "", scenario, dur, response_payload={"__error__": err or "GET room-nos failed"})
@@ -180,7 +180,7 @@ def run_billing_sync(ctx: RunContext) -> CaseResult:
         "mTimeCode": "LCH", "mTimeName": "午餐", "deskNos": "A02",
         "payAmount": 500, "acuAmount": 0, "precreditTotal": 0, "custType": "5",
     }, "roomPayDetail": [{"sequenceNos": 1, "productName": "牛排", "orderQuantity": 1, "specialAmount": 500, "precreditAmount": 0}]}
-    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay"], params=ctx.params_amenity, json_body=payload)
+    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay"], params=ctx.params_amenity, json_body=payload, headers=ctx.headers_amenity)
     dur = int((_t.perf_counter() - t0) * 1000)
     if err2 or res2 is None or res2.status_code not in (200, 204):
         return _fail("billing_sync", "", scenario, dur, request_payload=payload, response_payload={"__error__": err2 or f"POST room-pay {getattr(res2,'status_code',None)}"})
@@ -190,6 +190,139 @@ def run_billing_sync(ctx: RunContext) -> CaseResult:
     except Exception:
         body2 = {"status_code": res2.status_code}
     return _ok("billing_sync", "", scenario, dur, request_payload=payload, response_payload=body2)
+
+
+# ====================================================================
+# 🦏 小美犀負面路徑(對齊 SA 錯誤碼表:失敗一律 HTTP 417 + {code, message})
+# PASS 條件 = 收到 417 且 code 與 SA 定義相符(反向斷言)。
+# ====================================================================
+def _expect_417(case_id, scenario, dur, payload, res, expected_code):
+    """負面路徑共用判定:HTTP 417 + SA code 相符 → PASS。"""
+    if res is None:
+        return _fail(case_id, "", scenario, dur, request_payload=payload,
+                     response_payload={"__error__": "no response"})
+    body = None
+    try:
+        body = res.json()
+    except Exception:
+        body = {"status_code": res.status_code}
+    if res.status_code == 417 and isinstance(body, dict) and str(body.get("code")) == expected_code:
+        return _ok(case_id, "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+@register_scenario(
+    "room_nos_query_notfound", module="amenity", vendor="BR_AIELLO",
+    name="查無房號(417/1001)", endpoint="/room-pay/room-nos",
+)
+def run_room_nos_query_notfound(ctx: RunContext) -> CaseResult:
+    """SA 負面:查無此房號 → 417 code=1001(mock 以房號 9999 模擬無住客房)。"""
+    import time as _t
+    scenario = registry.get("room_nos_query_notfound")
+    payload = {"keyword": "9999"}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"],
+                               params={**ctx.params_amenity, "keyword": "9999"}, headers=ctx.headers_amenity)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err:
+        return _fail("room_nos_query_notfound", "", scenario, dur, request_payload=payload, response_payload={"__error__": err})
+    return _expect_417("room_nos_query_notfound", scenario, dur, payload, res, "1001")
+
+
+@register_scenario(
+    "mifare_query_notfound", module="amenity", vendor="BR_AIELLO",
+    name="查無房卡卡號(417/1001)", endpoint="/room-pay/mifare-nos",
+)
+def run_mifare_query_notfound(ctx: RunContext) -> CaseResult:
+    """SA 負面:查無此房卡卡號 → 417 code=1001(mock 以未註冊卡號模擬)。"""
+    import time as _t
+    scenario = registry.get("mifare_query_notfound")
+    payload = {"keyword": "UNKNOWN0001"}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["mifare_nos"],
+                               params={**ctx.params_amenity, "keyword": "UNKNOWN0001"}, headers=ctx.headers_amenity)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err:
+        return _fail("mifare_query_notfound", "", scenario, dur, request_payload=payload, response_payload={"__error__": err})
+    return _expect_417("mifare_query_notfound", scenario, dur, payload, res, "1001")
+
+
+@register_scenario(
+    "amenity_billing_notfound", module="amenity", vendor="BR_AIELLO",
+    name="備品入帳無住客(417/1001)", endpoint="/room-billing",
+)
+def run_amenity_billing_notfound(ctx: RunContext) -> CaseResult:
+    """SA 負面:此房間無住客 → 417 code=1001(mock 以房號 9999 模擬,對齊 SA 失敗範例)。"""
+    import time as _t
+    scenario = registry.get("amenity_billing_notfound")
+    payload = {"roomNos": "9999", "items": [{"seqNos": 1, "productNos": "M001", "orderQuantity": 1}]}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["room_billing"],
+                               params=ctx.params_amenity, json_body=payload, headers=ctx.headers_amenity)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err:
+        return _fail("amenity_billing_notfound", "", scenario, dur, request_payload=payload, response_payload={"__error__": err})
+    return _expect_417("amenity_billing_notfound", scenario, dur, payload, res, "1001")
+
+
+@register_scenario(
+    "amenity_pay_duplicate", module="amenity", vendor="BR_AIELLO",
+    name="重複掛帳(417/1010)", endpoint="/room-pay",
+)
+def run_amenity_pay_duplicate(ctx: RunContext) -> CaseResult:
+    """SA 負面:同單號重複掛帳 → 417 code=1010(先成功掛一筆,再掛同單號)。"""
+    import time as _t
+    scenario = registry.get("amenity_pay_duplicate")
+    t0 = _t.perf_counter()
+    # Phase 1: GET room-nos 取 ciSerial
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"],
+                               params={**ctx.params_amenity, "keyword": "11101"}, headers=ctx.headers_amenity)
+    if err or res is None or res.status_code != 200:
+        dur = int((_t.perf_counter() - t0) * 1000)
+        return _fail("amenity_pay_duplicate", "", scenario, dur, response_payload={"__error__": err or "GET room-nos failed"})
+    ci_serial = _extract_ci_serial(res)
+
+    # Phase 2: 第一筆掛帳(應 200)
+    order_nos = f"BR-DUP-{datetime.now().strftime('%m%d%H%M%S')}"
+    pay_payload = {"roomPayMain": {
+        "ciSerial": str(ci_serial), "roomNos": "11101", "orderNos": order_nos,
+        "needTransfer": "N", "rsptCode": "2FFO", "rsptName": "2F櫃台",
+        "mTimeCode": "LCH", "mTimeName": "午餐", "deskNos": "A06",
+        "payAmount": 100, "acuAmount": 0, "precreditTotal": 0, "custType": "5",
+    }, "roomPayDetail": [{"sequenceNos": 1, "productName": "重複掛帳測試", "orderQuantity": 1, "specialAmount": 100, "precreditAmount": 0}]}
+    res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay"],
+                                 params=ctx.params_amenity, json_body=pay_payload, headers=ctx.headers_amenity)
+    if err2 or res2 is None or res2.status_code not in (200, 204):
+        dur = int((_t.perf_counter() - t0) * 1000)
+        return _fail("amenity_pay_duplicate", "", scenario, dur, request_payload=pay_payload,
+                     response_payload={"__error__": err2 or f"前置掛帳失敗 {getattr(res2,'status_code',None)}"})
+
+    # Phase 3: 同單號重複掛帳 → 應 417/1010
+    res3, err3 = execute_for_ctx(ctx, "POST", ctx.urls["room_pay"],
+                                 params=ctx.params_amenity, json_body=pay_payload, headers=ctx.headers_amenity)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err3:
+        return _fail("amenity_pay_duplicate", "", scenario, dur, request_payload=pay_payload, response_payload={"__error__": err3})
+    return _expect_417("amenity_pay_duplicate", scenario, dur, pay_payload, res3, "1010")
+
+
+@register_scenario(
+    "amenity_cancel_notfound", module="amenity", vendor="BR_AIELLO",
+    name="取消查無單號(417/2001)", endpoint="/room-pay-cancel",
+)
+def run_amenity_cancel_notfound(ctx: RunContext) -> CaseResult:
+    """SA 負面:取消不存在的掛帳單號 → 417 code=2001(掛帳資料找不到)。"""
+    import time as _t
+    scenario = registry.get("amenity_cancel_notfound")
+    ghost_order = f"NO-SUCH-{datetime.now().strftime('%m%d%H%M%S')}"
+    payload = {"orderNos": ghost_order}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["room_pay_cancel"],
+                               params={**ctx.params_amenity, "orderNos": ghost_order}, headers=ctx.headers_amenity)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err:
+        return _fail("amenity_cancel_notfound", "", scenario, dur, request_payload=payload, response_payload={"__error__": err})
+    return _expect_417("amenity_cancel_notfound", scenario, dur, payload, res, "2001")
 
 
 # ====================================================================
@@ -600,7 +733,8 @@ def run_card_lifecycle(ctx: RunContext) -> CaseResult:
 
     # 2) 用該 cardUid 走 amenity mifare 查詢（跨模組）
     res_mf, err_mf = execute_for_ctx(ctx, "GET", ctx.urls["mifare_nos"],
-                                     params={**ctx.params_amenity, "keyword": card_uid})
+                                     params={**ctx.params_amenity, "keyword": card_uid},
+                                     headers=ctx.headers_amenity)
     dur = int((_t.perf_counter() - t0) * 1000)
     if err_mf or res_mf is None or res_mf.status_code != 200:
         return _fail("card_lifecycle", "", scenario, dur,

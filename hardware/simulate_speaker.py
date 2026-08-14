@@ -205,7 +205,7 @@ def run_all_expanded_scenarios():
         
         response_json = res.json()
         # 🎯 同步優化：精準雙層扒皮，直擊真實雲端深處的憑證，確保全腳本邏輯大一統
-        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        real_ci_serial = response_json[0]["checkInSerial"]
         
         logger.info(f"🔑[真實雲端資料對齊] 成功提取並儲存過帳憑證 (ciSerial): 【{real_ci_serial}】")
         time.sleep(0.5)
@@ -239,7 +239,7 @@ def run_all_expanded_scenarios():
         
         response_json = res.json()
         # 🎯 核心能力展現：精準雙層扒皮，直接直擊真實雲端深處的憑證！
-        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        real_ci_serial = response_json[0]["checkInSerial"]
             
         logger.info(f"🔑[真實雲端資料對齊] 成功提取並繼承過帳憑證 (ciSerial): 【{real_ci_serial}】")
         time.sleep(0.5)
@@ -288,7 +288,7 @@ def run_all_expanded_scenarios():
         
         response_json = res.json()
         # 🎯 精準雙層扒皮
-        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        real_ci_serial = response_json[0]["checkInSerial"]
             
         logger.info(f"🔑[真實雲端資料對齊] 成功提取並繼承過帳憑證 (ciSerial): 【{real_ci_serial}】")
         time.sleep(2.5)
@@ -345,7 +345,7 @@ def run_all_expanded_scenarios():
         
         response_json = res.json()
         # 🎯 精準雙層扒皮
-        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        real_ci_serial = response_json[0]["checkInSerial"]
             
         logger.info(f"🔑[真實雲端資料對齊] 成功提取並繼承過帳憑證 (ciSerial): 【{real_ci_serial}】")
         time.sleep(2.5)
@@ -473,7 +473,7 @@ def run_all_expanded_scenarios():
         
         response_json = res.json()
         # 🎯 核心能力：精準雙層扒皮，直擊真實雲端深處的歸屬房號
-        target_room_nos = response_json["data"]["data"][0]["roomNos"]
+        target_room_nos = response_json[0]["roomNos"]
         
         logger.info(f"🔑[真實雲端資料對齊] 房卡成功識別 ➔ 歸屬房號: 【{target_room_nos}】")
         time.sleep(0.5)
@@ -510,8 +510,8 @@ def run_all_expanded_scenarios():
         
         response_json = res.json()
         # 🎯 雙層扒皮：同時繼承房號與餐廳過帳必備的 ciSerial 憑證
-        target_room_nos = response_json["data"]["data"][0]["roomNos"]
-        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        target_room_nos = response_json[0]["roomNos"]
+        real_ci_serial = response_json[0]["checkInSerial"]
         
         logger.info(f"🔑[真實雲端資料對齊] 成功繼承 ➔ 房號: 【{target_room_nos}】 | 憑證(ciSerial): 【{real_ci_serial}】")
         time.sleep(0.5)
@@ -567,8 +567,8 @@ def run_all_expanded_scenarios():
         logger.info(f"🟢Phase 1 (GET /mifare-nos 逆查) 通關。")
         
         response_json = res.json()
-        target_room_nos = response_json["data"]["data"][0]["roomNos"]
-        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        target_room_nos = response_json[0]["roomNos"]
+        real_ci_serial = response_json[0]["checkInSerial"]
         
         logger.info(f"🔑[真實雲端資料對齊] 成功繼承 ➔ 房號: 【{target_room_nos}】 | 憑證(ciSerial): 【{real_ci_serial}】")
         time.sleep(0.5)
@@ -637,8 +637,8 @@ def run_all_expanded_scenarios():
         logger.info(f"🟢Phase 1 (GET /mifare-nos 逆查) 通關。")
         
         response_json = res.json()
-        target_room_nos = response_json["data"]["data"][0]["roomNos"]
-        real_ci_serial = response_json["data"]["data"][0]["checkInSerial"]
+        target_room_nos = response_json[0]["roomNos"]
+        real_ci_serial = response_json[0]["checkInSerial"]
         
         logger.info(f"🔑[真實雲端資料對齊] 成功繼承 ➔ 房號: 【{target_room_nos}】 | 憑證(ciSerial): 【{real_ci_serial}】")
         time.sleep(0.5)

@@ -64,9 +64,20 @@ def build_run_context(environment: str) -> RunContext:
         "thirdParty": "SHIN_YEONG",
     }
     params_amenity = {
-        "bacchus-hotelcod": cfg["HOTEL_COD"],
-        "bacchus-athenaid": cfg["ATHENA_ID"],
+        # 💡 對齊 SA 公版住掛 v1.2:URL 參數僅 thirdParty(+各端點的 keyword/orderNos)。
+        # 舊版曾把 bacchus-* 也放 query params——各廠商傳輸機制不同,以下註解保留舊制:
+        # "bacchus-hotelcod": cfg["HOTEL_COD"],
+        # "bacchus-athenaid": cfg["ATHENA_ID"],
         "thirdParty": "BR",
+    }
+    # 💡 對齊 SA(小美犀):鑑別 Header 為 athena / hotel,與 parking/keycard 的
+    # bacchus-* 機制(ctx.headers,註解保留於此)不同——公司未統一規格,兩者並存:
+    #   "bacchus-athenaid": cfg["ATHENA_ID"], "bacchus-hotelcod": cfg["HOTEL_COD"],
+    headers_amenity = {
+        "athena": cfg["ATHENA_ID"],
+        "hotel": cfg["HOTEL_COD"],
+        "accept": "application/json",
+        "Content-Type": "application/json",
     }
     # LOCAL / LOCAL_OFFLINE 模式：runner 是「客戶端」，要打到本地 Flask 伺服器。
     # LOCAL_OFFLINE 的攔截（不出站）發生在「伺服器路由內部」，所以客戶端仍指向 localhost。
@@ -101,7 +112,8 @@ def build_run_context(environment: str) -> RunContext:
     }
     return RunContext(
         environment=environment, use_real=use_real, base_url=base,
-        headers=headers, params_parking=params_parking, params_amenity=params_amenity,
+        headers=headers, headers_amenity=headers_amenity,
+        params_parking=params_parking, params_amenity=params_amenity,
         urls=urls,
     )
 
