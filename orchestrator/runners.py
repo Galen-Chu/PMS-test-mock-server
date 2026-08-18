@@ -6,7 +6,7 @@
 - runner 簽章固定：(RunContext) -> CaseResult。成功 2xx → PASS，否則 FAIL。
 - keycard 模組目前無執行器 → register_unimplemented（UI 顯示「待開發」）。
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .registry import registry, register_scenario
 from .models import CaseResult, RunContext, CASE_PASS, CASE_FAIL
@@ -696,8 +696,9 @@ def run_paytronex_add(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("car_arrival_pt")
     ts = datetime.now().strftime("%m%d%H%M%S")
+    today = datetime.now().strftime("%Y/%m/%d")  # 💡 SA:StartTime=C/I 日 00:00:00,請求格式 yyyy/mm/dd hh:mm:ss(斜線+秒)
     payload = {"Roomer": {
-        "RoomNumber": "207", "StartTime": "2026-08-12T15:00:00", "EndTime": "2026-08-13T12:00:00",
+        "RoomNumber": "207", "StartTime": f"{today} 00:00:00", "EndTime": f"{today} 23:59:00",
         "LicensePlateList": [f"PT-{ts}"],
     }}
     t0 = _t.perf_counter()
@@ -729,9 +730,10 @@ def run_paytronex_find(ctx: RunContext) -> CaseResult:
     ts = datetime.now().strftime("%m%d%H%M%S")
     plate = f"FIND-{ts}"
     t0 = _t.perf_counter()
-    # 先 add 建立含該車牌的租約
+    # 先 add 建立含該車牌的租約(SA 格式 yyyy/mm/dd hh:mm:ss)
+    today = datetime.now().strftime("%Y/%m/%d")
     execute_for_ctx(ctx, "POST", ctx.urls["paytronex_add"], json_body={"Roomer": {
-        "RoomNumber": "209", "StartTime": "2026-08-12T15:00:00", "EndTime": "2026-08-13T12:00:00",
+        "RoomNumber": "209", "StartTime": f"{today} 00:00:00", "EndTime": f"{today} 23:59:00",
         "LicensePlateList": [plate],
     }})
     # 再逆查
@@ -748,6 +750,182 @@ def run_paytronex_find(ctx: RunContext) -> CaseResult:
     if res.status_code == 200 and body.get("roomer"):
         return _ok("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload=body)
     return _fail("car_arrival_retry", "", scenario, dur, request_payload=payload, response_payload=body)
+
+
+# ====================================================================
+# 🚗 博辰(PAYTRONEX)SA 管線情境 — find→update 兩步閉環(wiki 博辰停車場 SA)
+# SA 事件:CIX 取消入住(EndTime=當下+緩衝、車牌空)/清除車號(車牌空)/更新車號(新牌)/修改退房(新 EndTime)
+# 💡 SA 未定義 add/update 回應 body 與 find 查無行為 → 沿用 mock 現況(resultCode 0000 / 動態虛擬租約),待 SA 確認
+# ====================================================================
+def _pt_today():
+    return datetime.now().strftime("%Y/%m/%d")
+
+
+def _pt_add_roomer(ctx, room, plate_list):
+    """管線前置:add 建租約(SA 請求格式 yyyy/mm/dd hh:mm:ss)。"""
+    return execute_for_ctx(ctx, "POST", ctx.urls["paytronex_add"], json_body={"Roomer": {
+        "RoomNumber": room, "StartTime": f"{_pt_today()} 00:00:00", "EndTime": f"{_pt_today()} 23:59:00",
+        "LicensePlateList": plate_list,
+    }})
+
+
+def _pt_find_rentid(ctx, plate):
+    """管線第一步:findByLicensePlate 取 RentId。回傳 (rent_id, res, err)。"""
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["paytronex_find"], json_body={"LicensePlate": plate})
+    if err or res is None or res.status_code != 200:
+        return None, res, err
+    try:
+        roomer = (res.json() or {}).get("roomer") or {}
+    except Exception:
+        roomer = {}
+    return roomer.get("rentId"), res, err
+
+
+@register_scenario(
+    "paytronex_cancel_checkin", module="parking", vendor="PAYTRONEX",
+    name="取消入住管線(查租約→更新銷帳)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
+)
+def run_paytronex_cancel_checkin(ctx: RunContext) -> CaseResult:
+    """SA CIX:find 取 RentId → update(EndTime=當下+緩衝分鐘、車牌空)。
+    閉環斷言:原車牌已從租約移除(舊牌再查會落到 mock 動態虛擬租約)。"""
+    import time as _t
+    scenario = registry.get("paytronex_cancel_checkin")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    plate = f"CIX-{ts}"
+    t0 = _t.perf_counter()
+    _pt_add_roomer(ctx, "301", [plate])
+    rent_id, _, err_f = _pt_find_rentid(ctx, plate)
+    # 💡 SA 兩處說法(當下時間 vs 當下+緩衝分鐘),取較具體的「當下+30分」
+    cix_end = (datetime.now() + timedelta(minutes=30)).strftime("%Y/%m/%d %H:%M:%S")
+    payload = {"Roomer": {"RentId": rent_id, "RoomNumber": "301",
+                          "StartTime": f"{_pt_today()} 00:00:00", "EndTime": cix_end,
+                          "LicensePlateList": []}}
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["paytronex_update"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err_f or not rent_id or err or res is None:
+        return _fail("paytronex_cancel_checkin", "", scenario, dur, request_payload=payload,
+                     response_payload={"__error__": err or err_f or "前置 find 未取得 RentId"})
+    body = res.json()
+    rent2, res2, _ = _pt_find_rentid(ctx, plate)
+    summary = {"update_code": body.get("resultCode"), "old_plate_rentid_changed": (rent2 != rent_id) if rent2 else None}
+    if res.status_code == 200 and body.get("resultCode") == "0000" and summary["old_plate_rentid_changed"]:
+        return _ok("paytronex_cancel_checkin", "", scenario, dur, request_payload=payload, response_payload=summary)
+    return _fail("paytronex_cancel_checkin", "", scenario, dur, request_payload=payload, response_payload=summary)
+
+
+@register_scenario(
+    "paytronex_clear_plate", module="parking", vendor="PAYTRONEX",
+    name="清除車號管線(查租約→空車牌更新)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
+)
+def run_paytronex_clear_plate(ctx: RunContext) -> CaseResult:
+    """SA 綜合櫃台清除車號:find(修改前車號)→ update(LicensePlateList 空)。閉環:舊牌已移出原租約。"""
+    import time as _t
+    scenario = registry.get("paytronex_clear_plate")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    plate = f"CLR-{ts}"
+    t0 = _t.perf_counter()
+    _pt_add_roomer(ctx, "302", [plate, f"{plate}-B"])
+    rent_id, _, err_f = _pt_find_rentid(ctx, plate)
+    payload = {"Roomer": {"RentId": rent_id, "RoomNumber": "302",
+                          "StartTime": f"{_pt_today()} 00:00:00", "EndTime": f"{_pt_today()} 23:59:00",
+                          "LicensePlateList": []}}
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["paytronex_update"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err_f or not rent_id or err or res is None:
+        return _fail("paytronex_clear_plate", "", scenario, dur, request_payload=payload,
+                     response_payload={"__error__": err or err_f or "前置 find 未取得 RentId"})
+    body = res.json()
+    rent2, _, _ = _pt_find_rentid(ctx, plate)
+    summary = {"update_code": body.get("resultCode"), "old_plate_rentid_changed": (rent2 != rent_id) if rent2 else None}
+    if res.status_code == 200 and body.get("resultCode") == "0000" and summary["old_plate_rentid_changed"]:
+        return _ok("paytronex_clear_plate", "", scenario, dur, request_payload=payload, response_payload=summary)
+    return _fail("paytronex_clear_plate", "", scenario, dur, request_payload=payload, response_payload=summary)
+
+
+@register_scenario(
+    "paytronex_change_plate", module="parking", vendor="PAYTRONEX",
+    name="更新車號管線(查舊牌→新牌更新)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
+)
+def run_paytronex_change_plate(ctx: RunContext) -> CaseResult:
+    """SA 綜合櫃台更新車號:find(修改前舊牌)取 RentId → update(新牌)。閉環:新牌查到同一租約。"""
+    import time as _t
+    scenario = registry.get("paytronex_change_plate")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    old_plate, new_plate = f"OLDP-{ts}", f"NEWP-{ts}"
+    t0 = _t.perf_counter()
+    _pt_add_roomer(ctx, "303", [old_plate])
+    rent_id, _, err_f = _pt_find_rentid(ctx, old_plate)
+    payload = {"Roomer": {"RentId": rent_id, "RoomNumber": "303",
+                          "StartTime": f"{_pt_today()} 00:00:00", "EndTime": f"{_pt_today()} 23:59:00",
+                          "LicensePlateList": [new_plate]}}
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["paytronex_update"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err_f or not rent_id or err or res is None:
+        return _fail("paytronex_change_plate", "", scenario, dur, request_payload=payload,
+                     response_payload={"__error__": err or err_f or "前置 find 未取得 RentId"})
+    body = res.json()
+    rent_new, _, _ = _pt_find_rentid(ctx, new_plate)
+    summary = {"update_code": body.get("resultCode"), "new_plate_same_rent": (rent_new == rent_id) if rent_new else None}
+    if res.status_code == 200 and body.get("resultCode") == "0000" and summary["new_plate_same_rent"]:
+        return _ok("paytronex_change_plate", "", scenario, dur, request_payload=payload, response_payload=summary)
+    return _fail("paytronex_change_plate", "", scenario, dur, request_payload=payload, response_payload=summary)
+
+
+@register_scenario(
+    "paytronex_change_checkout", module="parking", vendor="PAYTRONEX",
+    name="修改退房管線(查租約→新EndTime更新)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
+)
+def run_paytronex_change_checkout(ctx: RunContext) -> CaseResult:
+    """SA 修改退房日期:find 取 RentId → update(新 EndTime=退房日+最晚離場時間)。閉環:find 回新 EndTime。"""
+    import time as _t
+    scenario = registry.get("paytronex_change_checkout")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    plate = f"CKO-{ts}"
+    t0 = _t.perf_counter()
+    _pt_add_roomer(ctx, "304", [plate])
+    rent_id, _, err_f = _pt_find_rentid(ctx, plate)
+    new_end = (datetime.now() + timedelta(days=1)).strftime("%Y/%m/%d 15:00:00")
+    payload = {"Roomer": {"RentId": rent_id, "RoomNumber": "304",
+                          "StartTime": f"{_pt_today()} 00:00:00", "EndTime": new_end,
+                          "LicensePlateList": [plate]}}
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["paytronex_update"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err_f or not rent_id or err or res is None:
+        return _fail("paytronex_change_checkout", "", scenario, dur, request_payload=payload,
+                     response_payload={"__error__": err or err_f or "前置 find 未取得 RentId"})
+    body = res.json()
+    # find 回應的時間會洗成 ISO T 格式(mock 防禦,亦符合 SA 回應範例 2026-10-11T10:01:14)
+    expected_end_iso = new_end.replace("/", "-").replace(" ", "T")
+    rent2, res2, _ = _pt_find_rentid(ctx, plate)
+    end_after = ((res2.json().get("roomer") or {}).get("endTime")) if res2 else None
+    summary = {"update_code": body.get("resultCode"), "end_after": end_after, "expected": expected_end_iso}
+    if res.status_code == 200 and body.get("resultCode") == "0000" and end_after == expected_end_iso:
+        return _ok("paytronex_change_checkout", "", scenario, dur, request_payload=payload, response_payload=summary)
+    return _fail("paytronex_change_checkout", "", scenario, dur, request_payload=payload, response_payload=summary)
+
+
+@register_scenario(
+    "paytronex_find_unknown", module="parking", vendor="PAYTRONEX",
+    name="查無車牌(動態虛擬租約・SA未定義)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate",
+)
+def run_paytronex_find_unknown(ctx: RunContext) -> CaseResult:
+    """SA 未定義 find 查無行為;mock 現況=動態就地合法(建虛擬租約回 200)。本情境守護現況,待 SA 確認後改斷言。"""
+    import time as _t
+    scenario = registry.get("paytronex_find_unknown")
+    ts = datetime.now().strftime("%m%d%H%M%S")
+    payload = {"LicensePlate": f"NOSUCH-{ts}"}
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["paytronex_find"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("paytronex_find_unknown", "", scenario, dur, request_payload=payload,
+                     response_payload={"__error__": err or "no response"})
+    body = res.json()
+    roomer = body.get("roomer") or {}
+    ok = res.status_code == 200 and roomer.get("rentId") and roomer.get("isRenting") is True
+    if ok:
+        return _ok("paytronex_find_unknown", "", scenario, dur, request_payload=payload, response_payload=body)
+    return _fail("paytronex_find_unknown", "", scenario, dur, request_payload=payload, response_payload=body)
 
 
 # （原本 checkin_sync/whitelist_update/car_arrival_retry 的 UNIMPLEMENTED 註冊已由上方實作取代）

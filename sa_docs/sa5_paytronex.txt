@@ -1,0 +1,236 @@
+===== PAGE 1 =====
+/ / / /󰋜 integration parking_lot A7 博⾠停⾞場
+博⾠停⾞場
+Hotel60\A6GW XML 規格 \ 停⾞場 \ 博⾠⾼雄漢來󰏌
+使⽤ thirdparty ⽅式做串接，廠商代號 : PAYTRONEX
+情境事件 動作代號 ⾏為
+⼊住 CKI 若已有⾞號且為住客，才傳送新增住客資料給廠商 , 否則不
+傳
+取消⼊住 CIX
+若已有⾞號且為住客 , 才先使⽤某⼀⾞號查詢  RentID, 再傳
+送更新住客資料給廠商
+結束⽇期為傳送當下主機時間 , ⾞號給空值
+綜合櫃台新
+增⾞號 CHG_CAR_NOS 原本沒⾞號 , 傳送新增住客資料給廠商
+綜合櫃台清
+除⾞號 CHG_CAR_NOS ⽤修改前某⼀⾞號查詢 , 取 RentId, 再傳送更新住客資料給
+廠商 , ⾞號欄位給空值
+綜合櫃台更
+新⾞號 CHG_CAR_NOS ⽤修改前某⼀⾞號查詢 , 取 RentId, 傳送更新住客資料給廠
+商 , ⾞號為修改後的資料
+修改退房⽇
+期 CHANGE_CKO_DATE_TIME 使⽤某⼀⾞號查詢 RentID, 再傳送更新住客資料給廠商
+RentId(string): 租約編號
+RoomNumber(string): 房號
+博⾠停⾞場串接 SA
+串接規格：
+串接說明
+串接情境事件
+API
+JSON KEY 說明 廠商規格
+
+===== PAGE 2 =====
+StartTime(string): 住客 C/I ⽇，時間固定 00:00:00
+EndTime(string): 住客退房⽇，時間若為取消⼊住，則為當下主機時間；若為其他事件，則傳送參數設定  停⾞場
+參數: 最晚離場時間
+LicensePlateList(List): 該房房客⾞牌列表，最多五個，客⼾輸⼊資料時會⾃⾏控管以逗號區隔
+RentId(string): 廠商的租約編號
+RoomNumber(string):guest_mn.room_nos 房號
+StartTime(string):guest_mn.ci_dat
+EndTime(string):guest_mn.aco_dat ，時間若為取消⼊住，則為現在時間＋停⾞場參數取消⼊住離場緩衝分鐘數
+(parking_garage_cix_buffer_min)
+ 若為其他事件，則傳送參數設定  停⾞場參數: 最晚離場時間 (parking_garage_co_tim)
+LicensePlateList(List): guest_mn.car_nos, 客⼾輸⼊時⾃⾏控管 , 系統不檢查
+⽤其中⼀台⾞號傳送「依⾞牌查詢房客租約（單筆）」，取得 RentId
+回傳  HTTP Status 200 OK
+德安傳送
+新增房客預約資料 API 範例
+POST
+http://<host>:5541/parktron/hpms/services/roomer/add
+1
+2
+1
+2
+3
+4
+5
+6
+7
+8
+9
+依⾞牌查詢房客租約（單筆） API
+POST
+http://<host>:5541/parktron/hpms/services/roomer/findByLicensePlate
+1
+2
+1
+2
+3
+{
+ "roomer":
+1
+2
+3
+{
+"Roomer":
+{
+"RoomNumber":"104"
+,
+"StartTime":"2026/10/01 00:00:00"
+,
+"EndTime":"2026/10/03 15:00:00"
+,
+"LicensePlateList":
+[ "ABC123"
+, "BCD241"
+]
+}
+}
+{
+"LicensePlate":"ABC123"
+}
+
+===== PAGE 3 =====
+ {
+ "rentId": "9bd34535-8e3b-4d31-9823-faf0f3ad83c9",
+ "roomNumber": "106",
+ "createTime": "2026-10-11T10:01:14",
+ "startTime": "2026-10-11T09:56:45",
+ "endTime": "2026-10-12T09:56:45",
+ "licensePlateList":
+["ABC123","CDE4567","EFG7891","QWE7896","POI7851"],
+ "isRenting": false
+ }
+ }
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+更新房客預約資料  API
+POST
+http://<host>:5541/parktron/hpms/services/roomer/update
+1
+2
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+取資料的 SQL
+ CI_SER    CAR_NOS    ALT_NAM     CI_DAT     ACO_DAT
+  GUEST_MN
+ ATHENA_ID  德安代號
+   HOTEL_COD  
+   CI_SER  
+   CAR_NOS   
+   GUEST_STA     
+   GUEST_MN MASTER_STA  
+   GUEST_MN SYSTEM_TYP  
+1
+2
+3
+4
+5
+6
+7
+8
+9
+2026/10/05 16:30:00 取消⼊住範例
+call 依⾞牌查詢房客租約（單筆） API
+⽤修改前⾞號
+▸
+再 call 更新房客預約資料  API▸
+{
+"Roomer":
+{
+"RentId":"2c27e881-5fe0-484c-bb4f-f14f98e15460"
+,
+"RoomNumber":"105"
+,
+"StartTime":"2026/10/05 00:00:00"
+,
+"EndTime":"2026/10/15 15:00:00"
+,
+"LicensePlateList":
+[ "ABC123"
+]
+}
+}
+SELECT
+,
+,
+,
+,
+FROM
+WHERE =
+AND = ' 館別代號 '
+AND = ' 住客序號 '
+AND IS NOT NULL
+AND IN
+( 'K'
+, 'O'
+)
+AND
+. = 'G'
+AND
+. = 'HFD'
+;
+
+===== PAGE 4 =====
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+© 2026 Athena Information Systems. 。版權所有。  | Powered by Wiki.js
+{
+"Roomer":
+{
+"RentId":"2c27e881-5fe0-484c-bb4f-f14f98e15460"
+,
+"RoomNumber":"105"
+,
+"StartTime":"2026/10/05 12:00:00"
+,
+"EndTime":"2026/10/05 17:30:00"
+,
+"LicensePlateList":
+[
+]
+}
+}

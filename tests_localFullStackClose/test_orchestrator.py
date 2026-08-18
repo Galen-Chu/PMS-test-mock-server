@@ -29,7 +29,7 @@ def test_registry_completeness():
     assert {"room_nos_query_notfound", "mifare_query_notfound", "amenity_billing_notfound",
             "amenity_pay_duplicate", "amenity_cancel_notfound"} <= amenity_ids
     parking = by_mod["parking"]
-    assert len(parking) == 15  # SHIN_YEONG 13(7 事件路由 + 6 SA 公版) + PAYTRONEX 2
+    assert len(parking) == 20  # SHIN_YEONG 13(7 事件路由 + 6 SA 公版) + PAYTRONEX 7(2 + 5 管線情境)
     parking_vendors = {s.vendor for s in parking}
     assert parking_vendors == {"SHIN_YEONG", "PAYTRONEX"}
     parking_ids = {s.id for s in parking}
@@ -37,7 +37,10 @@ def test_registry_completeness():
     assert {"change_checkout", "change_car_nos", "check_in_cancel",
             "parking_sync_checkin", "parking_sync_change_car", "parking_sync_disable",
             "parking_sync_cancel", "parking_sync_invalid", "car_arrival_missing_field"} <= parking_ids
-    assert all(s.implemented for s in parking), "parking 15 案例應都已實作"
+    # 博辰 SA find→update 管線 4 事件 + 查無車牌
+    assert {"paytronex_cancel_checkin", "paytronex_clear_plate", "paytronex_change_plate",
+            "paytronex_change_checkout", "paytronex_find_unknown"} <= parking_ids
+    assert all(s.implemented for s in parking), "parking 20 案例應都已實作"
     keycard = by_mod["keycard"]
     assert len(keycard) == 5  # WAFERLOCK 4 + LIVEAM 1
     keycard_vendors = {s.vendor for s in keycard}
