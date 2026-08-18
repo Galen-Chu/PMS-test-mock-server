@@ -1,0 +1,107 @@
+===== PAGE 1 =====
+/ / /󰋜 PMS 房控房卡梯控串接 華豫寧 LIVEAM
+華豫寧 LIVEAM
+API󰏌Page: 34 有 Call API 的說明
+華豫寧開給德安的測試系統  ( 可能有時效 )1. 登⼊資訊
+帳號：
+密碼：
+Project ID ：
+Swagger 線上 Web API ⽂件與⼿動使⽤系統，專案網址 +Swagger ( 可能有時效 )
+測試⽤發卡機編號
+- thirdparty_room_rf: 房號轉換檔直接呼叫華豫寧的 API 取房號的 roomID ，省去設定，飯店變動房間時省去在系統內設定
+訂單檔： ID 、房號、預進時間、預退時間，⼀個 ID 對應⼀個房號訂單卡⽚檔 : 記錄是哪個訂單 ID
+實際 C/I 更新訂單檔的實際 C/I ⽇  ==>> 實際 C/I ⽇  ~ 預退時間  可進房間實際 C/O 更新訂單檔的實際 C/O ⽇  ==>> 實際 C/I ⽇  ~ 預退時間  可進房間
+實際 C/I ⽇  及  實際 C/O ⽇不可異動
+打登⼊ , 取 token ，之後的 API 都是使⽤ token, ⼀次取的 token 有效期限是三天 , token 失敗在 api 內有說明失敗的代號POST /api/Order 新增訂單PUT /api/Order 修改訂單 (checkinTime 填⼊當下時間，開啟客房權限 )POST /api/Operation/getCardInfo/{pmrId} 取得卡⽚資訊POST /api/OrderCard/ 新增訂單卡⽚
+華豫寧  LiveAM ( 維夫拉克 )
+https://liveamcore1.waferlock.com:10001/1
+admin1
+ytuGXbiY3jmsFr81
+Proj_Athena_Test1
+https://liveamcore1.waferlock.com:10001/Swagger1
+E8EB1BCCE94F1
+設定
+參數設定 : 取得的 token (72 ⼩時內有效 ) 、登⼊的帳號、密碼▸
+thirdparty_dt: CKI, CKO, CIX, COX, 改 C/O ⽇https://{doman name or ip}:10001/api/Auth/login若要梯控 , thirdparty_dt: 加 type= 梯控  CKI, CKO, CIX, COX, 改 C/O ⽇
+▸
+本機環境設定 : 卡機編號▸
+華豫寧
+===== PAGE 2 =====
+DELET /api/OrderCard/{oid}/{cuid} 刪除卡⽚POST /api/Order/elevator/{id} 電梯權限  ( ⽬前沒做 )
+德安製卡作業 華豫寧
+1.getToken, 再建⽴訂單 : Order, 取得訂單 id
+2-1. 讀取卡號   getCardInfo
+4. 新增卡⽚  OrderCard ( 帶⼊ 1. 的訂單 id, 2 的卡號 )f 判斷卡⽚是否已製過  (hfd_door_mn),且在有效範圍
+可製
+卡機
+卡⽚
+3. 取得卡號後
+2-3 回傳卡號
+2-2. 讀卡
+ACTION_COD= CREATE_CARD⼀連串呼叫 API
+ACTION_COD= CHANGE_RESERVATIONPUT /api/Order 修改  preciTime 、 preoutTime
+ACTION_COD= CHANGE_ASSIGN_ROOMGET /api/Room/getRoomIdByName/{name: 新房號 }PUT /api/Order 修改  roomnos
+ACTION_COD=ROOM_CHGGET /api/Room/getRoomIdByName/{name: 新房號 }PUT /api/Order 修改  roomnos
+ACTION_COD=CKI檢查若已有產⽣訂單，則要傳送⽬前 c/i 時間 , 代表已 C/I, 客⼈才能開⾨PUT /api/Order 修改訂單 (checkinTime 填⼊當下時間 )若未有訂單 , 則不⽤傳
+同製卡ACTION_COD= CREATE_CARD
+ACTION_COD=CIXhfd_door_mn 取得卡號PUT /api/Order 修改訂單 checkoutTime (C/O)( 卡⽚失效，若要重新⼊住 , user 需再⾛製卡流程 )
+流程
+製卡作業
+取得操作裝置認證  Token 或讀記錄在參數內的已取得 token, 72 ⼩時內有效POST /api/Operation/getToken- 取得房號在華豫寧裏設定的 IDGET /api/Room/getRoomIdByName/{name}
+▸
+檢查若未有訂單，則新增訂單 , 若已 C/I, 則⼀併給 checkinTime, 傳送的資料⽤華豫寧的房間 IDPOST /api/Order▸
+讀取卡號POST /api/Operation/getCardInfo/{pmrId} 取得卡⽚資訊 (cardUid 卡⽚  UID) pmrid: 為卡機代號 , by 本機環境▸
+製卡POST /api/OrderCard/ 新增訂單卡⽚  ( 傳⼊取得的 CardInfo)寫⼊  hfd_door_mn( 所以應該可以使⽤沖餐券功能 )
+▸
+製卡後且 C/I 前 , 修改訂房卡的 C/I 、 C/O ⽇期、預計退房時間
+在製卡後 , 更換排房
+⼊住後換房
+⼊住
+WalkIn 的製卡鈕
+取消⼊住
+刪卡
+
+===== PAGE 3 =====
+ACTION_COD= DELETE_CARDgetCardInfo 讀取卡號  or 從  讀 DB hfd_door_mn 卡⽚DELET /api/OrderCard/{oid}/
+- 可以不要 call api, 否則退房還原還要建回來讀取訂單檔 IDPUT /api/Order 修改訂單 checkoutTime (C/O)
+- 不做退房 , 所以就不⽤做退房還原華豫寧的訂單沒有還原功能hfd_door_mn 取得卡號POST /api/Order 新增訂單 ( 給  preciTime, PreOutTime, checkinTime) (C/I)POST /api/OrderCard/ 新增訂單卡⽚
+### 建⽴  App Link ：1. 要先建⽴訂單2.POST /api/AppLink/{orderId} 建⽴訂單的  AppLink( 取得  startup 欄位值以簡訊或  Email 傳給⼿機或製成  QR-Code 供⼿機掃描，僅第⼀台⼿機為  Master ，其餘⼿機只能由master 分享 )
+欄位 欄位名稱 資料型態 說明
+athena_id 德安代號 NUMBER(10)主鍵
+hotel_cod 館別代號 NVARCHAR2(4)主鍵
+ikey 訂房卡號 NVARCHAR2(10)主鍵
+ikey_seq_nos訂房卡明細序號NUMBER(5)主鍵
+liveam_id LiveAM 訂單編號 NVARCHAR2(100)由新增  LiveAM 訂單  API 回傳  ID
+order_sta 狀態 NVARCHAR2(1)N: 新增  / I: 已⼊住  / C: 已退房  / X: 取消⼊住此欄位於  LiveAM 系統上訂單資料不存在，僅於德安系統註記
+room_nos 房號 NVARCHAR2(6)德安系統房號
+guest_nam住客姓名 NVARCHAR2(80)第⼀位住客姓名
+pre_in_tim 預計⼊住時間DATE
+pre_out_tim 預計退房時間DATE
+check_in_tim實際⼊住時間DATE 第⼀位住客⼊住⽇期時間
+check_out_tim實際退房時間DATE 房間退房⽇期時間
+⼊住後更改退房⽇、退房時間
+功能：綜合櫃檯、團體管理、住客帳維護ACTION_COD= CHANGE_CKO_DATE_TIME讀取訂單檔 IDPUT /api/Order 修改訂單  PreOutTime
+▸
+退房  ( 此房間最後⼀個⼈才執⾏ )
+退房還原
+詢問華豫寧
+1. ⼿機流程▸
+Ans: ⼀樣先有訂單 , 給的 APPLink 是下載 LIVEAM 的 app 及房間的授權 , 不能與德安的會員 app 結合▸
+2. 訂單  checkoutTime 、 checkinTime 可以不給嗎 ?▸
+Ans: 要給  checkinTime 才能開⾨，若沒給  checkoutTime, 就會⽤  PreOutTime▸
+3. 每個都要⾝份驗証嗎 ?(token) 還是只有製卡才要 ?▸
+Ans: 每個 API 都要 , token 失效會回傳訊息代號 , 取 token 時 , 要先打  login▸
+德安系統  LiveAM 訂單記錄
+記錄資料
+資料表： LIVEAM_ORDER_MN▸
+主鍵： athena_id 、 hotel_cod 、 ikey 、 ikey_seq_nos 、 ins_dat▸
+
+===== PAGE 4 =====
+欄位 欄位名稱 資料型態 說明
+can_app_check_in是否可由  App 辦理⼊住NVARCHAR2(1)Y: 是  / N: 否⽬前皆為  N
+ins_dat 新增⽇期 DATE 主鍵，新增訂單執⾏作業⽇期時間
+ins_usr 新增⼈員 NVARCHAR2(10)新增訂單執⾏作業⼈員帳號
+upd_dat 修改⽇期 DATE 異動訂單執⾏作業⽇期時間
+upd_usr 修改⼈員 NVARCHAR2(10)異動訂單執⾏作業⼈員帳號
+訂單記錄異動情境
+© 2026 Athena Information Systems. 。版權所有。  | Powered by Wiki.js

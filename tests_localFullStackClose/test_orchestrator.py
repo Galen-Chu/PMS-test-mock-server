@@ -42,9 +42,14 @@ def test_registry_completeness():
             "paytronex_change_checkout", "paytronex_find_unknown"} <= parking_ids
     assert all(s.implemented for s in parking), "parking 20 案例應都已實作"
     keycard = by_mod["keycard"]
-    assert len(keycard) == 5  # WAFERLOCK 4 + LIVEAM 1
+    assert len(keycard) == 10  # WAFERLOCK 9(Swagger 真實合約情境) + LIVEAM 1(待開發)
     keycard_vendors = {s.vendor for s in keycard}
     assert keycard_vendors == {"WAFERLOCK", "LIVEAM"}
+    keycard_ids = {s.id for s in keycard}
+    # Swagger 真實管線/狀態機情境
+    assert {"keycard_login", "keycard_room_lookup", "keycard_make_card", "keycard_checkin_open",
+            "keycard_checkout_invalidate", "keycard_change_checkout", "keycard_revoke_card",
+            "keycard_bad_token", "card_lifecycle"} <= keycard_ids
     # LIVEAM card_issue_exception 為 UNIMPLEMENTED,其餘已實作
     assert any(not s.implemented for s in keycard if s.vendor == "LIVEAM")
 

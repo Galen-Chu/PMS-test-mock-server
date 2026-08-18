@@ -14,23 +14,29 @@ class VendorWaferlockLiveamStrategy:
         self.doorcard_machine = "0000000101"
 
     def authenticate_login(self, body_data):
-        """🎯 核心對齊：校驗德安傳入的登入欄位，並產出帶有製卡機代號的高真回應結構"""
+        """🎯 對齊 Swagger LoginPara/TokenInfo:校驗 {id, password, projectID},回 {id, token}。
+
+        💡 projectID 依 Swagger 為必填;沙盒採寬鬆策略(帳密對即可,projectID 僅要求非空)。
+        """
         if not body_data:
             return {"error": 1, "desc": "Empty Payload", "msg": "未傳送登入參數"}, 400
-            
+
         req_id = body_data.get("id")
         req_password = body_data.get("password")
-        
-        # 👮‍♂️ 鑑權防禦
+        req_project = body_data.get("projectID")
+
+        # 👮‍♂️ 鑑權防禦(Swagger LoginPara:projectID 必填)
+        if not req_project:
+            return {"error": 1, "desc": "projectID is required", "msg": "projectID 為必填"}, 400
         if req_id == self.valid_id and req_password == self.valid_password:
             # 簽發一組高真的門禁 Session Token
             simulated_token = f"LIVEAM-STAGING-TOKEN-{secrets.token_hex(12).upper()}"
-            
-            # 完美對齊 200 OK 成功合約 (夾帶 10 碼純數字製卡機代號供 PMS 設定)
+
+            # TokenInfo(Swagger):{id, token};encoderCode 為沙盒附加(供 PMS 設定製卡機)
             success_payload = {
                 "id": str(req_id),
                 "token": simulated_token,
-                "encoderCode": self.doorcard_machine  # 🌟 10碼純數字機型編碼
+                "encoderCode": self.doorcard_machine
             }
             return success_payload, 200
         else:
@@ -63,11 +69,19 @@ class VendorWaferlockLiveamStrategy:
         }
     
     def transform_card_info_response(self, card_node, room_id):
-        """🎯 核心對齊：封裝高真的維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM)卡片逆查成功回應"""
+        """🎯 對齊 Swagger CardPermission:getCardInfo 成功回應。
+
+        {errorCode:int(0=成功), description, cardUid, type:int, name, activation, expiration, deviceList}
+        💡 cardUid 由本端點生成(模擬讀卡機感應實體卡)——真實流程:先 getCardInfo 拿卡號,再 OrderCard 綁定。
+        """
+        now = datetime.datetime.now()
         return {
-            "orderID": str(card_node.get("orderID", "")),
+            "errorCode": 0,
+            "description": "Success",
             "cardUid": str(card_node.get("cardUid", "")),
-            "type": str(card_node.get("type", "card")),
-            "roomID": int(room_id), # 💡 動態反查注入的實體房號
-            "queryTimestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "type": int(card_node.get("type", 1)),  # 💡 Swagger type 為 integer(類型代碼,1=卡片,值待與廠商確認)
+            "name": str(card_node.get("name", "")),
+            "activation": now.strftime("%Y-%m-%dT%H:%M:%S"),
+            "expiration": (now + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S"),
+            "deviceList": card_node.get("deviceList", []),
         }

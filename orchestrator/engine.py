@@ -121,6 +121,9 @@ def build_run_context(environment: str) -> RunContext:
         "paytronex_find": f"{server_base}/parktron/hpms/services/roomer/findByLicensePlate",
         "paytronex_update": f"{server_base}/parktron/hpms/services/roomer/update",
         # 門禁 keycard 廠商 API 面（PMS→vendor 製卡方向；非 vendor-sync 前綴）
+        "keycard_login": f"{server_base}/api/Auth/login",
+        "keycard_roomid_base": f"{server_base}/api/Room/getRoomIdByName",
+        "keycard_getcardinfo_base": f"{server_base}/api/Operation/getCardInfo",
         "keycard_order": f"{server_base}/api/Order",
         "keycard_ordercard": f"{server_base}/api/OrderCard",
     }

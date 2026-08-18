@@ -33,6 +33,27 @@ WaferlockLiveam_card_mapping_db = {
     }
 }
 
+# 🗃️ 房號(字串)↔ LiveAM 房間編號 roomID(int)轉換表
+# 💡 Swagger Order.roomID 為整數房間編號,須先經 GET /api/Room/getRoomIdByName/{房號} 轉換
+WaferlockLiveam_room_db = {"101": 101, "207": 207, "209": 209, "301": 301, "309": 309, "401": 401}
+WaferlockLiveam_room_seq = [500]  # 未註冊房號的動態編號起點(沙盒防禦)
+
+
+def _room_name_to_id(name):
+    """房號(字串)→ roomID(int);未註冊則動態編號(沙盒防禦,對齊 getRoomIdByName 行為)。"""
+    key = str(name).strip()
+    if key not in WaferlockLiveam_room_db:
+        WaferlockLiveam_room_seq[0] += 1
+        WaferlockLiveam_room_db[key] = WaferlockLiveam_room_seq[0]
+    return WaferlockLiveam_room_db[key]
+
+
+def _room_id_to_name(rid):
+    for n, i in WaferlockLiveam_room_db.items():
+        if i == rid:
+            return n
+    return str(rid)
+
 def verify_WaferlockLiveam_token():
     """👮‍♂️ 雙軌制權限驗證：相容動態登入 Token、沙盒自簽 Token、與德安真實環境的 PMS_QA_ATHENA_TOKEN"""
     # 🎯 動作一：實時從 HTTP Header 扒皮德安傳過來的 Token (相容大/小寫與 Bearer 帶法)
@@ -61,7 +82,8 @@ def verify_WaferlockLiveam_token():
         return True
         
     # 🎯 驗證路徑 3：檢查是否為德安 PMS 真實雲端環境打過來的固定 PMS_QA_ATHENA_TOKEN
-    if incoming_token == config.PMS_QA_ATHENA_TOKEN:
+    # 💡 config 目前未定義此屬性,以 getattr 防禦(避免錯誤 token 直達此處時 AttributeError → 500)
+    if incoming_token == getattr(config, "PMS_QA_ATHENA_TOKEN", None):
         return True
         
     # 觀測未通過的髒 Token 究竟長什麼樣子
@@ -91,6 +113,41 @@ def keycard_vendor_login():
     return jsonify(response_payload), status_code
 
 # ====================================================================
+# 🔑 🚀 1b. 房號轉房間編號 (GET /api/Room/getRoomIdByName/{name}) — Swagger IdInfo
+# ====================================================================
+@keycard_bp.route('/api/Room/getRoomIdByName/<string:name>', methods=['GET'])
+def get_room_id_by_name(name):
+    if not verify_WaferlockLiveam_token():
+        return jsonify({"error": 401, "desc": "Unauthorized", "msg": "Invalid or expired token."}), 401
+    key = str(name).strip()
+    # 💡 沙盒負面路徑:X- 前綴模擬「房間未在 LiveAM 註冊」→ 404(ResponseData)
+    if key.startswith("X-"):
+        return jsonify({"error": 404, "desc": "Not Found", "msg": f"Room not found: {key}"}), 404
+    rid = _room_name_to_id(key)
+    print(f"🏠 [LiveAM 房號轉換] 房號 【{key}】 ➔ roomID 【{rid}】")
+    # 💡 Swagger IdInfo:{error:int, desc, idList:[int], msg}
+    return jsonify({"error": 0, "desc": "Success", "idList": [rid], "msg": ""}), 200
+
+# ====================================================================
+# 🔑 🚀 1c. 取得 Token (POST /api/Operation/getToken) — Swagger GetTokenPara/ResponseInfo
+# ====================================================================
+@keycard_bp.route('/api/Operation/getToken', methods=['POST'])
+def keycard_get_token():
+    if not request.is_json:
+        return jsonify({"error": 400, "desc": "Bad Request", "msg": "Payload 必須為 JSON"}), 400
+    body_data = request.get_json() or {}
+    # 💡 Swagger GetTokenPara:{projectId, account, password, timeout(必填 1~10)}
+    if body_data.get("account") == WaferlockLiveam_strategy.valid_id \
+            and body_data.get("password") == WaferlockLiveam_strategy.valid_password:
+        import secrets as _secrets
+        tok = f"LIVEAM-STAGING-TOKEN-{_secrets.token_hex(12).upper()}"
+        WaferlockLiveam_session_vault.add(tok)
+        # 💡 Swagger 回應為 ResponseInfo {errorCode, description};token 欄位為沙盒附加
+        #    (真實傳遞方式待確認;SA 以 /api/Auth/login 為主要取 token 途徑)
+        return jsonify({"errorCode": 0, "description": "Success", "token": tok}), 200
+    return jsonify({"error": 4001, "desc": "Authentication Failed", "msg": "帳號或密碼錯誤"}), 400
+
+# ====================================================================
 # 🔑 🚀 2. 【維夫拉克 WAFERLOCK】新增門禁訂單端點 (POST /api/Order)
 # ====================================================================
 # 🌟 核心重構：同時監聽標準路徑與德安真實環境噴過來的拼接畸形路徑
@@ -99,30 +156,35 @@ def keycard_vendor_login():
 @keycard_bp.route('/api/OrderCard/api/Order', methods=['POST']) # 👈 完美收容德安真實環境流量
 def create_keycard_order():
     incoming_path = request.path
-    
+
     # 🎯 雙軌制權限驗證 (調用你優化後的動態強制綁定版本)
     if not verify_WaferlockLiveam_token():
         print(f"\n🔴 [維夫拉克 & 門禁] Token 驗證失敗，阻擋請求。")
-        return jsonify({"error": "Invalid or expired token."}), 401
+        return jsonify({"error": 401, "desc": "Unauthorized", "msg": "Invalid or expired token."}), 401
 
     if not request.is_json:
-        return jsonify({"error": 400, "msg": "Payload 必須為 JSON"}), 400
-        
+        return jsonify({"error": 400, "desc": "Bad Request", "msg": "Payload 必須為 JSON"}), 400
+
     body_data = request.get_json()
     cleaned_order = WaferlockLiveam_strategy.clean_order_payload(body_data)
-    
-    # 💡 健壯性防禦：真實環境從頭訂房時，德安傳入的主鍵可能是 ikey 或 id
-    order_id = str(body_data.get("ikey") or body_data.get("id") or "").strip()
+
+    # 💡 Swagger Order:訂單編號欄位為 id;德安端概念 ikey 相容收容(舊制註解保留)
+    order_id = str(body_data.get("id") or body_data.get("ikey") or "").strip()
     if not order_id:
-        # 如果真的都沒有，動態用時間戳生成，確保流程絕對不卡死
         order_id = f"AUTO-ORD-{int(datetime.datetime.now().timestamp())}"
-        
     cleaned_order["id"] = order_id
-    room_nos = str(body_data.get("roomNos") or cleaned_order.get("roomID") or "101").strip()
-    cleaned_order["roomID"] = room_nos
+
+    # 💡 Swagger Order:roomID 為整數房間編號(經 getRoomIdByName 轉換);舊制 roomNos(房號字串)相容收容
+    room_nos = str(body_data.get("roomNos") or "").strip()
+    if room_nos:
+        cleaned_order["roomID"] = _room_name_to_id(room_nos)
+    elif not cleaned_order.get("roomID"):
+        cleaned_order["roomID"] = _room_name_to_id("101")
+        room_nos = "101"
+    cleaned_order["_roomNos"] = room_nos or _room_id_to_name(cleaned_order["roomID"])
 
     print(f"\n🔒 [維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM)門禁] 收到建立/推播訂單請求 ➔ 路由: {incoming_path}")
-    print(f"   🎯 乾淨解析 ➔ 訂單ID(ikey): 【{order_id}】| 房號: 【{room_nos}】| 住客: 【{cleaned_order['guestName']}】")
+    print(f"   🎯 乾淨解析 ➔ 訂單ID(id): 【{order_id}】| roomID: 【{cleaned_order['roomID']}】| 房號: 【{cleaned_order['_roomNos']}】| 住客: 【{cleaned_order['guestName']}】")
 
     # 💾 乾淨落庫與複寫機制
     if order_id in WaferlockLiveam_order_db:
@@ -131,8 +193,9 @@ def create_keycard_order():
     else:
         WaferlockLiveam_order_db[order_id] = cleaned_order
         print(f" 🟢 [維夫拉克同步成功] 全新門禁開門權限已乾淨預備就緒！")
-        
-    return jsonify(cleaned_order), 201
+
+    # 💡 Swagger:201 回 Order 物件(內部 _ 前綴欄位剝除)
+    return jsonify({k: v for k, v in cleaned_order.items() if not k.startswith("_")}), 201
 
 # ====================================================================
 # 🔑 🚀 3. 修改/啟用門禁訂單端點 (PUT /api/Order)
@@ -140,24 +203,42 @@ def create_keycard_order():
 @keycard_bp.route('/api/Order', methods=['PUT'])
 def update_keycard_order():
     if not verify_WaferlockLiveam_token():
-        return jsonify({"error": "Invalid or expired token."}), 401
+        return jsonify({"error": 401, "desc": "Unauthorized", "msg": "Invalid or expired token."}), 401
     if not request.is_json:
-        return jsonify({"error": 400, "msg": "Payload 必須為 JSON"}), 400
-        
+        return jsonify({"error": 400, "desc": "Bad Request", "msg": "Payload 必須為 JSON"}), 400
+
     body_data = request.get_json()
+    if not body_data:
+        return jsonify({"error": 400, "desc": "Bad Request", "msg": "Payload 不可為空"}), 400
     cleaned_order = WaferlockLiveam_strategy.clean_order_payload(body_data)
-    order_id = cleaned_order["id"]
+    order_id = str(body_data.get("id") or body_data.get("ikey") or "").strip()
+    cleaned_order["id"] = order_id
 
     print(f"\n🔑 [維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM)門禁 Mock] 收到修改訂單請求 ➔ 訂單ID: 【{order_id}】")
 
-    if order_id not in WaferlockLiveam_order_db:
+    if not order_id or order_id not in WaferlockLiveam_order_db:
         print(f" 🔴 [修改失敗] 查無訂單 ID 【{order_id}】")
-        return jsonify({"error": 4041, "msg": "查無此訂單 ID"}), 404
+        # 💡 Swagger:404 回 ResponseData {error:int, desc, msg}
+        return jsonify({"error": 404, "desc": "Not Found", "msg": f"查無此訂單 ID: {order_id}"}), 404
 
     old_order = WaferlockLiveam_order_db[order_id]
-    old_order.update(cleaned_order)
+    # 💡 防禦性合併:僅覆寫有值的欄位(避免部分更新清空既有 preInTime/checkinTime 等)
+    old_order.update({k: v for k, v in cleaned_order.items() if v not in (None, "")})
     print(f" 🟢 [修改成功] 實體開門權限已啟用。")
+    # 💡 Swagger:PUT 成功回 200(空 body)
     return jsonify({}), 200
+
+# ====================================================================
+# 🔑 🚀 3b. 單一查詢訂單 (GET /api/Order/{id}) — Swagger:回 Order 物件
+# ====================================================================
+@keycard_bp.route('/api/Order/<string:order_id>', methods=['GET'])
+def get_keycard_order(order_id):
+    if not verify_WaferlockLiveam_token():
+        return jsonify({"error": 401, "desc": "Unauthorized", "msg": "Invalid or expired token."}), 401
+    order = WaferlockLiveam_order_db.get(str(order_id).strip())
+    if not order:
+        return jsonify({"error": 404, "desc": "Not Found", "msg": f"查無此訂單 ID: {order_id}"}), 404
+    return jsonify({k: v for k, v in order.items() if not k.startswith("_")}), 200
 
 # ====================================================================
 # 🔑 🚀 4. 【維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM)】新增訂單卡片端點 (POST /api/OrderCard)
@@ -165,31 +246,22 @@ def update_keycard_order():
 @keycard_bp.route('/api/OrderCard', methods=['POST'])
 def create_keycard_asset():
     if not verify_WaferlockLiveam_token():
-        return jsonify({"error": "Unauthorized"}), 401
+        return jsonify({"error": 401, "desc": "Unauthorized", "msg": "Invalid or expired token."}), 401
     if not request.is_json:
         return jsonify({"error": 400, "msg": "Payload 必須為 JSON"}), 400
         
     body_data = request.get_json()
-    
-    # 🎯 兼容性洗滌：同時相容本地測試欄位與德安 PMS 真實轉發欄位
-    order_id = str(body_data.get("ikey") or body_data.get("orderID") or "").strip()
-    encoder_code = str(body_data.get("pmrId") or "").strip()
-    room_nos = str(body_data.get("roomNos") or "101").strip()
-    
-    print(f"\n🛠️ [維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM) 製卡系統] 收到德安轉發製卡請求")
+
+    # 💡 Swagger OrderCard:只收 {orderID, cardUid} —— 真實流程是「getCardInfo 先拿到卡號,OrderCard 做綁定」。
+    # 舊制欄位(ikey)相容收容;卡號不再由本端點隨機生成(已移至 getCardInfo 讀卡端點)。
+    order_id = str(body_data.get("orderID") or body_data.get("ikey") or "").strip()
+    card_uid = str(body_data.get("cardUid") or "").strip()
+
+    print(f"\n🛠️ [維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM) 製卡系統] 收到訂單卡片綁定請求")
     print(f"   📥 原始 Payload: {body_data}")
-    print(f"   🎯 解析 ➔ 訂單(ikey): 【{order_id}】| 指定製卡機(pmrId): 【{encoder_code}】| 房號: 【{room_nos}】")
 
-    if not order_id:
-        return jsonify({"error": 4002, "msg": "ikey (orderID) 不可為空"}), 400
-
-    # 🌟 核心修正：德安此時沒給實體卡號(cardUid)，我們必須模擬「實體製卡機感應晶片」動態生成一組 8 碼大寫英數卡號！
-    import secrets
-    import string
-    alphabet = string.ascii_uppercase + string.digits
-    simulated_card_uid = ''.join(secrets.choice(alphabet) for _ in range(8))
-    
-    print(f"   ⚡ [實體製卡機動作] 偵測到製卡機 【{encoder_code}】 壓卡成功！動態寫入晶片卡號: 【{simulated_card_uid}】")
+    if not order_id or not card_uid:
+        return jsonify({"error": 400, "desc": "Bad Request", "msg": "orderID 與 cardUid 為必填"}), 400
 
     # 🔗 跨系統關聯防禦放寬：串接真實環境時，德安 PMS 可能還沒呼叫 /api/Order 建立門禁，
     # 為了不讓製卡流程卡死，若維夫拉克找不到訂單，我們自動幫他補一筆，確保聯調暢通！
@@ -197,39 +269,34 @@ def create_keycard_asset():
         print(f"   ⚠️ [維夫拉克門禁真空] 查無門禁主檔，自動為其補全虛擬門禁權限...")
         WaferlockLiveam_order_db[order_id] = {
             "id": order_id,
-            "roomID": room_nos,
+            "roomID": 0,
+            "_roomNos": str(body_data.get("roomNos") or "101"),
             "guestName": body_data.get("guestName", "真實雲端住客")
         }
+
+    room_nos = WaferlockLiveam_order_db[order_id].get("_roomNos", "101")
 
     # 💾 維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM) 卡片資產落庫
     card_node = {
         "ikey": order_id,
         "orderID": order_id,
-        "cardUid": simulated_card_uid,
+        "cardUid": card_uid,
         "type": "card",
         "ikeySeqNos": body_data.get("ikeySeqNos", 1)
     }
-    WaferlockLiveam_card_db[simulated_card_uid] = card_node
-    
-    # ⚡ 跨模組重大連動：同步回寫小美犀映射表，讓後續的【情境 5】刷卡流可以直接用這張卡
+    WaferlockLiveam_card_db[card_uid] = card_node
+
+    # ⚡ 跨模組重大連動：同步回寫小美犀映射表，讓後續的刷卡流可以直接用這張卡
     try:
         from server.amenity.routes import mock_card_mapping_db
-        mock_card_mapping_db[simulated_card_uid] = room_nos
-        print(f"   ⚙️  [數據閉環] 卡號 【{simulated_card_uid}】 與房號 【{room_nos}】 已同步注入小美犀！")
+        mock_card_mapping_db[card_uid] = room_nos
+        print(f"   ⚙️  [數據閉環] 卡號 【{card_uid}】 與房號 【{room_nos}】 已同步注入小美犀！")
     except Exception as e:
         pass
 
-    # 完美對齊高真回應：把維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM)系統最終生成的實體卡號與狀態吐回給德安 PMS
-    response_payload = {
-        "ikey": order_id,
-        "ikeySeqNos": card_node["ikeySeqNos"],
-        "cardUid": simulated_card_uid,
-        "status": "SUCCESS",
-        "msg": "製卡成功"
-    }
-    
-    print(f" 🟢 [維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM)製卡成功] 已將卡片資產回傳德安中台。")
-    return jsonify(response_payload), 201
+    # 💡 Swagger:201 回 Order_Card {orderID, cardUid, type:string}
+    print(f" 🟢 [維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM)綁定成功] 訂單 【{order_id}】 × 卡片 【{card_uid}】。")
+    return jsonify({"orderID": order_id, "cardUid": card_uid, "type": "card"}), 201
 
 # ====================================================================
 # 🔑 🚀 5. 刪除註銷卡片端點
@@ -237,7 +304,7 @@ def create_keycard_asset():
 @keycard_bp.route('/api/OrderCard/<string:oid>/<string:cuid>', methods=['DELETE'])
 def delete_keycard_asset(oid, cuid):
     if not verify_WaferlockLiveam_token():
-        return jsonify({"error": "Unauthorized"}), 401
+        return jsonify({"error": 401, "desc": "Unauthorized", "msg": "Invalid or expired token."}), 401
         
     order_id = str(oid).strip()
     card_uid = str(cuid).strip()
@@ -245,7 +312,8 @@ def delete_keycard_asset(oid, cuid):
     print(f"\n🔑 [維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM)門禁 Mock] 收到註銷銷卡請求 ➔ 訂單: 【{order_id}】| 卡號: 【{card_uid}】")
 
     if card_uid not in WaferlockLiveam_card_db or WaferlockLiveam_card_db[card_uid]["orderID"] != order_id:
-        return jsonify({"error": 4043, "msg": "查無此卡片資產綁定紀錄"}), 404
+        # 💡 Swagger:404 回 ResponseData {error:int, desc, msg}
+        return jsonify({"error": 404, "desc": "Not Found", "msg": "查無此卡片資產綁定紀錄"}), 404
 
     del WaferlockLiveam_card_db[card_uid]
     
@@ -269,34 +337,28 @@ def delete_keycard_asset(oid, cuid):
 def get_keycard_info_by_uid(pmrId):
     # 1. 👮‍♂️ 呼叫雙軌制權限驗證
     if not verify_WaferlockLiveam_token():
-        return jsonify({"error": "Unauthorized"}), 401
+        return jsonify({"error": 401, "desc": "Unauthorized", "msg": "Invalid or expired token."}), 401
         
     # 🌟 完美校準：全面更名為 doorcard_machine 對齊 PMS 規格
     doorcard_machine = str(pmrId).strip()
     print(f"\n🔑 [維夫拉克 & 華豫寧 (WAFERLOCK & LIVEAM) 製卡] ⚡ 蟲洞讀卡逆查觸發 ➔ 收到德安要求讀取製卡機 【{doorcard_machine}】 上的卡片")
 
-    # 2. 物理模擬：動態生成 6 碼大寫英數隨機空卡卡號
+    # 2. 物理模擬讀卡機感應:動態生成 8 碼大寫英數卡號
+    # 💡 真實流程(對齊 Swagger):本端點「讀卡」產出 cardUid → 呼叫端再以 POST /api/OrderCard {orderID, cardUid} 綁定
     import secrets
     import string
     alphabet = string.ascii_uppercase + string.digits
-    simulated_card_uid = ''.join(secrets.choice(alphabet) for _ in range(6))
-    
-    # 3. 構造虛擬的卡片資產節點
+    simulated_card_uid = ''.join(secrets.choice(alphabet) for _ in range(8))
+
+    # 3. 構造虛擬卡片節點並調用策略層封裝 CardPermission 回應
     simulated_card_node = {
-        "orderID": "",  
         "cardUid": simulated_card_uid,
-        "type": "card"
+        "type": 1,
+        "name": "",
+        "deviceList": []
     }
-    
-    # 4. 調用策略層封裝回應
-    # 💡 檢查點：確保內部傳入的是新宣告的 doorcard_machine (如果策略層有改的話)
-    # 如果策略層還是吃原始 room_id，這裡維持不變
-    formatted_response = WaferlockLiveam_strategy.transform_card_info_response(simulated_card_node, room_id=0) #
-    
-    # 外掛外殼欄位，確保德安中台能精準解讀
-    formatted_response["cardUid"] = simulated_card_uid
-    formatted_response["pmrId"] = doorcard_machine  # 👈 檢查這裡！原本可能手誤寫成 encoder_code 導致 500！
-    
+    formatted_response = WaferlockLiveam_strategy.transform_card_info_response(simulated_card_node, room_id=0)
+
     print(f"   🟢 [物理模擬成功] 成功回報德安 ➔ 機器 【{doorcard_machine}】 偵測到實體空卡 UID: 【{simulated_card_uid}】")
     return jsonify(formatted_response), 200
 
