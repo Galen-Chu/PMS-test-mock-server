@@ -13,3 +13,5 @@ ngrok.exe
 # Claude 環境暫存(截圖/瀏覽器產物),不入庫
 .playwright-mcp/
 ui-*.png
+# 各環境真實雲端 Token(本機注入用,嚴禁入庫)
+token_local.py

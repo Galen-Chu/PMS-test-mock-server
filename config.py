@@ -16,6 +16,28 @@ LOCAL_TOKEN = "2pKET7v9JqFxCzpj9bbT6dC17uM_wnTdoVjQtd1WbRPB48T7"
 LOCAL_SERVER_BASE = os.environ.get("LOCAL_SERVER_BASE", "http://127.0.0.1:5000")
 
 # ====================================================================
+# 🔑 各環境 Token 注入(階段二真實雲端驗收用)
+# 優先序:環境變數 > 未入庫的 token_local.py > 下方預設(截斷佔位/空)
+# token_local.py 內容範例(已列 .gitignore,嚴禁入庫):
+#   TOKEN_QA  = "eyJhbGciOi...(完整字串)"
+#   TOKEN_UG  = "eyJhbGciOi..."
+#   TOKEN_SIT = "..."
+#   TOKEN_MAS = "..."
+# ====================================================================
+def _local_tokens():
+    try:
+        import token_local  # 本機未入庫檔
+        return {k: v for k, v in vars(token_local).items() if k.startswith("TOKEN_")}
+    except ImportError:
+        return {}
+
+_LT = _local_tokens()
+TOKEN_QA  = os.environ.get("TOKEN_QA",  _LT.get("TOKEN_QA",  "eyJhbGciOiJSUzI1NiIsInR5cCI6ICJqd3QiLCAia2lkIiA6ICJRcV9OU2F6QUt5aVgxVDZ3WG1hNlZUSmN5RXVrQ2xQc09tVF81dW1seWswIn0..."))  # 舊截斷佔位
+TOKEN_UG  = os.environ.get("TOKEN_UG",  _LT.get("TOKEN_UG",  "eyJhbGciOiJSUzI1NiIsInR5cCI6ICJqd3QiLCAia2lkIiA6ICJtZVZGeGpnODZLMkYxX2JSSjcxWmxYSER2YUprUENHX1FQM3p6ejVkV0xjIn0..."))  # 舊截斷佔位
+TOKEN_SIT = os.environ.get("TOKEN_SIT", _LT.get("TOKEN_SIT", ""))
+TOKEN_MAS = os.environ.get("TOKEN_MAS", _LT.get("TOKEN_MAS", ""))
+
+# ====================================================================
 # 📊 環境配置矩陣 (Environment Matrix)
 # ====================================================================
 ENV_MATRIX = {
@@ -50,7 +72,7 @@ ENV_MATRIX = {
     },
     "REAL_QA": {
         "BASE_URL_EXTERNAL": "https://qa-cloud.athena.com.tw/pms/api/v3.0/pms/external/vendor-sync-data",
-        "TOKEN": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJRcV9OU2F6QUt5aVgxVDZ3WG1hNlZUSmN5RXVrQ2xQc09tVF81dW1seWswIn0...", # 為了排版縮短
+        "TOKEN": TOKEN_QA,
         "ATHENA_ID": "16",
         "HOTEL_COD": "01",
         "HEADERS": {
@@ -64,7 +86,7 @@ ENV_MATRIX = {
     },
     "REAL_UG": {
         "BASE_URL_EXTERNAL": "https://bacug.athena.com.tw/pms/api/v3.0/pms/external/vendor-sync-data",
-        "TOKEN": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJtZVZGeGpnODZLMkYxX2JSSjcxWmxYSER2YUprUENHX1FQM3p6ejVkV0xjIn0...", # 為了排版縮短
+        "TOKEN": TOKEN_UG,
         "ATHENA_ID": "28",
         "HOTEL_COD": "01",
         "HEADERS": {
@@ -78,7 +100,7 @@ ENV_MATRIX = {
     },
     "REAL_SIT": {
         "BASE_URL_EXTERNAL": "https://sit.athena.com.tw/pms/api/v3.0/pms/external/vendor-sync-data",
-        "TOKEN": "",
+        "TOKEN": TOKEN_SIT,
         "ATHENA_ID": "01",
         "HOTEL_COD": "01",
         "HEADERS": {
@@ -92,7 +114,7 @@ ENV_MATRIX = {
     },
     "REAL_MAS": {
         "BASE_URL_EXTERNAL": "https://bacmas.athena.com.tw/pms/api/v3.0/pms/external/vendor-sync-data",
-        "TOKEN": "",
+        "TOKEN": TOKEN_MAS,
         "ATHENA_ID": "35",
         "HOTEL_COD": "01",
         "HEADERS": {
