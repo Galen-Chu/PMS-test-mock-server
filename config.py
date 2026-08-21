@@ -32,8 +32,10 @@ def _local_tokens():
         return {}
 
 _LT = _local_tokens()
-TOKEN_QA  = os.environ.get("TOKEN_QA",  _LT.get("TOKEN_QA",  "eyJhbGciOiJSUzI1NiIsInR5cCI6ICJqd3QiLCAia2lkIiA6ICJRcV9OU2F6QUt5aVgxVDZ3WG1hNlZUSmN5RXVrQ2xQc09tVF81dW1seWswIn0..."))  # 舊截斷佔位
-TOKEN_UG  = os.environ.get("TOKEN_UG",  _LT.get("TOKEN_UG",  "eyJhbGciOiJSUzI1NiIsInR5cCI6ICJqd3QiLCAia2lkIiA6ICJtZVZGeGpnODZLMkYxX2JSSjcxWmxYSER2YUprUENHX1FQM3p6ejVkV0xjIn0..."))  # 舊截斷佔位
+# 💡 2026-08-21 實況確認:QA 的 Authorization 為 null(僅身分 Header 鑑別),故預設空。
+# 需要Token的環境(如 UG)由 token_local.py / 環境變數注入完整字串。
+TOKEN_QA  = os.environ.get("TOKEN_QA",  _LT.get("TOKEN_QA",  ""))
+TOKEN_UG  = os.environ.get("TOKEN_UG",  _LT.get("TOKEN_UG",  ""))
 TOKEN_SIT = os.environ.get("TOKEN_SIT", _LT.get("TOKEN_SIT", ""))
 TOKEN_MAS = os.environ.get("TOKEN_MAS", _LT.get("TOKEN_MAS", ""))
 
