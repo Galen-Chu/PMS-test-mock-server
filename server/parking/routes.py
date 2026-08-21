@@ -299,12 +299,12 @@ def receive_night_audit():
 # ====================================================================
 @parking_bp.route('/external/vendor-sync-data/car-arrival', methods=['POST'])
 def car_arrival():
-    # 💡 SA v1.2(修訂重點):鑑別 Header 為 athena/hotel;舊 Authorization Token 閘門並存保留
+    # 💡 SA v1.2 說 athena/hotel;QA 雲 Swagger 定義 bacchus-* —— 兩組都收(雙帶過渡,待裁決收斂)
     auth_header = request.headers.get('Authorization')
     auth_ok = auth_header in (config.CURRENT_TOKEN, config.LOCAL_TOKEN)
     if not auth_ok:
-        athena_h = request.headers.get('athena')
-        hotel_h = request.headers.get('hotel')
+        athena_h = request.headers.get('athena') or request.headers.get('bacchus-athenaid')
+        hotel_h = request.headers.get('hotel') or request.headers.get('bacchus-hotelcod')
         if athena_h and hotel_h and str(athena_h) == str(config.active_cfg["ATHENA_ID"]) \
                 and str(hotel_h) == str(config.active_cfg["HOTEL_COD"]):
             auth_ok = True

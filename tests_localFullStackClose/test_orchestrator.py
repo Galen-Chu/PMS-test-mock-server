@@ -107,6 +107,11 @@ def test_run_context_built_for_all_envs():
         assert "change_car_nos" in ctx.urls
         assert "check_in_cancel" in ctx.urls
         assert isinstance(ctx.recorder, list)      # 逐步錄製槽存在
+        # 階段二:鑑別 Header 雙帶(SA athena/hotel + QA Swagger bacchus-*,衝突待裁決)
+        assert ctx.headers_amenity.get("athena") is not None
+        assert ctx.headers_amenity.get("bacchus-athenaid") is not None
+        assert ctx.headers_parking.get("hotel") is not None
+        assert ctx.headers_parking.get("bacchus-hotelcod") is not None
 
 
 def test_start_run_unknown_scenario_marked_fail():

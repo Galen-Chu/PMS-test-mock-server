@@ -65,12 +65,13 @@ def build_run_context(environment: str) -> RunContext:
         # "bacchus-athenaid": cfg["ATHENA_ID"],
         "thirdParty": "SHIN_YEONG",
     }
-    # 💡 新詠 SA v1.2(修訂重點):廠商→德安(car-arrival)鑑別 Header 為 athena/hotel。
-    # 舊制 bacchus-* 註解保留:
-    #   "bacchus-athenaid": cfg["ATHENA_ID"], "bacchus-hotelcod": cfg["HOTEL_COD"],
+    # 💡 鑑別 Header 雙帶:新詠 SA v1.2 說 athena/hotel;QA 雲 Swagger 定義 bacchus-*。
+    # 兩組同送過渡,待裁決後收斂(同 headers_amenity 之說明)。
     headers_parking = {
         "athena": cfg["ATHENA_ID"],
         "hotel": cfg["HOTEL_COD"],
+        "bacchus-athenaid": cfg["ATHENA_ID"],
+        "bacchus-hotelcod": cfg["HOTEL_COD"],
         "accept": "*/*",
         "Content-Type": "application/json",
     }
@@ -81,12 +82,16 @@ def build_run_context(environment: str) -> RunContext:
         # "bacchus-athenaid": cfg["ATHENA_ID"],
         "thirdParty": "BR",
     }
-    # 💡 對齊 SA(小美犀):鑑別 Header 為 athena / hotel,與 parking/keycard 的
-    # bacchus-* 機制(ctx.headers,註解保留於此)不同——公司未統一規格,兩者並存:
-    #   "bacchus-athenaid": cfg["ATHENA_ID"], "bacchus-hotelcod": cfg["HOTEL_COD"],
+    # 💡 鑑別 Header 雙帶(階段二裁定前的過渡解):
+    #   SA 文件(公版住掛 v1.2 / 房務入帳 v1.1)定義 athena / hotel;
+    #   QA 雲 Swagger(sa_docs/sa8)securitySchemes 定義 bacchus-athenaid / bacchus-hotelcod
+    #   (與 REAL 環境原設定、REAL_UG 驗證記錄一致)。兩組正面衝突 → 兩者同送,
+    #   哪個環境認哪個就通;多送不相干欄位對伺服器無害。待 SA/後端裁決後收斂為單組。
     headers_amenity = {
         "athena": cfg["ATHENA_ID"],
         "hotel": cfg["HOTEL_COD"],
+        "bacchus-athenaid": cfg["ATHENA_ID"],
+        "bacchus-hotelcod": cfg["HOTEL_COD"],
         "accept": "application/json",
         "Content-Type": "application/json",
     }
