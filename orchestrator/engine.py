@@ -75,10 +75,6 @@ def build_run_context(environment: str) -> RunContext:
         "accept": "*/*",
         "Content-Type": "application/json",
     }
-    # 💡 真實環境且 Token 非空 → Authorization 一併帶進 amenity/parking 專用 headers(原樣送)
-    if use_real and cfg.get("TOKEN"):
-        headers_amenity["Authorization"] = cfg["TOKEN"]
-        headers_parking["Authorization"] = cfg["TOKEN"]
     params_amenity = {
         # 💡 對齊 SA 公版住掛 v1.2:URL 參數僅 thirdParty(+各端點的 keyword/orderNos)。
         # 舊版曾把 bacchus-* 也放 query params——各廠商傳輸機制不同,以下註解保留舊制:
@@ -99,6 +95,10 @@ def build_run_context(environment: str) -> RunContext:
         "accept": "application/json",
         "Content-Type": "application/json",
     }
+    # 💡 真實環境且 Token 非空 → Authorization 一併帶進 amenity/parking 專用 headers(原樣送)
+    if use_real and cfg.get("TOKEN"):
+        headers_amenity["Authorization"] = cfg["TOKEN"]
+        headers_parking["Authorization"] = cfg["TOKEN"]
     # LOCAL / LOCAL_OFFLINE 模式：runner 是「客戶端」，要打到本地 Flask 伺服器。
     # LOCAL_OFFLINE 的攔截（不出站）發生在「伺服器路由內部」，所以客戶端仍指向 localhost。
     if not use_real:
