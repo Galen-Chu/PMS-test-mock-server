@@ -75,6 +75,10 @@ def build_run_context(environment: str) -> RunContext:
         "accept": "*/*",
         "Content-Type": "application/json",
     }
+    # 💡 真實環境且 Token 非空 → Authorization 一併帶進 amenity/parking 專用 headers(原樣送)
+    if use_real and cfg.get("TOKEN"):
+        headers_amenity["Authorization"] = cfg["TOKEN"]
+        headers_parking["Authorization"] = cfg["TOKEN"]
     params_amenity = {
         # 💡 對齊 SA 公版住掛 v1.2:URL 參數僅 thirdParty(+各端點的 keyword/orderNos)。
         # 舊版曾把 bacchus-* 也放 query params——各廠商傳輸機制不同,以下註解保留舊制:
@@ -105,6 +109,11 @@ def build_run_context(environment: str) -> RunContext:
         headers["Authorization"] = config.LOCAL_TOKEN
     else:
         server_base = config.ENV_MATRIX[environment].get("BASE_URL_EXTERNAL", "").replace("/external/vendor-sync-data", "") or config.ENV_MATRIX[environment].get("PMS_URL", "")
+        # 💡 真實環境 Authorization:僅當該環境 Token 非空才帶(各環境閘道不同:
+        # UG 實測經驗要 session JWT;QA Swagger 只定義 bacchus-* 身分 Header、無 Authorization scheme)。
+        # 內容原樣送——token_local.py 給什麼就帶什麼(含 Bearer 前綴與否照 DevTools 實況)。
+        if cfg.get("TOKEN"):
+            headers["Authorization"] = cfg["TOKEN"]
     urls = {
         "room_nos": f"{base}/room-pay/room-nos",
         "mifare_nos": f"{base}/room-pay/mifare-nos",
