@@ -27,7 +27,7 @@ LOCAL_SERVER_BASE = os.environ.get("LOCAL_SERVER_BASE", "http://127.0.0.1:5000")
 def _local_tokens():
     try:
         import token_local  # 本機未入庫檔
-        return {k: v for k, v in vars(token_local).items() if k.startswith("TOKEN_")}
+        return {k: v for k, v in vars(token_local).items() if k.startswith(("TOKEN_", "NGROK_"))}
     except ImportError:
         return {}
 
@@ -38,6 +38,9 @@ TOKEN_QA  = os.environ.get("TOKEN_QA",  _LT.get("TOKEN_QA",  ""))
 TOKEN_UG  = os.environ.get("TOKEN_UG",  _LT.get("TOKEN_UG",  ""))
 TOKEN_SIT = os.environ.get("TOKEN_SIT", _LT.get("TOKEN_SIT", ""))
 TOKEN_MAS = os.environ.get("TOKEN_MAS", _LT.get("TOKEN_MAS", ""))
+# 💡 ngrok 固定網域(免費帳號可申請 1 個;申請步驟見 README「真實環境串接」)。
+# 留空 = 隨機 URL(每次重啟會變,且免費隨機 URL 的瀏覽器警告頁會擋掉 PMS 的機器請求 → 務必設定)。
+NGROK_STATIC_DOMAIN = os.environ.get("NGROK_STATIC_DOMAIN", _LT.get("NGROK_STATIC_DOMAIN", ""))
 
 # ====================================================================
 # 📊 環境配置矩陣 (Environment Matrix)

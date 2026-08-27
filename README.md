@@ -150,3 +150,54 @@ pytest tests_localFullStackClose/
 - **離線��跑**：`test_mock.py` 以 `responses` 函式庫 攔截 HTTP，純單元測試，不需網路與 server。
 - **需 server 在線**：`test_local_api.py`、`test_local_scenario.py` 打 `127.0.0.1:5000`，請先 `python main.py`（建議設 `LOCAL_OFFLINE` 模式以離線驗證）。
 - **需網路＋有效 Token**：`test_real_*.py` 直打真實德安雲端，日常 CI 不建議常駐執行。
+
+---
+
+## 🌐 真實環境串接（ngrok 對外隧道）
+
+真實 PMS 雲端（QA / SIT / UG / MAS）要能把「**PMS→廠商**」方向的推播（新詠、博辰、華豫寧）
+送進本沙盒，沙盒必須有一個雲端打得到的公網 URL —— 透過 **ngrok 隧道**把本機 `:5000` 暴露出去。
+主控台「① 環境/案例設定」頁的「🌐 對外隧道」卡可一鍵啟動/停止並複製各廠商登錄 URL。
+
+### 為什麼一定要「固定網域」
+- ngrok 免費**隨機 URL** 每次重啟都會變 → 登錄進 PMS 設定的 URL 立即失效，每次都要重設。
+- 免費隨機 URL 有瀏覽器警告頁（interstitial），會**直接擋掉 PMS 的機器請求**。
+- 免費帳號可申請 **1 個固定網域（static domain）**：URL 永不變、無警告頁 → PMS 設定一次永久有效。
+
+### 一次性設定（約 10 分鐘）
+0. **安裝 ngrok**：[ngrok.com/download](https://ngrok.com/download) 下載後解壓，
+   把 `ngrok.exe` 放進專案根目錄（或安裝到系統 PATH 皆可，沙盒兩處都會找）。
+1. 註冊/登入 [ngrok](https://ngrok.com)（免費帳號，完成 Email 驗證）。
+2. **申請固定網域**：Dashboard 左側 `Domains` → `New Domain` → 取名（如 `galen-pms-mock`）
+   → 得到 `xxxx.ngrok-free.app`（免費帳號限 1 個）。
+3. **設定 authtoken**：Dashboard `Your Authtoken` 頁複製 token → 本機執行：
+   ```bash
+   ./ngrok.exe config add-authtoken <your_token>
+   ```
+4. **把固定網域告訴沙盒**（二選一）：
+   - 專案根目錄 `token_local.py`（未入庫）加一行：`NGROK_STATIC_DOMAIN = "xxxx.ngrok-free.app"`
+   - 或環境變數 `NGROK_STATIC_DOMAIN`
+
+### 日常啟動
+- **UI（建議）**：主控台 →「① 環境/案例設定」→「🌐 對外隧道」卡 → **▶ 啟動隧道**
+  （綠燈亮起後，卡上可直接複製各廠商登錄 URL；停止鈕僅對沙盒自己啟動的隧道有效）
+- **手動**：`./ngrok.exe http --url=xxxx.ngrok-free.app 5000`
+
+### 各環境 PMS「第三方廠商設定」要登錄的 URL
+設 `{URL}` = 你的固定網域：
+
+| 廠商 | 登錄 URL | 備註 |
+|---|---|---|
+| 新詠 SHIN_YEONG | `{URL}/parking/sync` | SA v1.2 公版單一端點 |
+| 博辰 PAYTRONEX | `{URL}`（PMS 拼 `/parktron/hpms/services/roomer/*`） | add / findByLicensePlate / update |
+| 華豫寧 LIVEAM | `{URL}`（PMS 拼 `/api/*`） | Auth/login、Order、OrderCard… |
+| 小美犀 BR | **不需登錄 inbound URL** | 方向為我方主動呼叫 PMS |
+
+> 💡 PMS 的公開 API 沒有「寫入第三方廠商 URL 設定」的端點，登錄動作須由後台/資料庫手動完成（一次性）。
+
+### 注意事項
+- 電腦關機或 ngrok 停止 → 隧道斷線，PMS 推播會失敗；測試期間保持沙盒＋隧道開啟。
+- **MAS（正式環境）的資料會流經 ngrok 外部服務** —— 資安上有疑慮時，長期方案是把沙盒
+  部署到公司內部 VM（穩定內部 URL，完全不需要 ngrok）。
+- 鑑別 Header：四環境 vendor-sync 實測皆**免 Authorization**，沙盒自動雙帶
+  `athena`/`hotel` + `bacchus-athenaid`/`bacchus-hotelcod`。

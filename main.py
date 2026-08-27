@@ -6,6 +6,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from flask import Flask, send_from_directory
 # 🏗️ 第 0 層：測試編排協調層 (Orchestrator) — 統籌底下所有互動系統的測試編排
 from orchestrator.api import orchestrator_bp
+# 🌐 ngrok 對外隧道控制(UI「對外隧道」卡後端;/tunnel/*)
+from sandbox_tunnel import tunnel_bp
 # 🔌 互動系統層（被測系統）：目前三個廠商模組，後續可擴充房控、刷卡等其他互動系統
 from server.parking.routes import parking_bp
 from server.amenity.routes import amenity_bp
@@ -28,6 +30,7 @@ app = Flask(__name__)
 # 互動系統負責各自廠商的 vendor-sync 路由與狀態機。兩層正交、可獨立擴充。
 # ====================================================================
 app.register_blueprint(orchestrator_bp)   # 第 0 層：編排協調
+app.register_blueprint(tunnel_bp)          # 對外隧道控制(/tunnel/status|start|stop)
 app.register_blueprint(parking_bp)        # 互動系統 1：停車車辨
 app.register_blueprint(amenity_bp)        # 互動系統 2：房務備品
 app.register_blueprint(keycard_bp)        # 互動系統 3：門禁製卡

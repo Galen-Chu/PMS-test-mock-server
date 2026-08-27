@@ -240,3 +240,18 @@ pre.json.error { color: var(--fail); }
   .json-pair { grid-template-columns: 1fr; }
   .http-step.open .http-body { flex-direction: column; }
 }
+
+/* ---- 🌐 對外隧道卡(真實環境串接) ---- */
+.tunnel-card { padding: 14px 16px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.tunnel-head { display: flex; align-items: center; justify-content: space-between; }
+.tunnel-state { display: flex; align-items: center; gap: 6px; }
+.tunnel-url { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; background: rgba(0,0,0,.3); font: 12px 'JetBrains Mono'; color: var(--pass); word-break: break-all; }
+.tunnel-url.none { color: var(--text-dim); }
+.tunnel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.tunnel-hint { font: 11px/1.6 'Space Grotesk'; color: var(--text-dim); }
+.tunnel-warn { font: 11px/1.6 'Space Grotesk'; color: #ff8a3d; }
+.reg-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(255,255,255,.03); font: 11.5px 'JetBrains Mono'; }
+.reg-row .who { color: var(--text-mute); width: 230px; flex: none; }
+.reg-row .u { flex: 1; color: #7cbcff; word-break: break-all; min-width: 0; }
+.copy-btn { cursor: pointer; border: 1px solid var(--border); background: rgba(255,255,255,.05); color: var(--text); font: 600 10.5px 'Space Grotesk'; padding: 3px 10px; border-radius: 6px; flex: none; }
+.copy-btn:hover { border-color: var(--accent); }

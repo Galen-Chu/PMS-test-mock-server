@@ -40,6 +40,8 @@ const state = {
   caseDetailTab: 'http',   // 案例明細內部分頁:http / json / error / snapshot
   pollTimer: null,
   launchMsg: null,
+  tunnel: null,         // /tunnel/status 結果(對外隧道卡)
+  tunnelBusy: false,
 };
 
 // ---- API client ----
@@ -52,6 +54,9 @@ const api = {
   }).then(r => r.json()),
   getRun: (id) => fetch(API + `/runs/${id}`).then(r => r.json()),
   getResults: (id) => fetch(API + `/runs/${id}/results`).then(r => r.json()),
+  getTunnelStatus: () => fetch(API + '/tunnel/status').then(r => r.json()),
+  startTunnel: () => fetch(API + '/tunnel/start', { method: 'POST' }).then(r => r.json()),
+  stopTunnel: () => fetch(API + '/tunnel/stop', { method: 'POST' }).then(r => r.json()),
 };
 
 // ---- 初始化 ----
@@ -66,6 +71,8 @@ async function init() {
     for (const v of m.vendors) for (const s of v.scenarios) if (s.implemented) state.checked[s.id] = true;
   }
   render();
+  // 對外隧道狀態非同步補載(失敗不影響主控台)
+  api.getTunnelStatus().then(t => { state.tunnel = t; render(); }).catch(() => {});
 }
 
 // ---- 渲染入口 ----
@@ -142,6 +149,9 @@ function renderSetup() {
   }
   envWrap.appendChild(grid);
   page.appendChild(envWrap);
+
+  // 🌐 對外隧道卡(真實環境串接:ngrok 狀態/啟停/各廠商註冊 URL)
+  page.appendChild(renderTunnelCard());
 
   // 真實環境提示卡
   if (state.env && state.env.startsWith('REAL_')) {
@@ -634,6 +644,109 @@ function categoryLabel(cat) {
     TIMEOUT: '連線逾時／錯誤', UNIMPLEMENTED: '案例尚無執行器', UNKNOWN_SCENARIO: '未知案例',
     UNKNOWN: '未分類',
   }[cat] || cat;
+}
+
+// ---- 🌐 對外隧道卡(真實環境串接) ----
+function renderTunnelCard() {
+  const t = state.tunnel;
+  const busy = state.tunnelBusy;
+  const url = t && t.public_url;
+  const running = !!(t && t.running && url);
+  const card = el('div', { class: 'tunnel-card' });
+
+  card.appendChild(el('div', { class: 'tunnel-head' },
+    el('span', { class: 'section-label', text: '🌐 對外隧道（真實環境串接）', style: 'margin:0' }),
+    el('span', { class: 'tunnel-state' },
+      el('span', { class: 'dot', style: `background:${running ? '#35d399' : '#6b7280'}` }),
+      el('span', { text: busy ? '處理中…' : (running ? '已連線' : '未啟動'),
+                   style: `font:11.5px 'JetBrains Mono';color:${running ? '#35d399' : '#9aa0ac'}` }),
+    ),
+  ));
+
+  // 目前公網 URL + 複製
+  card.appendChild(el('div', { class: 'tunnel-url' + (url ? '' : ' none') },
+    el('span', { text: url || '（未建立隧道）', style: 'flex:1' }),
+    url ? el('button', { class: 'copy-btn', text: '複製', onclick: (e) => copyText(url, e) }) : null,
+  ));
+
+  // 啟動 / 停止 / 重新檢查
+  card.appendChild(el('div', { class: 'tunnel-actions' },
+    el('button', { class: 'btn-secondary', text: '▶ 啟動隧道', disabled: busy || running,
+                   onclick: () => tunnelAction('start') }),
+    el('button', { class: 'btn-secondary', text: '■ 停止隧道', disabled: busy || !(t && t.spawned_by_sandbox),
+                   onclick: () => tunnelAction('stop') }),
+    el('button', { class: 'btn-secondary', text: '重新檢查', disabled: busy,
+                   onclick: () => tunnelAction('refresh') }),
+  ));
+
+  // 固定網域提示
+  if (t && t.static_domain) {
+    card.appendChild(el('div', { class: 'tunnel-hint', text: `固定網域：${t.static_domain}` }));
+  } else {
+    card.appendChild(el('div', { class: 'tunnel-warn',
+      text: '⚠ 未設定固定網域：隨機 URL 每次重啟都會變，且免費隨機 URL 的瀏覽器警告頁會擋掉 PMS 的機器請求。請申請免費固定網域並設定 NGROK_STATIC_DOMAIN（步驟見 README「真實環境串接」）。' }));
+  }
+
+  // 各廠商登錄進 PMS 第三方廠商設定的 URL
+  if (running && t.register_urls) {
+    const rows = [
+      ['新詠 SHIN_YEONG（公版單一端點）', t.register_urls.SHIN_YEONG],
+      ['博辰 PAYTRONEX（base，PMS 拼 /roomer/*）', t.register_urls.PAYTRONEX],
+      ['華豫寧 LIVEAM（base，PMS 拼 /api/*）', t.register_urls.LIVEAM],
+    ];
+    const box = el('div', { class: 'list-stack' });
+    for (const [who, u] of rows) {
+      box.appendChild(el('div', { class: 'reg-row' },
+        el('span', { class: 'who', text: who }),
+        el('span', { class: 'u', text: u }),
+        el('button', { class: 'copy-btn', text: '複製', onclick: (e) => copyText(u, e) }),
+      ));
+    }
+    box.appendChild(el('div', { class: 'reg-row' },
+      el('span', { class: 'who', text: '小美犀 BR' }),
+      el('span', { class: 'u', text: '不需登錄 inbound URL（我方主動呼叫 PMS）', style: 'color:#6b7280' }),
+    ));
+    card.appendChild(el('div', {},
+      el('div', { class: 'tunnel-hint', text: '登錄進各環境 PMS「第三方廠商設定」的 URL：' }),
+      box,
+    ));
+  }
+  if (t && t.error) card.appendChild(el('div', { class: 'tunnel-warn', text: `⚠ ${t.error}` }));
+  return card;
+}
+
+async function tunnelAction(action) {
+  state.tunnelBusy = true; render();
+  try {
+    if (action === 'start') {
+      const r = await api.startTunnel();   // 後端最多等 20 秒,期間 UI 顯示「處理中…」
+      if (r && r.ok === false) state.tunnel = { running: false, error: r.error };
+      else state.tunnel = await api.getTunnelStatus();
+    } else {
+      if (action === 'stop') await api.stopTunnel();
+      state.tunnel = await api.getTunnelStatus();
+    }
+  } catch (e) {
+    state.tunnel = { running: false, error: String(e) };
+  }
+  state.tunnelBusy = false; render();
+}
+
+function copyText(text, ev) {
+  const done = () => {
+    const b = ev && ev.currentTarget;
+    if (b) { const old = b.textContent; b.textContent = '已複製 ✓'; setTimeout(() => { b.textContent = old; }, 1200); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else fallbackCopy(text, done);
+}
+
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { /* 忽略 */ }
+  document.body.removeChild(ta);
 }
 
 // 啟動
