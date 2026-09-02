@@ -52,8 +52,8 @@
 
 ## 3. Front Desk 櫃台面(訂單/製卡作業)— 可行性:高
 
-> ⚠️ 2026-09-02 起本切片歸屬更新:Front Desk 已裁定以**新模組 `frontdesk`** 開發(vendor 未定),
-> 詳見 `plan-frontdesk-module.md`(本文 F1 的 Front Desk 部分由該規劃收編;以下對照表仍有效)。
+> ⚠️ 2026-09-02 SA 確認:**frontdesk 模組之廠商不做了**,獨立 frontdesk 模組規劃取消(文件已移除)。
+> 本節保留為契約盤點參考;其中已在 keycard 上線的情境(CKI/CIX/改退房/製卡/刪卡)不受影響,缺口情境(換房二情境等)暫緩。
 
 ### 3.1 sa6 櫃台動作 × 沙盒案例對照(核心價值表)
 
@@ -90,7 +90,10 @@ sa6「德安製卡作業/流程」定義的 ACTION_COD 動作,逐一對照 `runn
 
 ---
 
-## 4. Room Control 房控面 — 可行性:中高(範圍待確認)
+## 4. Room Control 房控面 — 可行性:中高(**2026-09-02 SA 確認優先開發**)
+
+> ✅ 2026-09-02 SA 確認:房控**升為優先**,且 ACTION_COD=`ROOM_STA`(房況推送)與 `ROOM_INF`(房況查詢)兩類 API 先行。
+> 開發規劃移至 **`plan-roomcontrol-module.md`**(含 sa8/sa9 XML 匯入介面契約盤點與 RC0–RC3 分期);本節 §4.3 的 Q1(範圍)已解除。
 
 ### 4.1 契約盤點(sa7,23 端點全部有定義)
 
@@ -145,7 +148,7 @@ sa6「德安製卡作業/流程」定義的 ACTION_COD 動作,逐一對照 `runn
 
 | # | 問題 | 影響 |
 |---|---|---|
-| Q1 | 房控(Room Control)是否屬德安 PMS↔LiveAM 本期整合範圍?(sa6 未列) | F3/F4 全期 |
+| Q1 | ~~房控(Room Control)是否屬德安 PMS↔LiveAM 本期整合範圍?(sa6 未列)~~ | ✅ 2026-09-02 SA 確認:屬範圍且優先(ROOM_STA/ROOM_INF 先行,見 `plan-roomcontrol-module.md`) |
 | Q2 | 梯控:`/api/Order/elevator/{id}` 與 `remoteUnlockElevatorFloor` 是否啟用?(sa6:「目前沒做」) | F4 |
 | Q3 | AppLink/RoomPasswd(App 入住)是否推展給測試單位? | F5 |
 | Q4 | 真實 LiveAM 測試台的房控設備前提(實體/模擬/無) | F3/F4 的 REAL 驗收深度 |
