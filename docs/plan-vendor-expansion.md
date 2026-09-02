@@ -52,6 +52,9 @@
 
 ## 3. Front Desk 櫃台面(訂單/製卡作業)— 可行性:高
 
+> ⚠️ 2026-09-02 起本切片歸屬更新:Front Desk 已裁定以**新模組 `frontdesk`** 開發(vendor 未定),
+> 詳見 `plan-frontdesk-module.md`(本文 F1 的 Front Desk 部分由該規劃收編;以下對照表仍有效)。
+
 ### 3.1 sa6 櫃台動作 × 沙盒案例對照(核心價值表)
 
 sa6「德安製卡作業/流程」定義的 ACTION_COD 動作,逐一對照 `runners.py`:
