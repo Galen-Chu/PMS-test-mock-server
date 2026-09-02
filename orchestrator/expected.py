@@ -4,6 +4,7 @@
 
 每筆 log 是「真實通關過的 request body」，剛好可當成功 payload 的期望值。
 """
+import copy
 import json
 import os
 from typing import Any, Dict, List, Optional
@@ -44,31 +45,58 @@ def get_expected(scenario_name: Optional[str], endpoint: Optional[str]) -> Optio
     return _index.get((scenario_name, endpoint))
 
 
-def compute_diff(actual: Any, expected: Any) -> List[Dict[str, Any]]:
-    """欄位層級比對：逐欄位比 expected vs actual。
+def backfill_echo_fields(expected: Any, echo_map: Dict[str, Any]) -> Any:
+    """種子參數回填（設計 §7 兩層對策的第 1 層）。
 
-    第一版策略：
-    - expected 為 dict 時，逐 key 比對（actual 缺欄位 → MISSING；值不同 → MISMATCH）。
+    比對前把 expected 中屬於 ParamSpec.echo_fields 的欄位值，以本次 resolved
+    參數值替換——否則測試者覆寫房號後，回應 echo 的房號會被誤報 MISMATCH，
+    噪音淹死真差異。只替換既存欄位（路徑不存在則跳過），一律回傳拷貝、
+    不改動種子 index。
+    """
+    if not expected or not isinstance(expected, dict) or not echo_map:
+        return expected
+    out = copy.deepcopy(expected)
+    for dotted, value in echo_map.items():
+        keys = dotted.split(".")
+        node = out
+        for k in keys[:-1]:
+            if not isinstance(node, dict) or k not in node:
+                node = None
+                break
+            node = node[k]
+        if isinstance(node, dict) and keys[-1] in node:
+            node[keys[-1]] = value
+    return out
+
+
+def compute_diff(actual: Any, expected: Any, param_values: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """欄位層級比對：逐欄位比 expected vs actual（回傳列增 ``kind`` 分級，設計 §7 第 2 層）。
+
+    - expected 為 dict 時，逐 key 比對：actual 缺欄位 → kind="missing"；
+      值不同 → actual 等於本次 resolved 參數值（參數回映）→ kind="param_echo"（灰），
+      否則 kind="mismatch"（紅，真差異）。
+    - param_values：{頂層欄位名: 本次 resolved 值}；未給時全部回 mismatch（舊行為）。
     - actual 非 dict 或 expected 非 dict → 整體比對。
-    - 回傳 [{field, expected, actual}] 供 UI 直接渲染。
     """
     if expected is None:
         return []
     rows: List[Dict[str, Any]] = []
+    pv = param_values or {}
 
     if isinstance(expected, dict):
         actual_d = actual if isinstance(actual, dict) else {}
         for k, exp_v in expected.items():
             act_v = actual_d.get(k, _MISSING)
             if act_v is _MISSING:
-                rows.append({"field": k, "expected": exp_v, "actual": None})
+                rows.append({"field": k, "expected": exp_v, "actual": None, "kind": "missing"})
             elif act_v != exp_v:
-                rows.append({"field": k, "expected": exp_v, "actual": act_v})
+                kind = "param_echo" if k in pv and act_v == pv[k] else "mismatch"
+                rows.append({"field": k, "expected": exp_v, "actual": act_v, "kind": kind})
         return rows
 
     # 非 dict：整體比對
     if actual != expected:
-        rows.append({"field": "(root)", "expected": expected, "actual": actual})
+        rows.append({"field": "(root)", "expected": expected, "actual": actual, "kind": "mismatch"})
     return rows
 
 

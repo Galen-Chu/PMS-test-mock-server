@@ -255,3 +255,50 @@ pre.json.error { color: var(--fail); }
 .reg-row .u { flex: 1; color: #7cbcff; word-break: break-all; min-width: 0; }
 .copy-btn { cursor: pointer; border: 1px solid var(--border); background: rgba(255,255,255,.05); color: var(--text); font: 600 10.5px 'Space Grotesk'; padding: 3px 10px; border-radius: 6px; flex: none; }
 .copy-btn:hover { border-color: var(--accent); }
+
+/* ---- ⚙ 案例參數化(設計 §8):表單 + chip + diff 分級 ---- */
+.gear {
+  cursor: pointer; font-size: 12px; color: var(--text-dim); padding: 1px 4px; border-radius: 4px;
+  flex: none; user-select: none;
+}
+.gear:hover { color: #fff; background: rgba(255,255,255,.08); }
+.gear.on { color: var(--accent); }
+.gear.dirty { color: var(--accent); }
+.gear.dirty::after { content: '・'; color: var(--accent); }
+
+.param-form {
+  margin: 2px 0 8px 26px; padding: 10px 12px; border-radius: 8px;
+  background: rgba(0,0,0,.22); border: 1px solid var(--border-soft);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.param-row { display: flex; align-items: center; gap: 10px; }
+.param-label { width: 110px; flex: none; font: 11.5px 'Space Grotesk'; color: var(--text-mute); }
+.param-input {
+  flex: 1; min-width: 0; padding: 6px 10px; border-radius: 6px;
+  border: 1px solid var(--border); background: rgba(0,0,0,.3);
+  color: var(--text); font: 11.5px 'JetBrains Mono'; outline: none;
+}
+.param-input:focus { border-color: var(--accent); }
+.param-input.touched { border-color: rgba(255,138,61,.55); }
+.param-input::placeholder { color: var(--text-dim); }
+.param-type { width: 64px; flex: none; font: 10px 'JetBrains Mono'; color: var(--text-dim); text-align: right; }
+.param-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.param-note { font: 10.5px/1.5 'Space Grotesk'; color: var(--text-dim); }
+.param-reset { padding: 4px 10px; font-size: 10.5px; flex: none; }
+
+/* 結果頁:案例標題列參數摘要 chip */
+.param-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 12px; }
+.param-chip {
+  font: 10.5px 'JetBrains Mono'; color: #ffc79b; padding: 2px 8px; border-radius: 10px;
+  background: rgba(255,138,61,.1); border: 1px solid rgba(255,138,61,.3);
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Diff 分級(§7 第 2 層):參數覆寫=灰、真差異=紅、缺欄=琥珀;第 4 欄分級徽章 */
+.diff-row { grid-template-columns: 150px 1fr 1fr 78px; }
+.diff-row .k { font: 9.5px 'JetBrains Mono'; text-align: right; }
+.k-badge-param_echo { color: var(--text-dim); }
+.k-badge-mismatch { color: var(--fail); font-weight: 700; }
+.k-badge-missing { color: #ffb02e; }
+.diff-row.k-param_echo .f, .diff-row.k-param_echo .e, .diff-row.k-param_echo .a { opacity: .55; }
+.diff-row.k-missing .a { color: #ffb02e; }

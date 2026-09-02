@@ -4,18 +4,50 @@
 設計原則：
 - 不重寫 hardware/simulate_speaker 的 payload 組裝，重用其 _execute_for_ctx（環境隔離版）。
 - runner 簽章固定：(RunContext) -> CaseResult。成功 2xx → PASS，否則 FAIL。
-- keycard 模組目前無執行器 → register_unimplemented（UI 顯示「待開發」）。
+- 案例參數化（docs/design-case-parameterization.md）：案例宣告 ParamSpec，
+  runner 以 ``_p(ctx, case_id)`` 取合併後參數組 payload；不帶覆寫時
+  resolved 值 = 預設 = 參數化前的硬編值（行為 100% 相同，向後相容硬約束）。
 """
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 from .registry import registry, register_scenario
-from .models import CaseResult, RunContext, CASE_PASS, CASE_FAIL
+from .models import CaseResult, RunContext, ParamSpec, CASE_PASS, CASE_FAIL
 
 # 重用模擬器的環境隔離發射引擎 + 數據池料號載入
 from hardware.simulate_speaker import execute_for_ctx, load_product_from_pool
 
 
 # ---- 共用輔助 ----------------------------------------------------------
+def _p(ctx: RunContext, case_id: str) -> dict:
+    """取得案例「合併後參數」（預設 ← overrides，engine 已於 run 開始時求值填 ctx.params）。
+
+    直接呼叫 runner（離線測試 / REPL）時退化為當場求值預設——值與參數化前硬編相同。
+    未宣告參數的案例回 {}（固定劇本）。
+    """
+    if case_id in ctx.params:
+        return ctx.params[case_id]
+    sc = registry.get(case_id)
+    if sc is None or not sc.params:
+        return {}
+    return {sp.key: (sp.default(ctx) if callable(sp.default) else sp.default) for sp in sc.params}
+
+
+def _ts() -> str:
+    """動態唯一時間戳（%m%d%H%M%S，同參數化前 runner 內部格式）。"""
+    return datetime.now().strftime("%m%d%H%M%S")
+
+
+def _sa_now() -> str:
+    """SA v1.2 時間格式：yyyy/mm/dd hh:mm（無秒）。"""
+    return datetime.now().strftime("%Y/%m/%d %H:%M")
+
+
+def _path_seg(value) -> str:
+    """參數值進 URL 路徑段前的編碼（設計 §4：永不拼接未編碼路徑，防路徑注入）。"""
+    return quote(str(value), safe="")
+
+
 def _ok(case_id, run_id, scenario, duration_ms, request_payload=None, response_payload=None) -> CaseResult:
     return CaseResult(
         case_id=case_id, run_id=run_id, module=scenario.module, vendor=scenario.vendor,
@@ -51,11 +83,14 @@ def _extract_room_nos(res):
 @register_scenario(
     "room_nos_query", module="amenity", vendor="BR_AIELLO",
     name="房號查詢", endpoint="/room-pay/room-nos",
+    params=[ParamSpec("keyword", "房號關鍵字", "str", "11101",
+                      hint="SA:在住房號關鍵字;9999 模擬查無(417/1001)")],
 )
 def run_room_nos_query(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("room_nos_query")
-    params = {**ctx.params_amenity, "keyword": "11101"}
+    p = _p(ctx, "room_nos_query")
+    params = {**ctx.params_amenity, "keyword": p["keyword"]}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params=params, headers=ctx.headers_amenity)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -63,18 +98,21 @@ def run_room_nos_query(ctx: RunContext) -> CaseResult:
         return _fail("room_nos_query", "", scenario, dur, response_payload={"__error__": err})
     body = res.json() if res is not None and res.status_code == 200 else None
     if res is not None and res.status_code == 200:
-        return _ok("room_nos_query", "", scenario, dur, request_payload={"keyword": "11101"}, response_payload=body)
-    return _fail("room_nos_query", "", scenario, dur, request_payload={"keyword": "11101"}, response_payload=body)
+        return _ok("room_nos_query", "", scenario, dur, request_payload={"keyword": p["keyword"]}, response_payload=body)
+    return _fail("room_nos_query", "", scenario, dur, request_payload={"keyword": p["keyword"]}, response_payload=body)
 
 
 @register_scenario(
     "mifare_query", module="amenity", vendor="BR_AIELLO",
     name="Mifare 卡號查詢", endpoint="/room-pay/mifare-nos",
+    params=[ParamSpec("keyword", "Mifare 卡號", "str", "1A2B3C",
+                      hint="沙盒預設卡號映射房號 11101;未註冊卡號 → 417/1001")],
 )
 def run_mifare_query(ctx: RunContext) -> CaseResult:
     import time as _t
     scenario = registry.get("mifare_query")
-    params = {**ctx.params_amenity, "keyword": "1A2B3C"}
+    p = _p(ctx, "mifare_query")
+    params = {**ctx.params_amenity, "keyword": p["keyword"]}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "GET", ctx.urls["mifare_nos"], params=params, headers=ctx.headers_amenity)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -82,29 +120,35 @@ def run_mifare_query(ctx: RunContext) -> CaseResult:
         return _fail("mifare_query", "", scenario, dur, response_payload={"__error__": err})
     body = res.json() if res is not None and res.status_code == 200 else None
     if res is not None and res.status_code == 200:
-        return _ok("mifare_query", "", scenario, dur, request_payload={"keyword": "1A2B3C"}, response_payload=body)
-    return _fail("mifare_query", "", scenario, dur, request_payload={"keyword": "1A2B3C"}, response_payload=body)
+        return _ok("mifare_query", "", scenario, dur, request_payload={"keyword": p["keyword"]}, response_payload=body)
+    return _fail("mifare_query", "", scenario, dur, request_payload={"keyword": p["keyword"]}, response_payload=body)
 
 
 @register_scenario(
     "amenity_charge", module="amenity", vendor="BR_AIELLO",
     name="備品入帳", endpoint="/room-billing",
     expected_key="Scenario_1_Room_Nos_To_Billing",
+    params=[
+        ParamSpec("room_no", "房號", "str", "11101", echo_fields=("roomNos",)),
+        ParamSpec("product", "料號", "str", "M001", hint="數據池料號,經 load_product_from_pool 轉實際品項代號"),
+        ParamSpec("quantity", "數量", "int", 1),
+    ],
 )
 def run_amenity_charge(ctx: RunContext) -> CaseResult:
     """房號查驗 → 備品過帳（GET 取 ciSerial 後 POST /room-billing）。"""
     import time as _t
     scenario = registry.get("amenity_charge")
+    p = _p(ctx, "amenity_charge")
     t0 = _t.perf_counter()
     # Phase 1: GET room-nos 取 ciSerial
-    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"}, headers=ctx.headers_amenity)
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": p["room_no"]}, headers=ctx.headers_amenity)
     if err or res is None or res.status_code != 200:
         dur = int((_t.perf_counter() - t0) * 1000)
         return _fail("amenity_charge", "", scenario, dur, response_payload={"__error__": err or f"GET room-nos {getattr(res,'status_code',None)}"})
     ci_serial = _extract_ci_serial(res)
 
     # Phase 2: POST room-billing
-    payload = {"roomNos": "11101", "items": [{"seqNos": 1, "productNos": load_product_from_pool("M001"), "orderQuantity": 1}]}
+    payload = {"roomNos": p["room_no"], "items": [{"seqNos": 1, "productNos": load_product_from_pool(p["product"]), "orderQuantity": p["quantity"]}]}
     res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["room_billing"], params=ctx.params_amenity, json_body=payload, headers=ctx.headers_amenity)
     dur = int((_t.perf_counter() - t0) * 1000)
     if err2 or res2 is None or res2.status_code not in (200, 204):
@@ -121,13 +165,15 @@ def run_amenity_charge(ctx: RunContext) -> CaseResult:
     "amenity_cancel", module="amenity", vendor="BR_AIELLO",
     name="入帳沖銷", endpoint="/room-pay-cancel",
     expected_key="Scenario_3_Room_Nos_Pay_And_Cancel",
+    params=[ParamSpec("room_no", "房號", "str", "11101", echo_fields=("roomPayMain.roomNos",))],
 )
 def run_amenity_cancel(ctx: RunContext) -> CaseResult:
     """住掛 → 沖正作廢（先 POST /room-pay 取得單號，再 POST /room-pay-cancel）。"""
     import time as _t
     scenario = registry.get("amenity_cancel")
+    p = _p(ctx, "amenity_cancel")
     t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"}, headers=ctx.headers_amenity)
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": p["room_no"]}, headers=ctx.headers_amenity)
     if err or res is None or res.status_code != 200:
         dur = int((_t.perf_counter() - t0) * 1000)
         return _fail("amenity_cancel", "", scenario, dur, response_payload={"__error__": err or "GET room-nos failed"})
@@ -135,7 +181,7 @@ def run_amenity_cancel(ctx: RunContext) -> CaseResult:
 
     order_nos = f"BR-ORCH-{datetime.now().strftime('%m%d%H%M%S')}"
     pay_payload = {"roomPayMain": {
-        "ciSerial": str(ci_serial), "roomNos": "11101", "orderNos": order_nos,
+        "ciSerial": str(ci_serial), "roomNos": p["room_no"], "orderNos": order_nos,
         "needTransfer": "N", "rsptCode": "2FFO", "rsptName": "2F櫃台",
         "mTimeCode": "LCH", "mTimeName": "午餐", "deskNos": "A01",
         "payAmount": 120, "acuAmount": 0, "precreditTotal": 0, "custType": "5",
@@ -161,13 +207,15 @@ def run_amenity_cancel(ctx: RunContext) -> CaseResult:
     "billing_sync", module="amenity", vendor="BR_AIELLO",
     name="帳務同步", endpoint="/room-pay",
     expected_key="Scenario_2_Room_Nos_To_Pay",
+    params=[ParamSpec("room_no", "房號", "str", "11101", echo_fields=("roomPayMain.roomNos",))],
 )
 def run_billing_sync(ctx: RunContext) -> CaseResult:
     """房號查驗 → 餐廳住掛（POST /room-pay）。"""
     import time as _t
     scenario = registry.get("billing_sync")
+    p = _p(ctx, "billing_sync")
     t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": "11101"}, headers=ctx.headers_amenity)
+    res, err = execute_for_ctx(ctx, "GET", ctx.urls["room_nos"], params={**ctx.params_amenity, "keyword": p["room_no"]}, headers=ctx.headers_amenity)
     if err or res is None or res.status_code != 200:
         dur = int((_t.perf_counter() - t0) * 1000)
         return _fail("billing_sync", "", scenario, dur, response_payload={"__error__": err or "GET room-nos failed"})
@@ -175,7 +223,7 @@ def run_billing_sync(ctx: RunContext) -> CaseResult:
 
     order_nos = f"BR-SYNC-{datetime.now().strftime('%m%d%H%M%S')}"
     payload = {"roomPayMain": {
-        "ciSerial": str(ci_serial), "roomNos": "11101", "orderNos": order_nos,
+        "ciSerial": str(ci_serial), "roomNos": p["room_no"], "orderNos": order_nos,
         "needTransfer": "N", "rsptCode": "2FFO", "rsptName": "2F櫃台",
         "mTimeCode": "LCH", "mTimeName": "午餐", "deskNos": "A02",
         "payAmount": 500, "acuAmount": 0, "precreditTotal": 0, "custType": "5",
@@ -331,19 +379,25 @@ def run_amenity_cancel_notfound(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "car_arrival", module="parking", vendor="SHIN_YEONG",
     name="車輛抵達回推", endpoint="/car-arrival",
+    params=[
+        ParamSpec("car_number", "車牌", "str",
+                  default=lambda ctx: f"ABC-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("guest_name", "住客名", "str", "Orchestrator"),
+        ParamSpec("arrival_time", "抵達時間", "datetime",
+                  default=lambda ctx: _sa_now(), hint="SA v1.2 格式 yyyy/mm/dd hh:mm(無秒)"),
+    ],
 )
 def run_car_arrival(ctx: RunContext) -> CaseResult:
     """模擬車辨回推車輛抵達。先 check-in 落庫白名單，再觸發 car-arrival（car_arrival 需 guest 在白名單）。"""
     import time as _t
     scenario = registry.get("car_arrival")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")  # 💡 SA v1.2:yyyy/mm/dd hh:mm(無秒)
-    guest_id, car = f"G-{ts}", f"ABC-{ts}"
+    p = _p(ctx, "car_arrival")
+    guest_id = f"G-{_ts()}"  # 內部動態唯一 ID(未宣告為參數,保證每次 run 白名單隔離)
     # 先 check-in 落庫（car_arrival 路由會查 mock_vendor_db，無此 guest 會 417）
     execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
-        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
-        "start_date": now, "end_date": now, "is_enabled": "Yes"})
-    payload = {"guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator", "arrival_time": now}
+        "guest_id": guest_id, "car_number": p["car_number"], "guest_name": p["guest_name"],
+        "start_date": p["arrival_time"], "end_date": p["arrival_time"], "is_enabled": "Yes"})
+    payload = {"guest_id": guest_id, "car_number": p["car_number"], "guest_name": p["guest_name"], "arrival_time": p["arrival_time"]}
     t0 = _t.perf_counter()
     # 💡 SA v1.2:出站帶 athena/hotel headers、query 僅 thirdParty
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["car_arrival"], params=ctx.params_parking, headers=ctx.headers_parking, json_body=payload)
@@ -363,16 +417,22 @@ def run_car_arrival(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "checkin_sync", module="parking", vendor="SHIN_YEONG",
     name="住客入住同步", endpoint="/check-in",
+    params=[
+        ParamSpec("car_number", "車牌", "str",
+                  default=lambda ctx: f"ABC-{datetime.now().strftime('%m%d%H%M')}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("guest_name", "住客名", "str", "Orchestrator"),
+        ParamSpec("start_date", "入住時間", "datetime", default=lambda ctx: _sa_now(), hint="yyyy/mm/dd hh:mm"),
+        ParamSpec("end_date", "退房時間", "datetime", default=lambda ctx: _sa_now(), hint="yyyy/mm/dd hh:mm"),
+    ],
 )
 def run_checkin_sync(ctx: RunContext) -> CaseResult:
     """PMS→廠商方向：模擬 PMS 推播住客 check-in 落庫（建立白名單）。"""
     import time as _t
     scenario = registry.get("checkin_sync")
-    ts = datetime.now().strftime("%m%d%H%M")
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")  # 💡 SA v1.2:yyyy/mm/dd hh:mm(無秒)
+    p = _p(ctx, "checkin_sync")
     payload = {
-        "guest_id": f"G-{ts}", "car_number": f"ABC-{ts}",
-        "guest_name": "Orchestrator", "start_date": now, "end_date": now,
+        "guest_id": f"G-{datetime.now().strftime('%m%d%H%M')}", "car_number": p["car_number"],
+        "guest_name": p["guest_name"], "start_date": p["start_date"], "end_date": p["end_date"],
         "is_enabled": "Yes",  # 💡 SA v1.2 欄位(值域 Yes/No)
     }
     t0 = _t.perf_counter()
@@ -416,16 +476,22 @@ def run_whitelist_update(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "night_audit", module="parking", vendor="SHIN_YEONG",
     name="夜核名單同步", endpoint="/pms-sync-data/night-audit",
+    params=[
+        ParamSpec("car_number", "車牌", "str",
+                  default=lambda ctx: f"AUD-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("guest_name", "住客名", "str", "NightAudit"),
+        ParamSpec("start_date", "入住時間", "datetime", default=lambda ctx: _sa_now()),
+        ParamSpec("end_date", "退房時間", "datetime", default=lambda ctx: _sa_now()),
+    ],
 )
 def run_night_audit(ctx: RunContext) -> CaseResult:
     """PMS→廠商夜核:POST /pms-sync-data/night-audit 推播夜核住客名單(增量 Upsert)。"""
     import time as _t
     scenario = registry.get("night_audit")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")  # 💡 SA v1.2:yyyy/mm/dd hh:mm(無秒)
+    p = _p(ctx, "night_audit")
     payload = {
-        "guest_id": f"G-AUDIT-{ts}", "car_number": f"AUD-{ts}",
-        "guest_name": "NightAudit", "start_date": now, "end_date": now,
+        "guest_id": f"G-AUDIT-{_ts()}", "car_number": p["car_number"],
+        "guest_name": p["guest_name"], "start_date": p["start_date"], "end_date": p["end_date"],
         "is_enabled": "Yes",
     }
     t0 = _t.perf_counter()
@@ -448,18 +514,23 @@ def run_night_audit(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "change_checkout", module="parking", vendor="SHIN_YEONG",
     name="延長/修改退房", endpoint="/pms-sync-data/change-checkout-datetime",
+    params=[
+        ParamSpec("car_number", "原車牌", "str",
+                  default=lambda ctx: f"CKO-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("end_date", "新退房時間", "datetime", "2026/12/31 12:00", hint="yyyy/mm/dd hh:mm"),
+    ],
 )
 def run_change_checkout(ctx: RunContext) -> CaseResult:
     """PMS→廠商:綜合櫃台延長/修改退房時間(CHANGE_CKO_DATE_TIME)。"""
     import time as _t
     scenario = registry.get("change_checkout")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")
-    guest_id, car = f"G-CKO-{ts}", f"CKO-{ts}"
+    p = _p(ctx, "change_checkout")
+    now = _sa_now()
+    guest_id = f"G-CKO-{_ts()}"
     execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
-        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
+        "guest_id": guest_id, "car_number": p["car_number"], "guest_name": "Orchestrator",
         "start_date": now, "end_date": now, "is_enabled": "Yes"})
-    payload = {"guest_id": guest_id, "end_date": "2026/12/31 12:00", "car_number": car, "is_enabled": "Yes"}
+    payload = {"guest_id": guest_id, "end_date": p["end_date"], "car_number": p["car_number"], "is_enabled": "Yes"}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["change_checkout"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -478,18 +549,24 @@ def run_change_checkout(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "change_car_nos", module="parking", vendor="SHIN_YEONG",
     name="車牌三態異動", endpoint="/pms-sync-data/change-car-nos",
+    params=[
+        ParamSpec("old_car_number", "原車牌", "str",
+                  default=lambda ctx: f"OLD-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("new_car_number", "新車牌", "str",
+                  default=lambda ctx: f"NEW-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+    ],
 )
 def run_change_car_nos(ctx: RunContext) -> CaseResult:
     """PMS→廠商:綜合櫃台車牌異動(CHG_CAR_NOS,新增/清除/更新三態)。"""
     import time as _t
     scenario = registry.get("change_car_nos")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")
-    guest_id, car = f"G-CHG-{ts}", f"OLD-{ts}"
+    p = _p(ctx, "change_car_nos")
+    now = _sa_now()
+    guest_id = f"G-CHG-{_ts()}"
     execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
-        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
+        "guest_id": guest_id, "car_number": p["old_car_number"], "guest_name": "Orchestrator",
         "start_date": now, "end_date": now, "is_enabled": "Yes"})
-    payload = {"guest_id": guest_id, "car_number": f"NEW-{ts}", "is_enabled": "Yes"}
+    payload = {"guest_id": guest_id, "car_number": p["new_car_number"], "is_enabled": "Yes"}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["change_car_nos"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -508,18 +585,23 @@ def run_change_car_nos(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "check_in_cancel", module="parking", vendor="SHIN_YEONG",
     name="取消入住", endpoint="/pms-sync-data/check-in-cancel",
+    params=[
+        ParamSpec("car_number", "車牌", "str",
+                  default=lambda ctx: f"CIX-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("end_date", "結束時間", "datetime", default=lambda ctx: _sa_now(), hint="yyyy/mm/dd hh:mm"),
+    ],
 )
 def run_check_in_cancel(ctx: RunContext) -> CaseResult:
     """PMS→廠商:取消入住(CIX),廠商保留車牌供離場驗證。"""
     import time as _t
     scenario = registry.get("check_in_cancel")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")
-    guest_id, car = f"G-CIX-{ts}", f"CIX-{ts}"
+    p = _p(ctx, "check_in_cancel")
+    now = _sa_now()
+    guest_id = f"G-CIX-{_ts()}"
     execute_for_ctx(ctx, "POST", ctx.urls["check_in"], json_body={
-        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
+        "guest_id": guest_id, "car_number": p["car_number"], "guest_name": "Orchestrator",
         "start_date": now, "end_date": now, "is_enabled": "Yes"})
-    payload = {"guest_id": guest_id, "car_number": car, "end_date": now, "is_enabled": "Yes"}
+    payload = {"guest_id": guest_id, "car_number": p["car_number"], "end_date": p["end_date"], "is_enabled": "Yes"}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["check_in_cancel"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -552,11 +634,11 @@ def _sync_expect(case_id, scenario, dur, payload, res, expect_code="0000"):
     return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=body)
 
 
-def _sa_sync_payload(guest_id, car, enabled="Yes", start=None, end=None):
+def _sa_sync_payload(guest_id, car, enabled="Yes", start=None, end=None, guest_name="Orchestrator"):
     """組 SA v1.2 公版 schema payload(時間 yyyy/mm/dd hh:mm 無秒)。"""
-    now_sa = datetime.now().strftime("%Y/%m/%d %H:%M")
+    now_sa = _sa_now()
     return {
-        "guest_id": guest_id, "car_number": car, "guest_name": "Orchestrator",
+        "guest_id": guest_id, "car_number": car, "guest_name": guest_name,
         "start_date": start or now_sa, "end_date": end or now_sa,
         "is_enabled": enabled,
     }
@@ -565,13 +647,21 @@ def _sa_sync_payload(guest_id, car, enabled="Yes", start=None, end=None):
 @register_scenario(
     "parking_sync_checkin", module="parking", vendor="SHIN_YEONG",
     name="公版入住啟用", endpoint="/parking/sync",
+    params=[
+        ParamSpec("car_number", "車牌", "str",
+                  default=lambda ctx: f"SY-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("guest_name", "住客名", "str", "Orchestrator"),
+        ParamSpec("start_date", "入住時間", "datetime", default=lambda ctx: _sa_now()),
+        ParamSpec("end_date", "退房時間", "datetime", default=lambda ctx: _sa_now()),
+    ],
 )
 def run_parking_sync_checkin(ctx: RunContext) -> CaseResult:
     """SA 公版:入住且有車號 → 傳送啟用(Yes),廠商 upsert。"""
     import time as _t
     scenario = registry.get("parking_sync_checkin")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    payload = _sa_sync_payload(f"G-SYNC-{ts}", f"SY-{ts}", "Yes")
+    p = _p(ctx, "parking_sync_checkin")
+    payload = _sa_sync_payload(f"G-SYNC-{_ts()}", p["car_number"], "Yes",
+                               start=p["start_date"], end=p["end_date"], guest_name=p["guest_name"])
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -583,17 +673,24 @@ def run_parking_sync_checkin(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "parking_sync_change_car", module="parking", vendor="SHIN_YEONG",
     name="公版換車號(舊停用+新啟用兩筆)", endpoint="/parking/sync",
+    params=[
+        ParamSpec("guest_name", "住客名", "str", "Orchestrator"),
+        ParamSpec("old_car_number", "原車牌", "str",
+                  default=lambda ctx: f"OLD-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("new_car_number", "新車牌", "str",
+                  default=lambda ctx: f"NEW-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+    ],
 )
 def run_parking_sync_change_car(ctx: RunContext) -> CaseResult:
     """SA 公版範例 3:更改車號 → 兩筆連發(原車號 No + 新車號 Yes),兩筆皆應 0000。"""
     import time as _t
     scenario = registry.get("parking_sync_change_car")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    guest_id, old_car, new_car = f"G-CHC-{ts}", f"OLD-{ts}", f"NEW-{ts}"
+    p = _p(ctx, "parking_sync_change_car")
+    guest_id = f"G-CHC-{_ts()}"
     t0 = _t.perf_counter()
-    payload_old = _sa_sync_payload(guest_id, old_car, "No")
+    payload_old = _sa_sync_payload(guest_id, p["old_car_number"], "No", guest_name=p["guest_name"])
     res1, err1 = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload_old)
-    payload_new = _sa_sync_payload(guest_id, new_car, "Yes")
+    payload_new = _sa_sync_payload(guest_id, p["new_car_number"], "Yes", guest_name=p["guest_name"])
     res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload_new)
     dur = int((_t.perf_counter() - t0) * 1000)
     summary = {"disable_old": payload_old, "enable_new": payload_new}
@@ -613,13 +710,18 @@ def run_parking_sync_change_car(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "parking_sync_disable", module="parking", vendor="SHIN_YEONG",
     name="公版清除車號(停用)", endpoint="/parking/sync",
+    params=[
+        ParamSpec("car_number", "車牌", "str",
+                  default=lambda ctx: f"DIS-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("guest_name", "住客名", "str", "Orchestrator"),
+    ],
 )
 def run_parking_sync_disable(ctx: RunContext) -> CaseResult:
     """SA 公版範例 4:清除車號 → 傳送原車號停用(No)。"""
     import time as _t
     scenario = registry.get("parking_sync_disable")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    payload = _sa_sync_payload(f"G-DIS-{ts}", f"DIS-{ts}", "No")
+    p = _p(ctx, "parking_sync_disable")
+    payload = _sa_sync_payload(f"G-DIS-{_ts()}", p["car_number"], "No", guest_name=p["guest_name"])
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -631,14 +733,21 @@ def run_parking_sync_disable(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "parking_sync_cancel", module="parking", vendor="SHIN_YEONG",
     name="公版取消入住(當日結束)", endpoint="/parking/sync",
+    params=[
+        ParamSpec("car_number", "車牌", "str",
+                  default=lambda ctx: f"CXL-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+        ParamSpec("guest_name", "住客名", "str", "Orchestrator"),
+        ParamSpec("end_date", "結束時間", "datetime",
+                  default=lambda ctx: f"{datetime.now().strftime('%Y/%m/%d')} 23:59", hint="SA 範例 5:當日最晚 23:59"),
+    ],
 )
 def run_parking_sync_cancel(ctx: RunContext) -> CaseResult:
     """SA 公版範例 5:取消入住 → is_enabled Yes、結束日為當日最晚(23:59)。"""
     import time as _t
     scenario = registry.get("parking_sync_cancel")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    today = datetime.now().strftime("%Y/%m/%d")
-    payload = _sa_sync_payload(f"G-CXL-{ts}", f"CXL-{ts}", "Yes", end=f"{today} 23:59")
+    p = _p(ctx, "parking_sync_cancel")
+    payload = _sa_sync_payload(f"G-CXL-{_ts()}", p["car_number"], "Yes",
+                               end=p["end_date"], guest_name=p["guest_name"])
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["parking_sync"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -690,16 +799,21 @@ def run_car_arrival_missing_field(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "car_arrival_pt", module="parking", vendor="PAYTRONEX",
     name="新增房客預約(車輛抵達)", endpoint="/parktron/hpms/services/roomer/add",
+    params=[
+        ParamSpec("room_number", "房號", "str", "207"),
+        ParamSpec("license_plate", "車牌", "str",
+                  default=lambda ctx: f"PT-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
+    ],
 )
 def run_paytronex_add(ctx: RunContext) -> CaseResult:
     """PAYTRONEX:POST /parktron/hpms/services/roomer/add 新增房客預約(帶車牌)。"""
     import time as _t
     scenario = registry.get("car_arrival_pt")
-    ts = datetime.now().strftime("%m%d%H%M%S")
+    p = _p(ctx, "car_arrival_pt")
     today = datetime.now().strftime("%Y/%m/%d")  # 💡 SA:StartTime=C/I 日 00:00:00,請求格式 yyyy/mm/dd hh:mm:ss(斜線+秒)
     payload = {"Roomer": {
-        "RoomNumber": "207", "StartTime": f"{today} 00:00:00", "EndTime": f"{today} 23:59:00",
-        "LicensePlateList": [f"PT-{ts}"],
+        "RoomNumber": p["room_number"], "StartTime": f"{today} 00:00:00", "EndTime": f"{today} 23:59:00",
+        "LicensePlateList": [p["license_plate"]],
     }}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["paytronex_add"], json_body=payload)
@@ -719,6 +833,8 @@ def run_paytronex_add(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "car_arrival_retry", module="parking", vendor="PAYTRONEX",
     name="車牌逆查(逾時重試)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate",
+    params=[ParamSpec("license_plate", "車牌", "str",
+                      default=lambda ctx: f"FIND-{_ts()}", hint="留自動=每次執行產生唯一車牌")],
 )
 def run_paytronex_find(ctx: RunContext) -> CaseResult:
     """PAYTRONEX:先 add_roomer 建租約,再 findByLicensePlate 逆查(模擬車辨感應 → 查租約)。
@@ -727,10 +843,10 @@ def run_paytronex_find(ctx: RunContext) -> CaseResult:
     """
     import time as _t
     scenario = registry.get("car_arrival_retry")
-    ts = datetime.now().strftime("%m%d%H%M%S")
-    plate = f"FIND-{ts}"
+    p = _p(ctx, "car_arrival_retry")
+    plate = p["license_plate"]
     t0 = _t.perf_counter()
-    # 先 add 建立含該車牌的租約(SA 格式 yyyy/mm/dd hh:mm:ss)
+    # 先 add 建立含該車牌的租約(SA 格式 yyyy/mm/dd hh:mm:ss);種子參數沿用同一車牌保證查得到
     today = datetime.now().strftime("%Y/%m/%d")
     execute_for_ctx(ctx, "POST", ctx.urls["paytronex_add"], json_body={"Roomer": {
         "RoomNumber": "209", "StartTime": f"{today} 00:00:00", "EndTime": f"{today} 23:59:00",
@@ -961,8 +1077,11 @@ def _kc_room_id(ctx, room_nos, h):
     return ((res.json() or {}).get("idList") or [None])[0]
 
 
-def _kc_make_order(ctx, room_nos, h, guest="Orchestrator"):
-    """管線前置:依 Swagger Order 必填欄位建訂單 → 回 (order_id, order_payload);失敗回 (None, payload)。"""
+def _kc_make_order(ctx, room_nos, h, guest="Orchestrator", pre_out=None):
+    """管線前置:依 Swagger Order 必填欄位建訂單 → 回 (order_id, order_payload);失敗回 (None, payload)。
+
+    pre_out 可指定 preOutTime(參數化案例傳入);未指定=當下+1天(參數化前行為)。
+    """
     ts = datetime.now().strftime("%m%d%H%M%S%f")
     order_id = f"KC-{ts}"
     payload = {
@@ -970,7 +1089,7 @@ def _kc_make_order(ctx, room_nos, h, guest="Orchestrator"):
         "reserveID": int(datetime.now().timestamp()) % 1000000,  # Swagger:系統未用可任意
         "roomID": 0,  # 下方經 getRoomIdByName 轉換後覆寫
         "preInTime": _kc_iso(datetime.now()),
-        "preOutTime": _kc_iso(datetime.now() + timedelta(days=1)),
+        "preOutTime": pre_out or _kc_iso(datetime.now() + timedelta(days=1)),
         "canAppCheckin": False,
         "status": 0,
         "guestName": guest,
@@ -982,9 +1101,9 @@ def _kc_make_order(ctx, room_nos, h, guest="Orchestrator"):
     return order_id, payload
 
 
-def _kc_make_card(ctx, room_nos, h, guest="Orchestrator"):
+def _kc_make_card(ctx, room_nos, h, guest="Orchestrator", pre_out=None):
     """完整真實管線:建訂單 → 讀卡取 cardUid → OrderCard 綁定。回傳 (order_id, cardUid, order_payload)。"""
-    order_id, order_payload = _kc_make_order(ctx, room_nos, h, guest)
+    order_id, order_payload = _kc_make_order(ctx, room_nos, h, guest, pre_out=pre_out)
     if not order_id:
         return None, None, order_payload
     # 💡 Swagger CommonPara:{projectId, tokenValue, timeout}(mock 不嚴格驗 body,送最小集)
@@ -1003,12 +1122,18 @@ def _kc_make_card(ctx, room_nos, h, guest="Orchestrator"):
 @register_scenario(
     "keycard_login", module="keycard", vendor="WAFERLOCK",
     name="登入取得Token", endpoint="/api/Auth/login",
+    params=[
+        ParamSpec("account", "帳號", "str", "athena_pms", hint="Swagger LoginPara.id"),
+        ParamSpec("password", "密碼", "str", "liveam_password_123"),
+        ParamSpec("project_id", "專案代號", "str", "PRJ-01", hint="Swagger LoginPara.projectID"),
+    ],
 )
 def run_keycard_login(ctx: RunContext) -> CaseResult:
     """Swagger LoginPara {id, password, projectID} → TokenInfo {id, token}(SA:token 72 小時有效)。"""
     import time as _t
     scenario = registry.get("keycard_login")
-    payload = {"id": "athena_pms", "password": "liveam_password_123", "projectID": "PRJ-01"}
+    p = _p(ctx, "keycard_login")
+    payload = {"id": p["account"], "password": p["password"], "projectID": p["project_id"]}
     t0 = _t.perf_counter()
     res, err = execute_for_ctx(ctx, "POST", ctx.urls["keycard_login"], json_body=payload)
     dur = int((_t.perf_counter() - t0) * 1000)
@@ -1023,15 +1148,18 @@ def run_keycard_login(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "keycard_room_lookup", module="keycard", vendor="WAFERLOCK",
     name="房號轉房間編號", endpoint="/api/Room/getRoomIdByName/{name}",
+    params=[ParamSpec("room_name", "房號名稱", "str", "401", hint="沙盒房號 101–499 皆可查得 roomID")],
 )
 def run_keycard_room_lookup(ctx: RunContext) -> CaseResult:
     """Swagger:getRoomIdByName → IdInfo {error:0, idList:[int]}(Order.roomID 為整數,必要前置)。"""
     import time as _t
     scenario = registry.get("keycard_room_lookup")
     h = _kc_headers(ctx)
-    payload = {"name": "401"}
+    p = _p(ctx, "keycard_room_lookup")
+    payload = {"name": p["room_name"]}
     t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "GET", f"{ctx.urls['keycard_roomid_base']}/401", headers=h)
+    # 💡 設計 §4:參數值進 URL 路徑前一律編碼(quote,連 / 也轉義),防路徑注入
+    res, err = execute_for_ctx(ctx, "GET", f"{ctx.urls['keycard_roomid_base']}/{_path_seg(p['room_name'])}", headers=h)
     dur = int((_t.perf_counter() - t0) * 1000)
     if err or res is None:
         return _fail("keycard_room_lookup", "", scenario, dur, request_payload=payload, response_payload={"__error__": err or "no response"})
@@ -1044,19 +1172,27 @@ def run_keycard_room_lookup(ctx: RunContext) -> CaseResult:
 @register_scenario(
     "keycard_make_card", module="keycard", vendor="WAFERLOCK",
     name="正規製卡管線(訂單→讀卡→綁定)", endpoint="/api/Order + /api/Operation/getCardInfo + /api/OrderCard",
+    params=[
+        ParamSpec("room_no", "房號", "str", "401"),
+        ParamSpec("guest_name", "住客名", "str", "MakeCard"),
+        ParamSpec("pre_out_time", "預計退房", "datetime",
+                  default=lambda ctx: _kc_iso(datetime.now() + timedelta(days=1)),
+                  hint="ISO 格式 yyyy-mm-ddThh:mm:ss;留自動=當下+1天"),
+    ],
 )
 def run_keycard_make_card(ctx: RunContext) -> CaseResult:
     """真實管線:getRoomIdByName → POST Order(必填六欄位)→ getCardInfo 取 cardUid → OrderCard 綁定。"""
     import time as _t
     scenario = registry.get("keycard_make_card")
     h = _kc_headers(ctx)
+    p = _p(ctx, "keycard_make_card")
     t0 = _t.perf_counter()
-    order_id, card_uid, _payload = _kc_make_card(ctx, "401", h, "MakeCard")
+    order_id, card_uid, _payload = _kc_make_card(ctx, p["room_no"], h, p["guest_name"], pre_out=p["pre_out_time"])
     dur = int((_t.perf_counter() - t0) * 1000)
     summary = {"orderID": order_id, "cardUid": card_uid}
     if order_id and card_uid:
-        return _ok("keycard_make_card", "", scenario, dur, request_payload={"room": "401"}, response_payload=summary)
-    return _fail("keycard_make_card", "", scenario, dur, request_payload={"room": "401"},
+        return _ok("keycard_make_card", "", scenario, dur, request_payload={"room": p["room_no"]}, response_payload=summary)
+    return _fail("keycard_make_card", "", scenario, dur, request_payload={"room": p["room_no"]},
                  response_payload={"__error__": summary})
 
 

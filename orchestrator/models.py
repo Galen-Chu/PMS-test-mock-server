@@ -21,6 +21,26 @@ RUN_PARTIAL_FAIL = "PARTIAL_FAIL"
 
 
 @dataclass
+class ParamSpec:
+    """案例可調輸入欄位宣告（設計 docs/design-case-parameterization.md §3）。
+
+    - 註冊即宣告：/scenarios 自動帶出詮釋資料驅動 UI 表單，新增欄位免改 UI。
+    - ``default`` 為 callable 時代表「動態預設」（如時間戳唯一 ID），
+      於 run 開始時以 RunContext 求值一次（同 run 內一致）。
+    - ``echo_fields``：此參數會被回應/種子回映的欄位（dotted path，如
+      "roomNos"、"roomPayMain.roomNos"），供 §7 種子回填與 diff 分級。
+    - hint 以廠商/SA 術語撰寫（廠商推展介面約束 §12）。
+    """
+    key: str                 # runner 內部鍵,如 "keyword"
+    label: str               # UI 顯示,如「房號關鍵字」
+    type: str = "str"        # str / int / bool / date / datetime
+    default: Any = None      # 靜態值,或 callable(RunContext) -> 值(動態唯一 ID)
+    hint: str = ""           # SA 規格提示(格式、負面行為),UI tooltip
+    required: bool = True
+    echo_fields: tuple = ()  # 此參數會被回應/種子回映的欄位名(§7 diff 用)
+
+
+@dataclass
 class RunContext:
     """單次 Run 的執行環境快照。Runner 拿它來知道打哪、帶什麼 header/params。"""
     environment: str                 # e.g. "LOCAL_OFFLINE" / "REAL_UG"
@@ -31,6 +51,10 @@ class RunContext:
     headers_parking: dict            # 新詠(SHIN_YEONG) SA v1.2:car-arrival 出站 athena/hotel header
     params_parking: dict             # 停車模組的 query params（含 thirdParty）
     params_amenity: dict             # 房務模組的 query params（含 thirdParty）
+    # 逐案例合併後參數（case_id → {param_key: 值}）。engine 於 run 開始時
+    # 依 ParamSpec 預設（動態者此時求值一次）← overrides 覆蓋填入；
+    # runner 以 ctx.params[case_id] 取值組 payload（設計 §5）。
+    params: dict = field(default_factory=dict)
     # 預先解析好的端點 URL，runner 直接取用，避免各自重算
     urls: dict = field(default_factory=dict)
     # 逐步 HTTP 交易錄製槽：execute_for_ctx 每發一筆就 append 一個 step dict。
@@ -52,6 +76,7 @@ class Scenario:
     endpoint: str                    # 對應路由（展示用）
     runner: Optional[Callable[[RunContext], "CaseResult"]] = None
     expected_key: Optional[str] = None  # 對應 verified_payload_logs 的 scenario 名（diff 期望值索引）
+    params: tuple = ()               # (ParamSpec, ...) 宣告式可調參數；空 = 固定劇本（負面路徑刻意不開放）
 
     @property
     def implemented(self) -> bool:
@@ -76,6 +101,8 @@ class CaseResult:
     error_category: Optional[str] = None              # FIELD_MISMATCH / STATUS_CODE / TIMEOUT / UNIMPLEMENTED
     # 逐步 HTTP 交易紀錄（UI 的「HTTP 稽核」檢視來源）：每筆含 method/url/請求/回應/計時/錯誤。
     steps: list = field(default_factory=list)
+    # 本次執行「實際用到」的合併後參數（設計 §5：報告可追溯哪次測試用了什麼資料）。
+    resolved_params: Optional[dict] = None
 
 
 @dataclass

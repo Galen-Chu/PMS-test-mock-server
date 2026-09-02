@@ -13,9 +13,10 @@
 from flask import Blueprint, request, jsonify
 
 import config
-from .registry import registry
+from .registry import registry, params_meta
 from . import engine
 from .classify import remediation, first_failure
+from .models import ParamSpec
 
 orchestrator_bp = Blueprint('orchestrator', __name__)
 
@@ -38,16 +39,24 @@ def list_environments():
 
 @orchestrator_bp.route('/scenarios', methods=['GET'])
 def list_scenarios():
-    """三層結構:模組 → 廠商 → 案例(對齊原型,供前端畫廠商 chip)。"""
+    """三層結構:模組 → 廠商 → 案例(對齊原型,供前端畫廠商 chip)。
+
+    參數化(設計 §3/§8):案例帶 ``params`` 詮釋資料驅動 UI 表單——動態預設求值展示
+    + ``dynamic: true``;表單完全由本 API 驅動,未來廠商視角 UI 結構零改動。
+    """
     _MODULE_LABEL = {"parking": "🚗 停車車辨", "amenity": "🦏 房務備品", "keycard": "🔑 門禁製卡"}
+    disp_ctx = engine.build_run_context("LOCAL_OFFLINE")  # 動態預設求值展示用（時間戳類不依環境）
     out = []
     for module, scs in registry.by_module().items():
         # 同模組的案例依 vendor 分組
         vendors_map = {}
         for s in scs:
-            vendors_map.setdefault(s.vendor, []).append({
+            item = {
                 "id": s.id, "name": s.name, "endpoint": s.endpoint, "implemented": s.implemented,
-            })
+            }
+            if s.params:
+                item["params"] = params_meta(s, disp_ctx)
+            vendors_map.setdefault(s.vendor, []).append(item)
         vendors = [{"id": v, "label": v, "scenarios": items} for v, items in vendors_map.items()]
         out.append({
             "module": module,
@@ -62,6 +71,7 @@ def create_run():
     body = request.get_json(silent=True) or {}
     environment = body.get("environment")
     scenario_ids = body.get("scenario_ids") or []
+    overrides = body.get("overrides") or {}
 
     if environment not in config.ENV_MATRIX:
         return jsonify({"error": "UNKNOWN_ENVIRONMENT", "env": environment}), 400
@@ -71,8 +81,77 @@ def create_run():
     if not scenario_ids:
         return jsonify({"error": "NO_SCENARIOS"}), 400
 
-    run = engine.start_run_async(scenario_ids, environment)  # 背景執行；立即回 RUNNING
+    clean, err = validate_overrides(overrides, scenario_ids)
+    if err:
+        return jsonify(err), 400
+
+    run = engine.start_run_async(scenario_ids, environment, overrides=clean)  # 背景執行；立即回 RUNNING
     return jsonify(_run_summary(run)), 202   # 202 Accepted：已受理、執行中
+
+
+# ---- overrides 驗證（設計 §4；純函式，離線單元測試直接測）----------------
+_MAX_PARAM_LEN = 64
+
+
+def validate_overrides(overrides, scenario_ids):
+    """校驗 POST /runs 的 overrides：未知案例、未知參數鍵、型別轉換失敗、長度上限 64。
+
+    回傳 (clean_overrides, None) 或 (None, error_dict 附可用清單)。
+    刻意寬鬆：不擋「不合法值」——測試者故意填壞值就是在測負面路徑(417/1000)，
+    分類器本來就會接住（Postman 驗證是為了打對；我們是為了可控地打錯）。
+    """
+    clean = {}
+    if overrides in (None, {}):
+        return clean, None
+    if not isinstance(overrides, dict):
+        return None, {"error": "OVERRIDES_NOT_OBJECT"}
+    for case_id, kv in overrides.items():
+        if case_id not in scenario_ids:
+            return None, {"error": "UNKNOWN_CASE_IN_OVERRIDES", "case": case_id, "valid": scenario_ids}
+        sc = registry.get(case_id)
+        if sc is None:
+            return None, {"error": "UNKNOWN_CASE_IN_OVERRIDES", "case": case_id, "valid": scenario_ids}
+        if not isinstance(kv, dict):
+            return None, {"error": "OVERRIDE_PARAMS_NOT_OBJECT", "case": case_id}
+        specs = {sp.key: sp for sp in sc.params}
+        if not specs:
+            return None, {"error": "CASE_NOT_PARAMETERIZED", "case": case_id}
+        out = {}
+        for key, value in kv.items():
+            sp = specs.get(key)
+            if sp is None:
+                return None, {"error": "UNKNOWN_PARAM", "case": case_id, "param": key,
+                              "valid": sorted(specs)}
+            coerced, bad = _coerce_param(sp, value)
+            if bad:
+                return None, {"error": "BAD_PARAM_TYPE", "case": case_id, "param": key, "type": sp.type}
+            out[key] = coerced
+        if out:
+            clean[case_id] = out
+    return clean, None
+
+
+def _coerce_param(spec: ParamSpec, value):
+    """依 ParamSpec.type 轉換覆寫值；str 類上限 64 字元（設計 §4）。失敗回 (None, True)。"""
+    if spec.type == "int":
+        if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+            return None, True
+        try:
+            return int(value), False
+        except (TypeError, ValueError):
+            return None, True
+    if spec.type == "bool":
+        if isinstance(value, bool):
+            return value, False
+        if isinstance(value, str) and value.lower() in ("true", "false", "yes", "no"):
+            return value.lower() in ("true", "yes"), False
+        return None, True
+    # str / date / datetime：一律以字串原樣送（格式由測試者自負——壞格式即負面路徑）
+    if not isinstance(value, str):
+        return None, True
+    if len(value) > _MAX_PARAM_LEN:
+        return None, True
+    return value, False
 
 
 @orchestrator_bp.route('/runs/<run_id>', methods=['GET'])
@@ -119,6 +198,7 @@ def _case_dict(c):
         "expected_payload": c.expected_payload,
         "diff": c.diff,
         "error_category": c.error_category,
+        "resolved_params": c.resolved_params,              # 本次實際用的合併後參數（設計 §5，報告可追溯）
         "steps": c.steps,                                  # 逐步 HTTP 交易（HTTP 稽核）
         "remediation": remediation(c.error_category),      # 錯誤除錯建議（錯誤分析）
         "failing_step": first_failure(c),                  # 第一個失敗的 step（錯誤分析）

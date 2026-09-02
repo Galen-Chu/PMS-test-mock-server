@@ -28,10 +28,13 @@ const state = {
   activeTab: 'setup',
   environments: [],        // [{id,desc,color,ready,pms_url}]
   env: null,               // 當前選環境 id
-  modules: [],             // [{module,label,vendors:[{id,label,scenarios:[{id,name,endpoint,implemented}]}]}]
+  modules: [],             // [{module,label,vendors:[{id,label,scenarios:[{id,name,endpoint,implemented,params}]}]}]
   activeVendor: {},        // module → 當前選廠商 id
   expanded: {},            // module → bool
   checked: {},             // case_id → bool
+  paramEdits: {},          // case_id → {param_key: 使用者輸入字串}(參數化表單)
+  paramTouched: {},        // case_id → {param_key: bool}——動過的欄位才會進 overrides payload
+  paramOpen: {},           // case_id → bool(參數表單展開)
   runStep: 'idle',         // idle / running / done
   caseResults: [],         // CaseResult[]
   runId: null,
@@ -48,9 +51,11 @@ const state = {
 const api = {
   getEnvironments: () => fetch(API + '/environments').then(r => r.json()),
   getScenarios: () => fetch(API + '/scenarios').then(r => r.json()),
-  startRun: (env, ids) => fetch(API + '/runs', {
+  startRun: (env, ids, overrides) => fetch(API + '/runs', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ environment: env, scenario_ids: ids }),
+    body: JSON.stringify(Object.assign(
+      { environment: env, scenario_ids: ids },
+      overrides && Object.keys(overrides).length ? { overrides } : {})),
   }).then(r => r.json()),
   getRun: (id) => fetch(API + `/runs/${id}`).then(r => r.json()),
   getResults: (id) => fetch(API + `/runs/${id}/results`).then(r => r.json()),
@@ -216,12 +221,20 @@ function renderSetup() {
       const activeV = m.vendors.find(v => v.id === (state.activeVendor[m.module] || m.vendors[0]?.id)) || m.vendors[0];
       if (activeV) for (const s of activeV.scenarios) {
         const ck = !!state.checked[s.id];
+        const hasParams = !!(s.params && s.params.length);
         body.appendChild(el('div', { class: 'scenario', onclick: () => { state.checked[s.id] = !state.checked[s.id]; render(); } },
           el('span', { class: 'box' + (ck ? ' checked' : '') }, ck ? el('span', { text: '✓' }) : null),
           el('span', { class: 'name', text: s.name }),
+          hasParams ? el('span', {
+            class: 'gear' + (state.paramOpen[s.id] ? ' on' : '') + (paramTouchedCount(s.id) ? ' dirty' : ''),
+            text: '⚙', title: '案例參數',
+            onclick: (e) => { e.stopPropagation(); state.paramOpen[s.id] = !state.paramOpen[s.id]; render(); },
+          }) : null,
           el('span', { class: 'ep', text: s.endpoint }),
           s.implemented ? null : el('span', { class: 'tag', text: '待開發' }),
         ));
+        // 參數化(設計 §8):有宣告參數的案例,⚙ 展開由 /scenarios 詮釋資料驅動的表單
+        if (hasParams && state.paramOpen[s.id]) body.appendChild(renderParamForm(s));
       }
       mod.appendChild(body);
     }
@@ -232,8 +245,9 @@ function renderSetup() {
 
   // sticky 啟動列
   const canLaunch = totalSelected > 0 && envMeta.ready !== false && state.runStep !== 'running';
+  const overridden = Object.keys(collectOverrides(Object.keys(state.checked).filter(k => state.checked[k]))).length;
   page.appendChild(el('div', { class: 'launch-bar' },
-    el('div', { class: 'meta', text: `環境 ${state.env} ・ 已選 ${totalSelected} 案例` }),
+    el('div', { class: 'meta', text: `環境 ${state.env} ・ 已選 ${totalSelected} 案例${overridden ? ` ・ 參數覆寫 ${overridden} 案例` : ''}` }),
     el('button', { class: 'btn-launch', text: state.runStep === 'running' ? '執行中…' : '🚀 啟動測試', onclick: startRun, disabled: !canLaunch }),
   ));
   if (state.launchMsg) page.appendChild(el('div', { class: 'error-banner', text: state.launchMsg }));
@@ -250,21 +264,80 @@ function moduleLabel(id) {
   return { parking: '🚗 停車車辨', amenity: '🦏 房務備品', keycard: '🔑 門禁製卡' }[id] || id;
 }
 
+// ---- 案例參數化表單(設計 §8:全程由 /scenarios 詮釋資料驅動,廠商視角零改動) ----
+function paramTouchedCount(caseId) {
+  const t = state.paramTouched[caseId] || {};
+  return Object.values(t).filter(Boolean).length;
+}
+
+function renderParamForm(s) {
+  const box = el('div', { class: 'param-form' });
+  const touched = state.paramTouched[s.id] || {};
+  const edits = state.paramEdits[s.id] || {};
+  for (const sp of s.params) {
+    const isTouched = !!touched[sp.key];
+    const input = el('input', {
+      class: 'param-input' + (isTouched ? ' touched' : ''),
+      type: 'text',
+      value: isTouched ? String(edits[sp.key] ?? '') : '',
+      placeholder: sp.dynamic ? '自動(每次執行產生)' : (sp.default != null ? String(sp.default) : ''),
+      title: sp.hint || sp.label,
+    });
+    input.oninput = () => {
+      state.paramEdits[s.id] = state.paramEdits[s.id] || {};
+      state.paramTouched[s.id] = state.paramTouched[s.id] || {};
+      state.paramEdits[s.id][sp.key] = input.value;
+      state.paramTouched[s.id][sp.key] = true;   // 動過才進 overrides——保持請求乾淨
+    };
+    box.appendChild(el('div', { class: 'param-row' },
+      el('span', { class: 'param-label', text: sp.label + (sp.dynamic ? ' ⚡' : ''), title: sp.hint || '' }),
+      input,
+      el('span', { class: 'param-type', text: sp.type }),
+    ));
+  }
+  const n = paramTouchedCount(s.id);
+  box.appendChild(el('div', { class: 'param-foot' },
+    el('span', { class: 'param-note', text: n ? `已覆寫 ${n} 欄(其餘用預設)` : '未調整 = 全用預設值;清空欄位送空值可測缺欄負面路徑' }),
+    el('button', { class: 'btn-secondary param-reset', text: '↺ 還原預設',
+      onclick: (e) => { e.stopPropagation(); delete state.paramEdits[s.id]; delete state.paramTouched[s.id]; render(); } }),
+  ));
+  return box;
+}
+
+// 收集「已勾選案例」的 overrides(只有動過的欄位會進 payload)
+function collectOverrides(checkedIds) {
+  const out = {};
+  for (const cid of checkedIds) {
+    const t = state.paramTouched[cid];
+    if (!t) continue;
+    const edits = state.paramEdits[cid] || {};
+    const kv = {};
+    for (const [k, on] of Object.entries(t)) if (on && edits[k] !== undefined) kv[k] = edits[k];
+    if (Object.keys(kv).length) out[cid] = kv;
+  }
+  return out;
+}
+
 // ---- 啟動測試 + polling ----
 async function startRun() {
   const ids = Object.keys(state.checked).filter(k => state.checked[k]);
   if (!ids.length) return;
+  const overrides = collectOverrides(ids);
   state.launchMsg = null;
   let run;
   try {
-    run = await api.startRun(state.env, ids);
+    run = await api.startRun(state.env, ids, overrides);
   } catch (e) {
     state.launchMsg = `啟動失敗：${e}`;
     render(); return;
   }
   if (run.error) {
-    // 後端拒絕（如 ENV_NOT_READY 回 409；fetch 不丟例外，需看 body）
-    state.launchMsg = `後端拒絕：${run.error}${run.env ? ' (' + run.env + ')' : ''}`;
+    // 後端拒絕（如 ENV_NOT_READY 回 409、overrides 驗證 400；fetch 不丟例外，需看 body）
+    let detail = run.error;
+    if (run.param) detail += `（參數 ${run.param}）`;
+    else if (run.case) detail += `（案例 ${run.case}）`;
+    if (run.valid) detail += `・可用：${Array.isArray(run.valid) ? run.valid.join(', ') : run.valid}`;
+    state.launchMsg = `後端拒絕：${detail}`;
     render(); return;
   }
   state.runId = run.run_id;
@@ -438,6 +511,8 @@ function renderCaseBrowser() {
       el('span', { class: 'detail-title', text: `${moduleLabel(selected.module)} / ${selected.vendor} / ${selected.scenario_name}` }),
       el('span', { class: 'ep', text: selected.endpoint }),
     ),
+    // 參數化(設計 §8):標題列參數摘要 chip——本次實際用了什麼參數,報告可追溯
+    renderParamChips(selected),
     tabRow,
   );
   if (state.caseDetailTab === 'http') detail.appendChild(renderHttpAudit(selected));
@@ -445,6 +520,23 @@ function renderCaseBrowser() {
   else if (state.caseDetailTab === 'error') detail.appendChild(renderErrorAnalysis(selected));
   else detail.appendChild(renderSnapshot(selected));
   return el('div', { class: 'browser' }, list, detail);
+}
+
+// 參數摘要 chip:label=value(resolved_params 為內部鍵,對照 /scenarios 詮釋資料顯示 label)
+function paramLabelOf(caseId, key) {
+  for (const m of state.modules) for (const v of m.vendors) {
+    const s = (v.scenarios || []).find(x => x.id === caseId);
+    if (s && s.params) { const sp = s.params.find(x => x.key === key); if (sp) return sp.label; }
+  }
+  return null;
+}
+
+function renderParamChips(c) {
+  const rp = c.resolved_params;
+  if (!rp || !Object.keys(rp).length) return null;
+  const chips = Object.entries(rp).map(([k, v]) =>
+    el('span', { class: 'param-chip', title: `${k} = ${fmtVal(v)}`, text: `${paramLabelOf(c.case_id, k) || k}=${fmtVal(v)}` }));
+  return el('div', { class: 'param-chips' }, ...chips);
 }
 
 // HTTP 稽核:逐步 HTTP 交易(可折疊)
@@ -485,7 +577,7 @@ function renderHttpAudit(c) {
   return wrap;
 }
 
-// JSON 稽核:請求/回應並排 + 期望值 + 欄位 Diff
+// JSON 稽核:請求/回應並排 + 期望值 + 欄位 Diff(§7 分級:參數覆寫=灰/真差異=紅/缺欄=琥珀)
 function renderJsonAudit(c) {
   const wrap = el('div', { class: 'json-audit' });
   wrap.appendChild(el('div', { class: 'json-pair' },
@@ -498,25 +590,36 @@ function renderJsonAudit(c) {
       renderJson(c.response_payload),
     ),
   ));
+  if (c.resolved_params && Object.keys(c.resolved_params).length) {
+    wrap.appendChild(el('div', { class: 'json-col', style: 'margin-top:12px' },
+      el('div', { class: 'http-lbl', text: '本次使用參數（resolved）' }),
+      renderJson(c.resolved_params),
+    ));
+  }
   if (c.expected_payload) {
     wrap.appendChild(el('div', { class: 'json-col', style: 'margin-top:12px' },
-      el('div', { class: 'http-lbl', text: 'Expected payload（通關種子）' }),
+      el('div', { class: 'http-lbl', text: 'Expected payload（通關種子・echo 欄位已按本次參數回填）' }),
       renderJson(c.expected_payload),
     ));
   }
   const rows = (c.diff && c.diff.length) ? c.diff : [];
   if (rows.length) {
+    const nEcho = rows.filter(r => r.kind === 'param_echo').length;
     const box = el('div', { class: 'diff-box', style: 'margin-top:12px' },
-      el('div', { class: 'diff-title', text: `欄位 Diff 比對（${rows.length} 項）` }),
-      el('div', { class: 'diff-row' },
-        el('span', { class: 'f', text: '欄位' }), el('span', { class: 'e', text: '期望' }), el('span', { class: 'a', text: '實際' }),
+      el('div', { class: 'diff-title', text: `欄位 Diff 比對（${rows.length} 項${nEcho ? `・${nEcho} 參數覆寫` : ''}）` }),
+      el('div', { class: 'diff-row diff-head' },
+        el('span', { class: 'f', text: '欄位' }), el('span', { class: 'e', text: '期望' }),
+        el('span', { class: 'a', text: '實際' }), el('span', { class: 'k', text: '分級' }),
       ),
     );
     for (const d of rows) {
-      box.appendChild(el('div', { class: 'diff-row' },
+      const kind = d.kind || (d.actual == null ? 'missing' : 'mismatch');
+      box.appendChild(el('div', { class: 'diff-row k-' + kind },
         el('span', { class: 'f', text: d.field }),
         el('span', { class: 'e', text: fmtVal(d.expected) }),
         el('span', { class: 'a', text: fmtVal(d.actual) }),
+        el('span', { class: 'k k-badge-' + kind,
+                     text: kind === 'param_echo' ? '參數覆寫' : kind === 'missing' ? '缺欄' : '真差異' }),
       ));
     }
     wrap.appendChild(box);
@@ -568,6 +671,7 @@ function renderSnapshot(c) {
     case_id: c.case_id, module: c.module, vendor: c.vendor, scenario_name: c.scenario_name,
     endpoint: c.endpoint, status: c.status, duration_ms: c.duration_ms,
     error_category: c.error_category, remediation: c.remediation,
+    resolved_params: c.resolved_params,
     request_payload: c.request_payload, response_payload: c.response_payload,
     expected_payload: c.expected_payload, diff: c.diff, steps: c.steps || [],
   };

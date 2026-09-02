@@ -10,7 +10,7 @@
 """
 from typing import Callable, Dict, List, Optional
 
-from .models import Scenario, RunContext, CaseResult
+from .models import Scenario, RunContext, CaseResult, ParamSpec
 
 
 class ScenarioRegistry:
@@ -30,12 +30,14 @@ class ScenarioRegistry:
         endpoint: str,
         runner: Optional[Callable[[RunContext], CaseResult]] = None,
         expected_key: Optional[str] = None,
+        params: Optional[List[ParamSpec]] = None,
     ) -> Scenario:
         if id in self._by_id:
             raise ValueError(f"Scenario id 衝突: {id}")
         sc = Scenario(
             id=id, module=module, vendor=vendor, name=name,
             endpoint=endpoint, runner=runner, expected_key=expected_key,
+            params=tuple(params or ()),
         )
         self._by_id[id] = sc
         return sc
@@ -63,6 +65,41 @@ class ScenarioRegistry:
     def ids(self) -> List[str]:
         return list(self._by_id.keys())
 
+    # ---- 參數（設計 §3/§5）----------------------------------------------
+    def resolve_defaults(self, case_id: str, ctx: Optional[RunContext] = None) -> Dict[str, object]:
+        """求值案例的預設參數（動態 default 此時以 ctx 求值）。
+
+        未宣告參數或案例不存在 → {}。engine 於 run 開始時對每個案例呼叫一次，
+        同 run 內動態值（時間戳）一致。
+        """
+        sc = self._by_id.get(case_id)
+        if sc is None or not sc.params:
+            return {}
+        out: Dict[str, object] = {}
+        for spec in sc.params:
+            out[spec.key] = spec.default(ctx) if callable(spec.default) else spec.default
+        return out
+
+
+def params_meta(scenario: Scenario, ctx: Optional[RunContext] = None) -> List[Dict[str, object]]:
+    """ParamSpec → /scenarios 序列化形式（參數宣告即文件，UI 表單零硬編）。
+
+    動態 default 以 ctx 求值展示 + ``dynamic: true``（UI 顯示「每次執行自動產生」placeholder）。
+    """
+    out = []
+    for spec in scenario.params:
+        dynamic = callable(spec.default)
+        out.append({
+            "key": spec.key,
+            "label": spec.label,
+            "type": spec.type,
+            "default": (spec.default(ctx) if dynamic else spec.default),
+            "dynamic": dynamic,
+            "hint": spec.hint,
+            "required": spec.required,
+        })
+    return out
+
 
 # 全域單例 —— 各模組的 runners 檔 import 它並註冊
 registry = ScenarioRegistry()
@@ -76,19 +113,21 @@ def register_scenario(
     name: str,
     endpoint: str,
     expected_key: Optional[str] = None,
+    params: Optional[List[ParamSpec]] = None,
 ):
     """裝飾器：把一個 runner 函式註冊成案例。
 
     用法：
         @register_scenario("amenity_charge", module="amenity", vendor="BR_AIELLO",
-                           name="備品入帳", endpoint="/room-pay", expected_key="Scenario_1_Room_Nos_To_Billing")
+                           name="備品入帳", endpoint="/room-pay", expected_key="Scenario_1_Room_Nos_To_Billing",
+                           params=[ParamSpec("room_no", "房號", "str", "11101", echo_fields=("roomNos",))])
         def run(ctx: RunContext) -> CaseResult:
             ...
     """
     def deco(fn: Callable[[RunContext], CaseResult]) -> Callable[[RunContext], CaseResult]:
         registry.register(
             id, module=module, vendor=vendor, name=name,
-            endpoint=endpoint, runner=fn, expected_key=expected_key,
+            endpoint=endpoint, runner=fn, expected_key=expected_key, params=params,
         )
         return fn
     return deco

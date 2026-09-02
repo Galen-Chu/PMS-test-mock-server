@@ -149,19 +149,61 @@ def build_run_context(environment: str) -> RunContext:
     )
 
 
+def _resolve_case_params(scenario_ids, overrides, ctx):
+    """逐案例合併參數（設計 §5）：ParamSpec 預設（動態者此時求值一次，同 run 一致）← overrides 覆蓋。
+
+    只填有宣告參數的案例；未宣告 → 不進 ctx.params（runner 走固定劇本）。
+    overrides 的結構/型別由 API 層 validate_overrides 把關；此處防禦性忽略非 dict。
+    """
+    out = {}
+    for sid in scenario_ids:
+        defaults = registry.resolve_defaults(sid, ctx)
+        if not defaults:
+            continue
+        merged = dict(defaults)
+        ov = (overrides or {}).get(sid) if isinstance(overrides, dict) else None
+        if isinstance(ov, dict):
+            merged.update(ov)
+        out[sid] = merged
+    return out
+
+
+def _echo_map(scenario, resolved_params):
+    """§7 種子回填用：ParamSpec.echo_fields（dotted path）→ 本次 resolved 值。"""
+    if not resolved_params or not scenario.params:
+        return {}
+    out = {}
+    for spec in scenario.params:
+        v = resolved_params.get(spec.key)
+        if v is None or not spec.echo_fields:
+            continue
+        for path in spec.echo_fields:
+            out[path] = v
+    return out
+
+
+def _expected_with_backfill(scenario, resolved_params):
+    """取種子並做 §7 種子參數回填（echo 欄位以本次 resolved 值替換）。"""
+    exp = expected_mod.get_expected(scenario.expected_key, scenario.endpoint)
+    return expected_mod.backfill_echo_fields(exp, _echo_map(scenario, resolved_params))
+
+
 def _build_case_result(case_id, run_id, scenario, status, duration_ms,
-                       request_payload=None, response_payload=None) -> CaseResult:
+                       request_payload=None, response_payload=None,
+                       resolved_params=None) -> CaseResult:
     cr = CaseResult(
         case_id=case_id, run_id=run_id,
         module=scenario.module, vendor=scenario.vendor,
         scenario_name=scenario.name, endpoint=scenario.endpoint,
         status=status, duration_ms=duration_ms,
         request_payload=request_payload, response_payload=response_payload,
+        resolved_params=dict(resolved_params) if resolved_params else None,
     )
-    # diff + expected
-    exp = expected_mod.get_expected(scenario.expected_key, scenario.endpoint)
+    # diff + expected（§7 回填後比對；分級用 param_values 取 echo 路徑末段）
+    exp = _expected_with_backfill(scenario, resolved_params)
+    pv = {p.split(".")[-1]: v for p, v in _echo_map(scenario, resolved_params).items()}
     cr.expected_payload = exp
-    cr.diff = expected_mod.compute_diff(response_payload, exp)
+    cr.diff = expected_mod.compute_diff(response_payload, exp, param_values=pv)
     cr.error_category = classify_mod.classify(cr)
     return cr
 
@@ -172,6 +214,7 @@ def _execute_run(run, scenario_ids, ctx):
     for sid in scenario_ids:
         ctx.recorder = []  # 逐步錄製槽每案重置（ctx 跨案例共用）
         sc = registry.get(sid)
+        rp = ctx.params.get(sid)  # 本案例合併後參數（設計 §5；未宣告參數者為 None）
         if sc is None:
             cr = CaseResult(
                 case_id=sid, run_id=run_id, module="?", vendor="?",
@@ -179,16 +222,19 @@ def _execute_run(run, scenario_ids, ctx):
                 error_category="UNKNOWN_SCENARIO",
             )
         elif not sc.implemented:
-            cr = _build_case_result(sid, run_id, sc, CASE_SKIP, 0)
+            cr = _build_case_result(sid, run_id, sc, CASE_SKIP, 0, resolved_params=rp)
             cr.error_category = classify_mod.UNIMPLEMENTED
         else:
             t0 = time.perf_counter()
             try:
                 cr = sc.runner(ctx)
                 cr.run_id = run_id
+                cr.resolved_params = dict(rp) if rp else None  # 結果可追溯本次用了什麼參數
                 if cr.expected_payload is None and sc.expected_key:
-                    cr.expected_payload = expected_mod.get_expected(sc.expected_key, sc.endpoint)
-                    cr.diff = expected_mod.compute_diff(cr.response_payload, cr.expected_payload)
+                    exp = _expected_with_backfill(sc, rp)
+                    pv = {p.split(".")[-1]: v for p, v in _echo_map(sc, rp).items()}
+                    cr.expected_payload = exp
+                    cr.diff = expected_mod.compute_diff(cr.response_payload, exp, param_values=pv)
                 if cr.error_category is None:
                     cr.error_category = classify_mod.classify(cr)
                 cr.duration_ms = cr.duration_ms or int((time.perf_counter() - t0) * 1000)
@@ -197,6 +243,7 @@ def _execute_run(run, scenario_ids, ctx):
                 cr = _build_case_result(
                     sid, run_id, sc, CASE_FAIL, dur,
                     response_payload={"__error__": f"{type(e).__name__}: {e}"},
+                    resolved_params=rp,
                 )
         cr.steps = list(ctx.recorder)  # 把本案例逐步 HTTP 交易錄進結果（UI「HTTP 稽核」來源）
         with _RUNS_LOCK:
@@ -219,21 +266,27 @@ def _new_run(environment: str) -> Run:
     )
 
 
-def start_run(scenario_ids, environment: str) -> Run:
-    """同步執行一組案例，回傳完整 Run（跑完才回）。供需要同步語意的呼叫端用。"""
+def start_run(scenario_ids, environment: str, overrides: dict = None) -> Run:
+    """同步執行一組案例，回傳完整 Run（跑完才回）。供需要同步語意的呼叫端用。
+
+    overrides（可選，設計 §4）：{case_id: {param_key: 值}}；不帶時行為與參數化前 100% 相同。
+    """
     ctx = build_run_context(environment)
+    ctx.params = _resolve_case_params(scenario_ids, overrides, ctx)
     run = _new_run(environment)
     _execute_run(run, scenario_ids, ctx)
     return run
 
 
-def start_run_async(scenario_ids, environment: str) -> Run:
+def start_run_async(scenario_ids, environment: str, overrides: dict = None) -> Run:
     """非同步執行：背景執行緒跑案例，立即回傳 status=RUNNING 的 Run。
 
     client 用 GET /runs/<id> polling(snapshot_run 給序列化安全快照)直到 status != RUNNING。
     Run 先 store_run 入記憶體表(鎖保護)，背景執行緒逐案 append + recompute。
+    overrides 同 start_run；動態預設於此求值一次（同 run 內一致）。
     """
     ctx = build_run_context(environment)
+    ctx.params = _resolve_case_params(scenario_ids, overrides, ctx)
     run = _new_run(environment)
     store_run(run)
     t = threading.Thread(target=_execute_run, args=(run, scenario_ids, ctx), daemon=True)

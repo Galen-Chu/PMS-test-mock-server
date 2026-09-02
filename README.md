@@ -153,6 +153,28 @@ pytest tests_localFullStackClose/
 
 ---
 
+## 🎛️ 案例參數化（Case Parameterization）
+
+設計文件：`docs/design-case-parameterization.md`。每個測試案例可宣告「可調輸入欄位」（`ParamSpec`），
+UI 表單預填 SA 合法預設值、測試者改一個欄位即可重發；**不帶覆寫時行為與原本 100% 相同**。
+
+- **UI**：案例清單上有 ⚙ 的案例可展開參數表單（預填預設值；⚡ 動態欄位留白＝每次執行自動產生唯一值；
+  「↺ 還原預設」回復）。只有動過的欄位會進請求。結果頁案例標題列會顯示本次實際使用的參數 chip。
+- **API**：`POST /runs` 增加可選 `overrides`：
+  ```json
+  { "environment": "LOCAL_OFFLINE",
+    "scenario_ids": ["room_nos_query"],
+    "overrides": { "room_nos_query": { "keyword": "11205" } } }
+  ```
+  驗證採「刻意寬鬆」：擋未知案例／未知參數鍵／型別轉換失敗／超過 64 字元（400 附可用清單），
+  但**不擋不合法值**——填壞值就是在測負面路徑（417/1000），分類器會接住。
+- **新增案例欄位**：在 `orchestrator/runners.py` 的 `@register_scenario(..., params=[ParamSpec(...)])`
+  加一行宣告即可，`/scenarios` 自動帶出、UI 免改。負面路徑案例（缺欄位/壞格式/查無）刻意不開放覆寫。
+- **Diff 分級**：覆寫造成的回應差異標「參數覆寫」（灰），真差異維持「真差異」（紅）、缺欄琥珀色；
+  期望值種子的 echo 欄位會先以本次參數回填再比對（避免誤報淹死真差異）。
+
+---
+
 ## 🌐 真實環境串接（ngrok 對外隧道）
 
 真實 PMS 雲端（QA / SIT / UG / MAS）要能把「**PMS→廠商**」方向的推播（新詠、博辰、華豫寧）
