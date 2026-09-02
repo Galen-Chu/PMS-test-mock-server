@@ -168,8 +168,8 @@ pytest tests_localFullStackClose/
 0. **安裝 ngrok**：[ngrok.com/download](https://ngrok.com/download) 下載後解壓，
    把 `ngrok.exe` 放進專案根目錄（或安裝到系統 PATH 皆可，沙盒兩處都會找）。
 1. 註冊/登入 [ngrok](https://ngrok.com)（免費帳號，完成 Email 驗證）。
-2. **申請固定網域**：Dashboard 左側 `Domains` → `New Domain` → 取名（如 `galen-pms-mock`）
-   → 得到 `xxxx.ngrok-free.app`（免費帳號限 1 個）。
+2. **取得固定網域**：Dashboard 左側 `Domains` → 免費帳號由系統**直接配發 1 個**
+   （不可自取名，網域為 `xxxx.ngrok-free.dev` 結尾；若畫面不給新增，用配發的那個即可）。
 3. **設定 authtoken**：Dashboard `Your Authtoken` 頁複製 token → 本機執行：
    ```bash
    ./ngrok.exe config add-authtoken <your_token>
