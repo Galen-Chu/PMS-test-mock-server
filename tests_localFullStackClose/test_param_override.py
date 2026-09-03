@@ -93,8 +93,14 @@ def test_full_payload_with_overrides(monkeypatch):
 
 
 def test_dynamic_defaults_unique_per_run():
-    """動態預設(唯一 ID)：同 run 求值一次、跨 run 每次不同。"""
+    """動態預設(唯一 ID)：同 run 求值一次、跨 run 每次不同。
+
+    動態預設為秒級時間戳(sa 慣例 %m%d%H%M%S),跨 run 唯一性的前提是跨秒——
+    連跑兩輪之間隔 1.05 秒,避免同秒碰撞讓斷言飄移。
+    """
+    import time
     run1 = engine.start_run(["car_arrival"], "LOCAL_OFFLINE")
+    time.sleep(1.05)
     run2 = engine.start_run(["car_arrival"], "LOCAL_OFFLINE")
     p1 = run1.cases[0].resolved_params
     p2 = run2.cases[0].resolved_params

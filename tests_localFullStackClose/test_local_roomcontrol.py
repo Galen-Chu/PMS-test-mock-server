@@ -1,0 +1,123 @@
+# tests_localFullStackClose/test_local_roomcontrol.py
+"""🌡️ 房控模組 Mock Server 閉環測試(需本地 Flask 沙盒在線:python main.py)。
+
+與 test_local_api.py 同類(打 127.0.0.1:5000);離線單元版見 test_roomcontrol.py。
+
+閉環鏈:廠商(編排端)──ROOM_STA 推送──► Mock PMS(落庫)──內部回讀──► 驗位元串一致
+                └──ROOM_INF 查詢──► Mock PMS ──住客列(ROOM_STA O/S/V)──► 斷言 sa10 A6 合約
+"""
+import os
+import sys
+import time
+from datetime import datetime
+
+import pytest
+import requests
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+BASE = "http://127.0.0.1:5000"
+IMPORT_URL = f"{BASE}/third-party/import-sync-files"
+STATE_URL = f"{BASE}/roomcontrol/internal/state"
+
+
+def _import_body(xml_str, third="TT", fname="C001.xml", athena="16", hotel="01"):
+    return {"athenaId": athena, "hotelCode": hotel, "thirdPartyCode": third,
+            "requestDataList": [{"requestBody": xml_str, "fileName": fname}]}
+
+
+def _room_sta_xml(room, bits):
+    return (
+        '<?xml version="1.0"?>\n<ROWSET>\n<ROW>\n'
+        f'<REVE-CODE>0300TT4190 </REVE-CODE>\n<ROOM_NOS>{room}</ROOM_NOS>\n'
+        '<INS_CARD_INF></INS_CARD_INF>\n<INS_CARD_NO></INS_CARD_NO>\n'
+        f'<ACTION_COD>#ROOM_STA#{bits}#</ACTION_COD>\n<ACTION_STA>1</ACTION_STA>\n'
+        f'<ACTION_DAT>{datetime.now().strftime("%Y/%m/%d %H:%M:%S")}</ACTION_DAT>\n'
+        '</ROW>\n</ROWSET>'
+    )
+
+
+def _room_inf_xml(room):
+    return (
+        '<?xml version="1.0"?>\n<ROWSET>\n<ROW>\n'
+        f'<REVE-CODE>0300TT1090</REVE-CODE>\n<ACTION_COD>ROOM_INF</ACTION_COD>\n'
+        f'<ROOM_NOS>{room}</ROOM_NOS>\n'
+        f'<ACTION_DAT>{datetime.now().strftime("%Y/%m/%d %H:%M:%S")}</ACTION_DAT>\n'
+        '</ROW>\n</ROWSET>'
+    )
+
+
+@pytest.fixture(scope="module")
+def server_up():
+    """前置:本地沙盒須在線,否則整檔跳過(與 test_local_api 同策略)。"""
+    try:
+        r = requests.get(f"{BASE}/scenarios", timeout=3)
+        assert r.status_code == 200
+    except Exception:
+        pytest.skip("本地 Flask 沙盒未啟動(先 python main.py)")
+    return True
+
+
+def test_closed_loop_room_sta_push_and_readback(server_up):
+    """閉環①:ROOM_STA 推送 → Mock PMS 落庫 → 內部回讀位元串一致 + "1112 Set" 回應。"""
+    room = f"9{datetime.now().strftime('%H%M%S')}"          # 每輪唯一房號,避免狀態殘留干擾
+    bits = "010101011001"
+    res = requests.post(IMPORT_URL, json=_import_body(_room_sta_xml(room, bits)))
+    assert res.status_code == 200
+    item = res.json()[0]
+    assert item["procStatus"] is True
+    assert "<RETN-CODE>0000</RETN-CODE>" in item["responseBody"]
+    assert f"1112 Set #ROOM_STA#{bits}#" in item["responseBody"]
+
+    rb = requests.get(STATE_URL).json()["room_control_state"]
+    assert rb[room]["status_bits"] == bits                  # 下命令 → 回讀一致(閉環斷言)
+
+
+def test_closed_loop_room_inf_query_contract(server_up):
+    """閉環②:ROOM_INF 查詢 → 一住客一 ROW / ROOM_STA=O / RETN 0000;空房 → V 單列。"""
+    res = requests.post(IMPORT_URL, json=_import_body(_room_inf_xml("2403")))
+    assert res.status_code == 200
+    item = res.json()[0]
+    assert item["procStatus"] is True
+    body = item["responseBody"]
+    assert body.count("<ROW>") == 2                          # 種子房 2403 兩位住客
+    assert "<ROOM_STA>O</ROOM_STA>" in body
+    assert "<CI_SER>200605120002001</CI_SER>" in body
+
+    body2 = requests.post(IMPORT_URL, json=_import_body(_room_inf_xml("813"))).json()[0]["responseBody"]
+    assert body2.count("<ROW>") == 1 and "<ROOM_STA>V</ROOM_STA>" in body2
+
+
+def test_mock_negative_gates(server_up):
+    """負面:壞 XML → 417;缺識別三元組 → 400(mock 契約守護)。"""
+    r1 = requests.post(IMPORT_URL, json=_import_body("<ROWSET><ROW>broken"))
+    assert r1.status_code == 417
+    r2 = requests.post(IMPORT_URL, json={"requestDataList": [{"requestBody": "<a/>"}]})
+    assert r2.status_code == 400
+
+
+def test_orchestrator_closed_loop_via_runs_api(server_up):
+    """閉環③(編排端視角):/runs 帶覆寫跑兩案——推送落庫回讀 + 查詢合約,全 PASS。"""
+    room = f"8{datetime.now().strftime('%H%M%S')}"
+    bits = "1000001100100000"
+    payload = {
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["rc_room_status_push", "rc_room_status_query"],
+        "overrides": {
+            "rc_room_status_push": {"room_no": room, "status_bits": bits},
+            "rc_room_status_query": {"room_no": "2403"},
+        },
+    }
+    run = requests.post(f"{BASE}/runs", json=payload).json()
+    assert run.get("run_id"), run
+    for _ in range(60):
+        snap = requests.get(f"{BASE}/runs/{run['run_id']}").json()
+        if snap["status"] != "RUNNING":
+            break
+        time.sleep(0.3)
+    results = {c["case_id"]: c for c in requests.get(f"{BASE}/runs/{run['run_id']}/results").json()}
+    push, query = results["rc_room_status_push"], results["rc_room_status_query"]
+    assert push["status"] == "PASS"
+    assert push["resolved_params"]["status_bits"] == bits
+    assert push["response_payload"]["state_readback_bits"] == bits     # 編排端閉環回讀
+    assert query["status"] == "PASS" and query["response_payload"]["row_count"] == 2

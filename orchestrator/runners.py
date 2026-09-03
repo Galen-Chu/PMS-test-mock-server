@@ -1071,11 +1071,21 @@ def _a7_import_payload(ctx: RunContext, xml_str: str, third_party: str, file_nam
 
 
 def _a7_first_response_item(res):
-    """取回應陣列首項與其 responseBody 解析列;失敗回 ({}, [])。"""
+    """取回應首項與其 responseBody 解析列;失敗回 ({}, [])。
+
+    相容兩種回應形狀:
+    - sa8/sa9 swagger:200 → [VendorImportSyncDataResponse, ...](沙盒 mock)
+    - REAL_QA 實測(2026-09-03):Athena 標準信封 {"code":"2000","data":[...]} 包著同結構
+    """
     try:
         body = res.json()
-        item = body[0] if isinstance(body, list) and body else {}
     except Exception:
+        body = None
+    if isinstance(body, dict) and isinstance(body.get("data"), list) and body["data"]:
+        item = body["data"][0]
+    elif isinstance(body, list) and body:
+        item = body[0]
+    else:
         item = {}
     rows = []
     if item.get("responseBody"):

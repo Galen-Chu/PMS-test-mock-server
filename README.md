@@ -72,8 +72,8 @@ PMS-test-mock-server/
 |------|------|------------------|
 | `LOCAL_OFFLINE` | 🔒 **閉環規格比對**——路由組好 Payload 後直接回傳供比對 SA 文件欄位，**完全不出站** | ❌ 否 |
 | `LOCAL` | 🔵 本地隔離沙盒——走 Ngrok 邊��端轉發 | ✅ 是（Ngrok） |
-| `REAL_QA` | 🟠 真實德安 QA 雲端 E2E 串接 | ✅ 是（QA 雲） |
-| `REAL_UG` | 🟢 真實德安 UG 雲端 E2E 串接（預設） | ✅ 是（UG 雲） |
+| `REAL_QA` | 🟠 真實德安 QA 雲端 E2E 串接（**2026-09-03 起預設**；後續測試資料以 QA 環境為主） | ✅ 是（QA 雲） |
+| `REAL_UG` | 🟢 真實德安 UG 雲端 E2E 串接 | ✅ 是（UG 雲） |
 
 > 💡 切換方式：直接改 `config.py` 的 `ENV_SWITCH`，或在 Dashboard 用下拉選單動態切換（詳見下節）。
 
@@ -148,8 +148,8 @@ pytest tests_localFullStackClose/
 ## 🧪 測試資產與閉環測試
 
 - **離線��跑**：`test_mock.py` 以 `responses` 函式庫 攔截 HTTP，純單元測試，不需網路與 server。
-- **需 server 在線**：`test_local_api.py`、`test_local_scenario.py` 打 `127.0.0.1:5000`，請先 `python main.py`（建議設 `LOCAL_OFFLINE` 模式以離線驗證）。
-- **需網路＋有效 Token**：`test_real_*.py` 直打真實德安雲端，日常 CI 不建議常駐執行。
+- **需 server 在線**：`test_local_api.py`、`test_local_scenario.py`、`test_local_roomcontrol.py`（房控閉環）打 `127.0.0.1:5000`，請先 `python main.py`（建議設 `LOCAL_OFFLINE` 模式以離線驗證）。
+- **需網路＋有效 Token**：`test_real_*.py` 直打真實德安雲端，日常 CI 不建議常駐執行；`test_real_roomcontrol_qa.py` 為房控 A7 公版 REAL_QA 串接探測（僅 `ENV_SWITCH=REAL_QA` 時執行；thirdParty 實際代碼到位後設 `A7_THIRD_PARTY` 環境變數重跑即轉正式斷言）。
 
 ---
 
