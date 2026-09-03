@@ -82,7 +82,7 @@ def _extract_room_nos(res):
 
 @register_scenario(
     "room_nos_query", module="amenity", vendor="BR_AIELLO",
-    name="房號查詢", endpoint="/room-pay/room-nos",
+    name="房號查詢住客", endpoint="/room-pay/room-nos",
     params=[ParamSpec("keyword", "房號關鍵字", "str", "11101",
                       hint="SA:在住房號關鍵字;9999 模擬查無(417/1001)")],
 )
@@ -104,7 +104,7 @@ def run_room_nos_query(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "mifare_query", module="amenity", vendor="BR_AIELLO",
-    name="Mifare 卡號查詢", endpoint="/room-pay/mifare-nos",
+    name="卡號查詢住客(Mifare)", endpoint="/room-pay/mifare-nos",
     params=[ParamSpec("keyword", "Mifare 卡號", "str", "1A2B3C",
                       hint="沙盒預設卡號映射房號 11101;未註冊卡號 → 417/1001")],
 )
@@ -126,7 +126,7 @@ def run_mifare_query(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "amenity_charge", module="amenity", vendor="BR_AIELLO",
-    name="備品入帳", endpoint="/room-billing",
+    name="備品入帳(2步・查房→過帳)", endpoint="/room-billing",
     expected_key="Scenario_1_Room_Nos_To_Billing",
     params=[
         ParamSpec("room_no", "房號", "str", "11101", echo_fields=("roomNos",)),
@@ -163,7 +163,7 @@ def run_amenity_charge(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "amenity_cancel", module="amenity", vendor="BR_AIELLO",
-    name="入帳沖銷", endpoint="/room-pay-cancel",
+    name="掛帳沖銷(2步・掛帳→作廢)", endpoint="/room-pay-cancel",
     expected_key="Scenario_3_Room_Nos_Pay_And_Cancel",
     params=[ParamSpec("room_no", "房號", "str", "11101", echo_fields=("roomPayMain.roomNos",))],
 )
@@ -205,7 +205,7 @@ def run_amenity_cancel(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "billing_sync", module="amenity", vendor="BR_AIELLO",
-    name="帳務同步", endpoint="/room-pay",
+    name="餐廳住掛", endpoint="/room-pay",
     expected_key="Scenario_2_Room_Nos_To_Pay",
     params=[ParamSpec("room_no", "房號", "str", "11101", echo_fields=("roomPayMain.roomNos",))],
 )
@@ -261,7 +261,7 @@ def _expect_417(case_id, scenario, dur, payload, res, expected_code):
 
 @register_scenario(
     "room_nos_query_notfound", module="amenity", vendor="BR_AIELLO",
-    name="查無房號(417/1001)", endpoint="/room-pay/room-nos",
+    name="查無房號(417・1001)", endpoint="/room-pay/room-nos",
 )
 def run_room_nos_query_notfound(ctx: RunContext) -> CaseResult:
     """SA 負面:查無此房號 → 417 code=1001(mock 以房號 9999 模擬無住客房)。"""
@@ -279,7 +279,7 @@ def run_room_nos_query_notfound(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "mifare_query_notfound", module="amenity", vendor="BR_AIELLO",
-    name="查無房卡卡號(417/1001)", endpoint="/room-pay/mifare-nos",
+    name="查無卡號(417・1001)", endpoint="/room-pay/mifare-nos",
 )
 def run_mifare_query_notfound(ctx: RunContext) -> CaseResult:
     """SA 負面:查無此房卡卡號 → 417 code=1001(mock 以未註冊卡號模擬)。"""
@@ -297,7 +297,7 @@ def run_mifare_query_notfound(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "amenity_billing_notfound", module="amenity", vendor="BR_AIELLO",
-    name="備品入帳無住客(417/1001)", endpoint="/room-billing",
+    name="入帳無住客(417・1001)", endpoint="/room-billing",
 )
 def run_amenity_billing_notfound(ctx: RunContext) -> CaseResult:
     """SA 負面:此房間無住客 → 417 code=1001(mock 以房號 9999 模擬,對齊 SA 失敗範例)。"""
@@ -315,7 +315,7 @@ def run_amenity_billing_notfound(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "amenity_pay_duplicate", module="amenity", vendor="BR_AIELLO",
-    name="重複掛帳(417/1010)", endpoint="/room-pay",
+    name="重複掛帳(417・1010)", endpoint="/room-pay",
 )
 def run_amenity_pay_duplicate(ctx: RunContext) -> CaseResult:
     """SA 負面:同單號重複掛帳 → 417 code=1010(先成功掛一筆,再掛同單號)。"""
@@ -356,7 +356,7 @@ def run_amenity_pay_duplicate(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "amenity_cancel_notfound", module="amenity", vendor="BR_AIELLO",
-    name="取消查無單號(417/2001)", endpoint="/room-pay-cancel",
+    name="沖銷查無單(417・2001)", endpoint="/room-pay-cancel",
 )
 def run_amenity_cancel_notfound(ctx: RunContext) -> CaseResult:
     """SA 負面:取消不存在的掛帳單號 → 417 code=2001(掛帳資料找不到)。"""
@@ -378,7 +378,7 @@ def run_amenity_cancel_notfound(ctx: RunContext) -> CaseResult:
 # ====================================================================
 @register_scenario(
     "car_arrival", module="parking", vendor="SHIN_YEONG",
-    name="車輛抵達回推", endpoint="/car-arrival",
+    name="車輛抵達(回推)", endpoint="/car-arrival",
     params=[
         ParamSpec("car_number", "車牌", "str",
                   default=lambda ctx: f"ABC-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
@@ -416,7 +416,7 @@ def run_car_arrival(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "checkin_sync", module="parking", vendor="SHIN_YEONG",
-    name="住客入住同步", endpoint="/check-in",
+    name="住客入住(推播)", endpoint="/check-in",
     params=[
         ParamSpec("car_number", "車牌", "str",
                   default=lambda ctx: f"ABC-{datetime.now().strftime('%m%d%H%M')}", hint="留自動=每次執行產生唯一車牌"),
@@ -452,7 +452,7 @@ def run_checkin_sync(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "whitelist_update", module="parking", vendor="SHIN_YEONG",
-    name="PMS 白名單異動", endpoint="/internal/whitelist",
+    name="白名單總覽(沙盒內部)", endpoint="/internal/whitelist",
 )
 def run_whitelist_update(ctx: RunContext) -> CaseResult:
     """驗證白名單查詢端點回傳當前落庫的住客字典（GET /parking/internal/whitelist）。"""
@@ -475,7 +475,7 @@ def run_whitelist_update(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "night_audit", module="parking", vendor="SHIN_YEONG",
-    name="夜核名單同步", endpoint="/pms-sync-data/night-audit",
+    name="夜核名單(推播)", endpoint="/pms-sync-data/night-audit",
     params=[
         ParamSpec("car_number", "車牌", "str",
                   default=lambda ctx: f"AUD-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
@@ -513,7 +513,7 @@ def run_night_audit(ctx: RunContext) -> CaseResult:
 # 模式同 car_arrival：先 check-in 落庫白名單，再打目��路由；這些 /pms-sync-data/* 無 auth gate。
 @register_scenario(
     "change_checkout", module="parking", vendor="SHIN_YEONG",
-    name="延長/修改退房", endpoint="/pms-sync-data/change-checkout-datetime",
+    name="修改退房時間(推播)", endpoint="/pms-sync-data/change-checkout-datetime",
     params=[
         ParamSpec("car_number", "原車牌", "str",
                   default=lambda ctx: f"CKO-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
@@ -548,7 +548,7 @@ def run_change_checkout(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "change_car_nos", module="parking", vendor="SHIN_YEONG",
-    name="車牌三態異動", endpoint="/pms-sync-data/change-car-nos",
+    name="車牌異動(推播)", endpoint="/pms-sync-data/change-car-nos",
     params=[
         ParamSpec("old_car_number", "原車牌", "str",
                   default=lambda ctx: f"OLD-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
@@ -584,7 +584,7 @@ def run_change_car_nos(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "check_in_cancel", module="parking", vendor="SHIN_YEONG",
-    name="取消入住", endpoint="/pms-sync-data/check-in-cancel",
+    name="取消入住(推播)", endpoint="/pms-sync-data/check-in-cancel",
     params=[
         ParamSpec("car_number", "車牌", "str",
                   default=lambda ctx: f"CIX-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
@@ -646,7 +646,7 @@ def _sa_sync_payload(guest_id, car, enabled="Yes", start=None, end=None, guest_n
 
 @register_scenario(
     "parking_sync_checkin", module="parking", vendor="SHIN_YEONG",
-    name="公版入住啟用", endpoint="/parking/sync",
+    name="入住啟用(公版)", endpoint="/parking/sync",
     params=[
         ParamSpec("car_number", "車牌", "str",
                   default=lambda ctx: f"SY-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
@@ -672,7 +672,7 @@ def run_parking_sync_checkin(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "parking_sync_change_car", module="parking", vendor="SHIN_YEONG",
-    name="公版換車號(舊停用+新啟用兩筆)", endpoint="/parking/sync",
+    name="換車號(公版・兩筆連發)", endpoint="/parking/sync",
     params=[
         ParamSpec("guest_name", "住客名", "str", "Orchestrator"),
         ParamSpec("old_car_number", "原車牌", "str",
@@ -709,7 +709,7 @@ def run_parking_sync_change_car(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "parking_sync_disable", module="parking", vendor="SHIN_YEONG",
-    name="公版清除車號(停用)", endpoint="/parking/sync",
+    name="清除車號(公版)", endpoint="/parking/sync",
     params=[
         ParamSpec("car_number", "車牌", "str",
                   default=lambda ctx: f"DIS-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
@@ -732,7 +732,7 @@ def run_parking_sync_disable(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "parking_sync_cancel", module="parking", vendor="SHIN_YEONG",
-    name="公版取消入住(當日結束)", endpoint="/parking/sync",
+    name="取消入住(公版)", endpoint="/parking/sync",
     params=[
         ParamSpec("car_number", "車牌", "str",
                   default=lambda ctx: f"CXL-{_ts()}", hint="留自動=每次執行產生唯一車牌"),
@@ -758,7 +758,7 @@ def run_parking_sync_cancel(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "parking_sync_invalid", module="parking", vendor="SHIN_YEONG",
-    name="公版參數錯誤(is_enabled 非法)", endpoint="/parking/sync",
+    name="非法參數(公版・1000)", endpoint="/parking/sync",
 )
 def run_parking_sync_invalid(ctx: RunContext) -> CaseResult:
     """SA 公版負面:is_enabled 非 Yes/No → code 1000(反向斷言)。"""
@@ -776,7 +776,7 @@ def run_parking_sync_invalid(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "car_arrival_missing_field", module="parking", vendor="SHIN_YEONG",
-    name="車輛抵達缺必填(417/1000)", endpoint="/external/vendor-sync-data/car-arrival",
+    name="缺必填欄位(回推・417・1000)", endpoint="/external/vendor-sync-data/car-arrival",
 )
 def run_car_arrival_missing_field(ctx: RunContext) -> CaseResult:
     """SA v1.2 負面:必填欄位缺值(car_number)→ 417 + code 1000 "xxx is required"。"""
@@ -798,7 +798,7 @@ def run_car_arrival_missing_field(ctx: RunContext) -> CaseResult:
 # ====================================================================
 @register_scenario(
     "car_arrival_pt", module="parking", vendor="PAYTRONEX",
-    name="新增房客預約(車輛抵達)", endpoint="/parktron/hpms/services/roomer/add",
+    name="新增房客預約(roomer/add)", endpoint="/parktron/hpms/services/roomer/add",
     params=[
         ParamSpec("room_number", "房號", "str", "207"),
         ParamSpec("license_plate", "車牌", "str",
@@ -832,7 +832,7 @@ def run_paytronex_add(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "car_arrival_retry", module="parking", vendor="PAYTRONEX",
-    name="車牌逆查(逾時重試)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate",
+    name="車牌逆查租約(find)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate",
     params=[ParamSpec("license_plate", "車牌", "str",
                       default=lambda ctx: f"FIND-{_ts()}", hint="留自動=每次執行產生唯一車牌")],
 )
@@ -899,7 +899,7 @@ def _pt_find_rentid(ctx, plate):
 
 @register_scenario(
     "paytronex_cancel_checkin", module="parking", vendor="PAYTRONEX",
-    name="取消入住管線(查租約→更新銷帳)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
+    name="取消入住(2步・查租約→銷帳)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
 )
 def run_paytronex_cancel_checkin(ctx: RunContext) -> CaseResult:
     """SA CIX:find 取 RentId → update(EndTime=當下+緩衝分鐘、車牌空)。
@@ -931,7 +931,7 @@ def run_paytronex_cancel_checkin(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "paytronex_clear_plate", module="parking", vendor="PAYTRONEX",
-    name="清除車號管線(查租約→空車牌更新)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
+    name="清除車號(2步・查租約→清牌)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
 )
 def run_paytronex_clear_plate(ctx: RunContext) -> CaseResult:
     """SA 綜合櫃台清除車號:find(修改前車號)→ update(LicensePlateList 空)。閉環:舊牌已移出原租約。"""
@@ -960,7 +960,7 @@ def run_paytronex_clear_plate(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "paytronex_change_plate", module="parking", vendor="PAYTRONEX",
-    name="更新車號管線(查舊牌→新牌更新)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
+    name="更新車號(2步・查舊牌→換新牌)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
 )
 def run_paytronex_change_plate(ctx: RunContext) -> CaseResult:
     """SA 綜合櫃台更新車號:find(修改前舊牌)取 RentId → update(新牌)。閉環:新牌查到同一租約。"""
@@ -989,7 +989,7 @@ def run_paytronex_change_plate(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "paytronex_change_checkout", module="parking", vendor="PAYTRONEX",
-    name="修改退房管線(查租約→新EndTime更新)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
+    name="修改退房(2步・查租約→改EndTime)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate + /update",
 )
 def run_paytronex_change_checkout(ctx: RunContext) -> CaseResult:
     """SA 修改退房日期:find 取 RentId → update(新 EndTime=退房日+最晚離場時間)。閉環:find 回新 EndTime。"""
@@ -1022,7 +1022,7 @@ def run_paytronex_change_checkout(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "paytronex_find_unknown", module="parking", vendor="PAYTRONEX",
-    name="查無車牌(動態虛擬租約・SA未定義)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate",
+    name="查無車牌(SA未定義・虛擬租約)", endpoint="/parktron/hpms/services/roomer/findByLicensePlate",
 )
 def run_paytronex_find_unknown(ctx: RunContext) -> CaseResult:
     """SA 未定義 find 查無行為;mock 現況=動態就地合法(建虛擬租約回 200)。本情境守護現況,待 SA 確認後改斷言。"""
@@ -1198,7 +1198,7 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
                  "8緊急 9清潔(1請掃/2掃中/3待巡/4巡中/0完成) 10勿擾 11房門 12-16保留")
     registry.register(
         f"rc_{slug}_room_sta_push", module="roomcontrol", vendor=vendor_id,
-        name=f"房況推送 ROOM_STA/B4({vendor_label})", endpoint="/third-party/import-sync-files",
+        name="房況推送(B4・ROOM_STA)", endpoint="/third-party/import-sync-files",
         runner=_room_sta_push,
         params=[
             ParamSpec("room_no", "房號", "str", "2403"),
@@ -1209,7 +1209,7 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
     )
     registry.register(
         f"rc_{slug}_room_inf", module="roomcontrol", vendor=vendor_id,
-        name=f"房況查詢 ROOM_INF/A6({vendor_label})", endpoint="/third-party/import-sync-files",
+        name="房況查詢(A6・ROOM_INF)", endpoint="/third-party/import-sync-files",
         runner=_room_inf_query,
         params=[
             ParamSpec("room_no", "房號", "str", "2403", hint="查無住客的房號會回 ROOM_STA=V(空房)單列"),
@@ -1219,7 +1219,7 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
     )
     registry.register(
         f"rc_{slug}_return", module="roomcontrol", vendor=vendor_id,
-        name=f"全房況查詢 RETURN/A10({vendor_label})", endpoint="/third-party/import-sync-files",
+        name="全房況查詢(A10・RETURN)", endpoint="/third-party/import-sync-files",
         runner=_return_all,
         params=[
             ParamSpec("third_party_code", "廠商代碼", "str", tp_code,
@@ -1309,7 +1309,7 @@ def _kc_make_card(ctx, room_nos, h, guest="Orchestrator", pre_out=None):
 
 @register_scenario(
     "keycard_login", module="keycard", vendor="WAFERLOCK",
-    name="登入取得Token", endpoint="/api/Auth/login",
+    name="登入取得Token(Auth)", endpoint="/api/Auth/login",
     params=[
         ParamSpec("account", "帳號", "str", "athena_pms", hint="Swagger LoginPara.id"),
         ParamSpec("password", "密碼", "str", "liveam_password_123"),
@@ -1335,7 +1335,7 @@ def run_keycard_login(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "keycard_room_lookup", module="keycard", vendor="WAFERLOCK",
-    name="房號轉房間編號", endpoint="/api/Room/getRoomIdByName/{name}",
+    name="房號轉編號(getRoomIdByName)", endpoint="/api/Room/getRoomIdByName/{name}",
     params=[ParamSpec("room_name", "房號名稱", "str", "401", hint="沙盒房號 101–499 皆可查得 roomID")],
 )
 def run_keycard_room_lookup(ctx: RunContext) -> CaseResult:
@@ -1359,7 +1359,7 @@ def run_keycard_room_lookup(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "keycard_make_card", module="keycard", vendor="WAFERLOCK",
-    name="正規製卡管線(訂單→讀卡→綁定)", endpoint="/api/Order + /api/Operation/getCardInfo + /api/OrderCard",
+    name="製卡(3步・訂單→讀卡→綁定)", endpoint="/api/Order + /api/Operation/getCardInfo + /api/OrderCard",
     params=[
         ParamSpec("room_no", "房號", "str", "401"),
         ParamSpec("guest_name", "住客名", "str", "MakeCard"),
@@ -1425,7 +1425,7 @@ def run_keycard_checkin_open(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "keycard_checkout_invalidate", module="keycard", vendor="WAFERLOCK",
-    name="退房取消失效(填checkoutTime)", endpoint="PUT /api/Order",
+    name="退房失效(CIX・填checkoutTime)", endpoint="PUT /api/Order",
 )
 def run_keycard_checkout_invalidate(ctx: RunContext) -> CaseResult:
     """SA CIX/CKO:PUT Order 填 checkoutTime → 卡片失效。閉環:GET 訂單驗 checkoutTime 已寫入。"""
@@ -1482,7 +1482,7 @@ def run_keycard_change_checkout(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "keycard_revoke_card", module="keycard", vendor="WAFERLOCK",
-    name="刪卡(DELETE + 重刪404)", endpoint="DELETE /api/OrderCard/{oid}/{cuid}",
+    name="刪卡(重刪404)", endpoint="DELETE /api/OrderCard/{oid}/{cuid}",
 )
 def run_keycard_revoke_card(ctx: RunContext) -> CaseResult:
     """真實管線製卡後刪卡:首刪 200;重刪應 404(ResponseData)——含負面斷言。"""
@@ -1533,7 +1533,7 @@ def run_keycard_bad_token(ctx: RunContext) -> CaseResult:
 
 @register_scenario(
     "card_lifecycle", module="keycard", vendor="WAFERLOCK",
-    name="跨模組卡片生命週期閉環（真實管線製卡→mifare 刷回房號）", endpoint="/api/OrderCard + /room-pay/mifare-nos",
+    name="卡片生命週期(跨模組閉環)", endpoint="/api/OrderCard + /room-pay/mifare-nos",
 )
 def run_card_lifecycle(ctx: RunContext) -> CaseResult:
     """B 閉環(真實管線版):keycard 製卡(Order→getCardInfo→OrderCard,注入 mock_card_mapping_db)
@@ -1578,5 +1578,5 @@ def run_card_lifecycle(ctx: RunContext) -> CaseResult:
 # ====================================================================
 registry.register_unimplemented(
     "card_issue_exception", module="keycard", vendor="LIVEAM",
-    name="製卡例外重試", endpoint="/key-card-management/liveam/create-card",
+    name="製卡例外重試(LIVEAM客製)", endpoint="/key-card-management/liveam/create-card",
 )

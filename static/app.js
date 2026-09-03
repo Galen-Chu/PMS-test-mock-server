@@ -212,26 +212,40 @@ function renderSetup() {
     );
     if (expanded) {
       const body = el('div', { class: 'module-body' });
-      // 廠商 chip 列(切換 activeVendor)
-      const chipRow = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px' });
+      // 廠商 chip 列(切換 activeVendor)+ 本廠商全選/清除
+      const activeV = m.vendors.find(v => v.id === (state.activeVendor[m.module] || m.vendors[0]?.id)) || m.vendors[0];
+      const chipRow = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px' });
       for (const v of m.vendors) {
-        const active = (state.activeVendor[m.module] || m.vendors[0]?.id) === v.id;
+        const active = v.id === activeV.id;
         chipRow.appendChild(el('div', {
           class: 'vendor-chip' + (active ? ' active' : ''),
           onclick: (e) => { e.stopPropagation(); state.activeVendor[m.module] = v.id; render(); },
           style: (active
             ? 'background:rgba(255,138,61,.18);border:1.5px solid #ff8a3d'
             : 'background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.16)')
-            + ';padding:4px 12px;gap:8px',
+            + ';padding:4px 12px;gap:10px;align-items:center;display:inline-flex',
         },
           el('span', { style: `font:600 12px 'JetBrains Mono';color:${active ? '#fff' : '#d7dae0'}`, text: v.label }),
-          el('span', { style: `font:11px 'JetBrains Mono';color:${active ? '#ffc79b' : '#9aa0ac'}`,
-                       title: '已勾選案例數', text: String(v.scenarios.filter(s => state.checked[s.id]).length) }),
+          // 勾選數:徽章式呈現,與 label 明確分離
+          el('span', {
+            style: `font:600 10.5px 'JetBrains Mono';padding:1px 8px;border-radius:9px;`
+                 + (active ? 'background:rgba(255,138,61,.28);color:#ffd9b8' : 'background:rgba(255,255,255,.09);color:#b9bfca'),
+            title: '已勾選案例數 / 該廠商案例數',
+            text: `${v.scenarios.filter(s => state.checked[s.id])}/${v.scenarios.length}`,
+          }),
         ));
       }
+      // 本廠商(作用中)全選/清除
+      if (activeV && activeV.scenarios.length) {
+        const vAll = activeV.scenarios.every(s => state.checked[s.id]);
+        chipRow.appendChild(el('button', {
+          class: 'btn-secondary matrix-bulk', text: vAll ? '✕ 清除本商' : '☑ 全選本商',
+          title: `全選/清除「${activeV.label}」的案例`,
+          onclick: (e) => { e.stopPropagation(); for (const s of activeV.scenarios) state.checked[s.id] = !vAll; render(); },
+        }));
+      }
       body.appendChild(chipRow);
-      // 當前選中廠商的案例清單
-      const activeV = m.vendors.find(v => v.id === (state.activeVendor[m.module] || m.vendors[0]?.id)) || m.vendors[0];
+      // 當前選中廠商的案例清單(activeV 已於上方求得)
       if (activeV) for (const s of activeV.scenarios) {
         const ck = !!state.checked[s.id];
         const hasParams = !!(s.params && s.params.length);
@@ -460,12 +474,18 @@ function renderSummary() {
   state.summaryExpand = state.summaryExpand || {};
   const exp = state.summaryExpand;
 
-  // 可點擊統計卡:點擊展開該類別的案例條列(模組/廠商/路由路徑)
+  // 可點擊統計卡:單選式展開——點別張卡即覆蓋目前的展開(同一時間只展開一個清單)
   const mkStat = (key, label, val, cls, list) => {
-    const card = statCard(label + (list && list.length ? ' ▾' : ''), val, cls);
+    const card = statCard(label + (list && list.length ? (exp[key] ? ' ▴' : ' ▾') : ''), val, cls);
     if (list && list.length) {
       card.classList.add('clickable');
-      card.onclick = () => { exp[key] = !exp[key]; state.snapshotPreview = false; render(); };
+      card.onclick = () => {
+        const on = !exp[key];
+        for (const k of Object.keys(exp)) exp[k] = false;   // 互斥:其他卡收合
+        exp[key] = on;
+        state.snapshotPreview = false;
+        render();
+      };
     }
     return card;
   };
