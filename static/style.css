@@ -33,6 +33,7 @@ a { color: var(--link); } a:hover { color: var(--link-hover); }
 .nav-item.active { background: rgba(255,138,61,.12); border-left-color: var(--accent); color: #fff; }
 .nav-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--running); }
 .nav-dot.green { background: var(--pass); }
+.nav-dot.yellow { background: #ffb02e; }   /* 結果頁未讀提示(有結果但未查看)——與執行中的藍、通過的綠區隔 */
 .sidebar .foot {
   margin-top: auto; padding: 12px 8px; border-top: 1px solid var(--border);
   font: 11px/1.6 'JetBrains Mono'; color: var(--text-dim);
@@ -50,7 +51,7 @@ a { color: var(--link); } a:hover { color: var(--link-hover); }
 }
 .env-dot { width: 8px; height: 8px; border-radius: 50%; }
 .content { flex: 1; overflow: auto; padding: 28px; }
-.page { max-width: 960px; display: flex; flex-direction: column; gap: 22px; }
+.page { max-width: 1180px; display: flex; flex-direction: column; gap: 22px; }  /* 加寬:案例檢視主從明細需要橫向空間 */
 
 /* ---- ① 設定頁：環境卡 ---- */
 .section-label { font: 600 12px 'Space Grotesk'; color: var(--text-mute); letter-spacing: .04em; margin-bottom: 10px; }
@@ -105,7 +106,7 @@ a { color: var(--link); } a:hover { color: var(--link-hover); }
 }
 .scenario .box.checked { background: var(--pass); border-color: var(--pass); }
 .scenario .name { font-size: 12.5px; color: #d7dae0; flex: 1; }
-.scenario .ep { font: 10.5px 'JetBrains Mono'; color: #5b6270; }
+.scenario .ep { font: 10.5px 'JetBrains Mono'; color: #8a919e; }   /* 路由路徑亮度提升 */
 .scenario .tag { font: 9px 'JetBrains Mono'; color: var(--text-dim); border: 1px solid var(--border); padding: 1px 6px; border-radius: 8px; margin-left: 6px; }
 
 /* sticky 啟動列 */
@@ -164,7 +165,10 @@ a { color: var(--link); } a:hover { color: var(--link-hover); }
 .diff-row .f { color: var(--text-mute); } .diff-row .e { color: var(--pass); } .diff-row .a { color: var(--fail); }
 
 .timeline-row { display: flex; align-items: center; gap: 10px; }
-.timeline-row .tname { width: 150px; font: 11px 'Space Grotesk'; color: var(--text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-row .tname { width: 230px; flex: none; overflow: hidden; }
+.timeline-row .tname .nm { font: 600 11.5px 'Space Grotesk'; color: #d7dae0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timeline-row .tname .rt { font: 10.5px 'Space Grotesk'; color: var(--text-mute); }
+.timeline-row .tname .ep { font: 10px 'JetBrains Mono'; color: #8a919e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .timeline-track { flex: 1; height: 16px; background: var(--card); border-radius: 4px; overflow: hidden; }
 .timeline-fill { height: 100%; }
 .timeline-row .tdur { width: 52px; text-align: right; font: 11px 'JetBrains Mono'; color: var(--text-dim); }
@@ -194,7 +198,7 @@ a { color: var(--link); } a:hover { color: var(--link-hover); }
 .case-detail { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 16px; min-width: 0; }
 .detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .detail-head .detail-title { font: 600 13px 'Space Grotesk'; color: #fff; flex: 1; min-width: 0; }
-.detail-head .ep { font: 11px 'JetBrains Mono'; color: var(--text-dim); }
+.detail-head .ep { font: 11px 'JetBrains Mono'; color: var(--text-mute); }
 .result-tabs.sub { margin-bottom: 14px; }
 
 /* HTTP 逐步交易卡(可折疊) */
@@ -258,10 +262,10 @@ pre.json.error { color: var(--fail); }
 
 /* ---- ⚙ 案例參數化(設計 §8):表單 + chip + diff 分級 ---- */
 .gear {
-  cursor: pointer; font-size: 12px; color: var(--text-dim); padding: 1px 4px; border-radius: 4px;
+  cursor: pointer; font-size: 13px; color: #b9bfca; padding: 1px 5px; border-radius: 4px;
   flex: none; user-select: none;
 }
-.gear:hover { color: #fff; background: rgba(255,255,255,.08); }
+.gear:hover { color: #fff; background: rgba(255,255,255,.1); }
 .gear.on { color: var(--accent); }
 .gear.dirty { color: var(--accent); }
 .gear.dirty::after { content: '・'; color: var(--accent); }
@@ -302,3 +306,51 @@ pre.json.error { color: var(--fail); }
 .k-badge-missing { color: #ffb02e; }
 .diff-row.k-param_echo .f, .diff-row.k-param_echo .e, .diff-row.k-param_echo .a { opacity: .55; }
 .diff-row.k-missing .a { color: #ffb02e; }
+
+/* ---- UX 優化(2026-09-03 驗收回饋)---- */
+/* 案例矩陣:全選/清除全選 */
+.matrix-bulk { padding: 4px 12px; font-size: 11px; }
+
+/* 結果頁表頭:分頁 + 繼續測試按鈕靠右 */
+.results-head { align-items: center; }
+.results-head .continue-btn { margin-left: auto; padding: 6px 14px; font-size: 11.5px; white-space: nowrap; }
+
+/* 摘要:統計卡可點擊 + 展開條列 */
+.stat-card.clickable { cursor: pointer; transition: border-color .15s; }
+.stat-card.clickable:hover { border-color: var(--accent); }
+.stat-detail { margin-top: 12px; }
+.stat-detail .detail-title { color: var(--text-mute); }
+.stat-detail-row { display: flex; align-items: center; gap: 12px; padding: 6px 4px; border-bottom: 1px solid var(--border-soft); }
+.stat-detail-row .st { width: 52px; flex: none; font: 11px 'JetBrains Mono'; }
+.stat-detail-row .route { font: 11px 'JetBrains Mono'; color: #9fd3ff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-detail-row .nm { font: 11.5px 'Space Grotesk'; color: var(--text-mute); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-detail-row .dur { font: 11px 'JetBrains Mono'; color: var(--pass); flex: none; }
+
+/* 失敗歸類:Given-When-Then 三段式 */
+.gwt-case { padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,.18); margin-top: 10px; }
+.gwt-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.gwt-head .gwt-name { font: 600 12px 'Space Grotesk'; color: #d7dae0; flex: 1; }
+.gwt-head .dur { font: 10.5px 'JetBrains Mono'; color: var(--text-dim); }
+.gwt { display: flex; flex-direction: column; gap: 4px; }
+.g-line { font: 11.5px/1.6 'Space Grotesk'; color: #c7cbd4; padding-left: 10px; border-left: 2px solid var(--border); }
+.g-line.g-given { border-left-color: #4da3ff; }
+.g-line.g-when { border-left-color: #c084fc; }
+.g-line.g-then { border-left-color: var(--fail); color: #e7e9ee; }
+.g-line b { color: #fff; }
+
+/* RWD:中窄螢幕調整主從欄寬,讓案例明細保有閱讀寬度 */
+@media (max-width: 1000px) {
+  .page { max-width: none; }
+  .browser { grid-template-columns: 220px 1fr; }
+  .summary-cards { flex-wrap: wrap; }
+  .stat-card { min-width: 45%; }
+  .timeline-row .tname { width: 170px; }
+}
+@media (max-width: 760px) {
+  .browser { grid-template-columns: 1fr; }
+  .stat-card { min-width: 100%; }
+  .results-head { flex-wrap: wrap; }
+  .results-head .continue-btn { margin-left: 0; }
+  .timeline-row { flex-wrap: wrap; }
+  .timeline-row .tname { width: 100%; }
+}
