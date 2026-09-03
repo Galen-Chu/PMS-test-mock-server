@@ -1044,6 +1044,128 @@ def run_paytronex_find_unknown(ctx: RunContext) -> CaseResult:
     return _fail("paytronex_find_unknown", "", scenario, dur, request_payload=payload, response_payload=body)
 
 
+# ====================================================================
+# 🌡️ 房控(roomcontrol / A7 公版 XML 介面)— 對齊 sa_docs/sa10 V1.2
+# 方向:廠商→PMS(沙盒發砲端=模擬房控廠商;mock PMS 側在 server/roomcontrol/)。
+# RC0 兩案:B4 ROOM_STA 房況推送(16 位房況字串)、A6 ROOM_INF 房況查詢(住客現況)。
+# 傳輸:POST /third-party/import-sync-files(sa8/sa9 REST 版;
+#      GET TxnData 閘門版見 sa10,REAL 端點與 thirdParty 實際代碼待 SA 提供)。
+# ====================================================================
+from server.roomcontrol.vendors.vendor_A7_XML import (
+    build_room_sta_push, build_room_inf_query, parse_rowset_xml,
+    DEFAULT_STATUS_BITS,
+)
+
+
+def _a7_identity(ctx: RunContext):
+    """A7 公版識別三元組(athena/hotel 取自該環境矩陣;thirdParty 由案例參數帶入)。"""
+    return (str(ctx.headers_amenity.get("athena") or "25"),
+            str(ctx.headers_amenity.get("hotel") or "01"))
+
+
+def _a7_import_payload(ctx: RunContext, xml_str: str, third_party: str, file_name="C001.xml") -> dict:
+    """組 VendorImportSyncDataRequest(XML 字串包進 JSON,sa8/sa9 swagger 契約)。"""
+    athena, hotel = _a7_identity(ctx)
+    return {"athenaId": athena, "hotelCode": hotel, "thirdPartyCode": third_party,
+            "requestDataList": [{"requestBody": xml_str, "fileName": file_name}]}
+
+
+def _a7_first_response_item(res):
+    """取回應陣列首項與其 responseBody 解析列;失敗回 ({}, [])。"""
+    try:
+        body = res.json()
+        item = body[0] if isinstance(body, list) and body else {}
+    except Exception:
+        item = {}
+    rows = []
+    if item.get("responseBody"):
+        try:
+            rows = parse_rowset_xml(item["responseBody"])
+        except Exception:
+            rows = []
+    return item, rows
+
+
+@register_scenario(
+    "rc_room_status_push", module="roomcontrol", vendor="A7_XML",
+    name="房況推送(ROOM_STA/B4)", endpoint="/third-party/import-sync-files",
+    params=[
+        ParamSpec("room_no", "房號", "str", "2403"),
+        ParamSpec("status_bits", "房況位元串", "str", DEFAULT_STATUS_BITS,
+                  hint="16 位:1Keyhouse 2Keybox 3冷氣 4總電源 5鐵捲門 6一氧化碳 7防盜 8緊急 9清潔(1請掃/2掃中/3待巡/4巡中/0完成) 10勿擾 11房門 12-16保留"),
+        ParamSpec("third_party_code", "廠商代碼", "str", "TT",
+                  hint="A7 公版 thirdParty 代碼;TT=sa10 佔位,實際值由德安上線前提供"),
+    ],
+)
+def run_rc_room_status_push(ctx: RunContext) -> CaseResult:
+    """B4 送全部房況:推 16 位房況字串 → 斷言 procStatus + RETN-CODE 0000 + "1112 Set";
+    LOCAL 再經內部回讀閉環驗證狀態已落庫(REAL 無內部端點,跳過回讀)。"""
+    import time as _t
+    scenario = registry.get("rc_room_status_push")
+    p = _p(ctx, "rc_room_status_push")
+    xml_str = build_room_sta_push(p["room_no"], p["status_bits"])
+    payload = _a7_import_payload(ctx, xml_str, p["third_party_code"])
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    summary = {"room_no": p["room_no"], "action_cod": f"#ROOM_STA#{p['status_bits']}#"}
+    if err or res is None:
+        return _fail("rc_room_status_push", "", scenario, dur, request_payload=payload,
+                     response_payload={"__error__": err or "no response"})
+    item, rows = _a7_first_response_item(res)
+    retn = rows[0].get("RETN-CODE") if rows else None
+    summary.update({"procStatus": item.get("procStatus"), "retn_code": retn,
+                    "retn_desc": rows[0].get("RETN-CODE-DESC") if rows else None})
+    ok = res.status_code == 200 and item.get("procStatus") is True and retn == "0000"
+    # LOCAL 閉環:內部回讀斷言位元串已落庫(下命令→回讀,前例:keycard checkinTime)
+    if ok and not ctx.use_real:
+        res_rb, _ = execute_for_ctx(ctx, "GET", ctx.urls["roomcontrol_internal"])
+        if res_rb is not None and res_rb.status_code == 200:
+            state = (res_rb.json() or {}).get("room_control_state") or {}
+            summary["state_readback_bits"] = (state.get(p["room_no"]) or {}).get("status_bits")
+            ok = summary["state_readback_bits"] == p["status_bits"]
+    if ok:
+        return _ok("rc_room_status_push", "", scenario, dur, request_payload=payload, response_payload=summary)
+    return _fail("rc_room_status_push", "", scenario, dur, request_payload=payload, response_payload=summary)
+
+
+@register_scenario(
+    "rc_room_status_query", module="roomcontrol", vendor="A7_XML",
+    name="房況查詢(ROOM_INF/A6)", endpoint="/third-party/import-sync-files",
+    params=[
+        ParamSpec("room_no", "房號", "str", "2403", hint="查無住客的房號會回 ROOM_STA=V(空房)單列"),
+        ParamSpec("third_party_code", "廠商代碼", "str", "TT",
+                  hint="A7 公版 thirdParty 代碼;TT=sa10 佔位,實際值由德安上線前提供"),
+    ],
+)
+def run_rc_room_status_query(ctx: RunContext) -> CaseResult:
+    """A6 房間狀態查詢:ROOM_INF → 斷言 procStatus + 每住客一 ROW + ROOM_STA(O/S/V)+ RETN-CODE 0000。"""
+    import time as _t
+    scenario = registry.get("rc_room_status_query")
+    p = _p(ctx, "rc_room_status_query")
+    xml_str = build_room_inf_query(p["room_no"])
+    payload = _a7_import_payload(ctx, xml_str, p["third_party_code"], file_name="C002.xml")
+    t0 = _t.perf_counter()
+    res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    if err or res is None:
+        return _fail("rc_room_status_query", "", scenario, dur, request_payload=payload,
+                     response_payload={"__error__": err or "no response"})
+    item, rows = _a7_first_response_item(res)
+    summary = {
+        "procStatus": item.get("procStatus"),
+        "row_count": len(rows),
+        "rows": rows,   # 結構化住客列(JSON 稽核可直接檢視;HTTP 稽核另有原始 XML)
+    }
+    first = rows[0] if rows else {}
+    ok = (res.status_code == 200 and item.get("procStatus") is True
+          and rows and first.get("ROOM_STA") in ("O", "S", "V", "R")
+          and first.get("RETN-CODE") == "0000")
+    if ok:
+        return _ok("rc_room_status_query", "", scenario, dur, request_payload=payload, response_payload=summary)
+    return _fail("rc_room_status_query", "", scenario, dur, request_payload=payload, response_payload=summary)
+
+
 # （原本 checkin_sync/whitelist_update/car_arrival_retry 的 UNIMPLEMENTED 註冊已由上方實作取代）
 
 

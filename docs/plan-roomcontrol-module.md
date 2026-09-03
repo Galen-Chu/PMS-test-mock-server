@@ -22,7 +22,17 @@
 
 ## 1. 契約盤點(全部已在 sa_docs,附出處)
 
-### 1.1 傳輸層(sa8/sa9:`POST /third-party/import-sync-files`「處理廠商主動發送的資料(請求C001.xml,回傳C001.xml)」)
+> ✅ 2026-09-03 SA 正式文件入庫:**`sa_docs/sa10_a7_pms_xml.txt`**(A7PMS串接信息XML說明 V1.2,2026-09-02 改版)
+> ——本節原由 sa8/sa9 swagger 範例反推的契約已全數獲得正式文件證實,並補齊位元表/代碼表/回應形狀。
+
+### 1.0 傳輸層(sa10「訊息交換呼叫方式」+ sa8/sa9 swagger)
+
+- **HTTP GET 閘門版**(sa10 明載):`德安網址?athena=25&hotel=01&thirdParty=TT&TxnData=<XML>&Randomstr=1&istom=1`
+  (istom=1 TxnData 用 URLEncode、4 用 Base64;URL 內 `#` 需寫 `%23`;實際 URL 客戶環境備妥時提供)
+- **REST 版**(sa8/sa9):`POST /third-party/import-sync-files`(請求 C001.xml,回傳 C001.xml)
+- **RC0 實作 REST 版**(在 QA/SIT swagger 有定義、可測);REAL 實測用哪版待 SA 確認。
+
+### 1.1 REST 版契約(sa8/sa9)
 
 ```
 請求  VendorImportSyncDataRequest  { athenaId, hotelCode, thirdPartyCode,
@@ -69,17 +79,17 @@ RoomCtrl 18 端點(強制供電/預冷/空調/溫度/風速/窗簾/燈迴/服務
 
 ---
 
-## 2. 規格缺口(向 SA 索取清單;不阻塞 RC0)
+## 2. 規格缺口(2026-09-03 sa10 入庫後更新)
 
-| # | 問題 | 影響 |
+| # | 問題 | 狀態 |
 |---|---|---|
-| Q1 | `#ROOM_STA#010101011001#` **位元字串每一位的定義**(順序/長度/語意) | RC0 僅能原樣轉發斷言;位元級驗證要等 |
-| Q2 | **ROOM_INF 回應 XML 形狀**(房況欄位 + 多住客帳務編號結構) | RC0 的查詢案先只斷言 procStatus + RETN-CODE 0000 |
-| Q3 | `ACTION_STA` 值域與語意(CLEAN=1?);`ACTION_DAT` 格式確定 yyyy/mm/dd hh:mm:ss? | 負面路徑與種子 |
-| Q4 | REVE-CODE/SEND-CODE 完整代碼表(已知:房控推播 0300TT4190、房況查詢 0300TT1090) | 解析器嚴謹度 |
-| Q5 | `thirdPartyCode` 實際值;import-sync-files 的**鑑別**(比照 vendor-sync 免 Authorization?或需 token) | REAL_QA/SIT 實測(RC1) |
-| Q6 | `procStatus=false` 的錯誤處理與重送契約 | 負面路徑 |
-| Q7 | 真實測試台房控設備前提(實體/模擬/無) | RC3 的 REAL 驗證深度 |
+| Q1 | `#ROOM_STA#` **16 位房況字串定義** | ✅ sa10「房間房況順序說明」:1 Keyhouse(1拔卡0插卡)/2 Keybox(1插卡0拔卡)/3 冷氣/4 總電源/5 鐵捲門/6 一氧化碳(1動作0無)/7 防盜(0動作1無)/8 緊急(0動作1無,F=OFF_LINE)/**9 房間清潔(1請打掃/2打掃中/3待巡房/4巡房中/0清潔完成——德安收 0 設乾淨房)**/10 勿擾/11 房門(0開1關)/12–16 保留;預設 `#1000001100100000#` |
+| Q2 | **ROOM_INF 回應 XML 形狀** | ✅ sa10 A6:一住客一 ROW;ROOM_STA CHAR(1) O住人/S參觀/V空房;GUEST_STA K關帳/O開帳;CI_SER/ALT_NAM/稱謂/姓名/CI_DAT/CI_TIM/ECO_DAT/TEL_NOS/BIRTH_DAT/ADVBAL_AMT/CCARD_AMT/LANG/VIP_STA + RETN 尾列 |
+| Q3 | `ACTION_STA` 值域與語意 | ✅ sa10 B4:1=設定、0=清除;逐 action 對照(勿擾/緊急/房門/清潔 0–4)已入 vendor 模組註解 |
+| Q4 | REVE-CODE/SEND-CODE 完整代碼表 | ✅ sa10 訊息列表(雙向全表):PMS→廠商 CKI/CKO/RMC/CIX/COX/QUERY/CLEAN_STA/SET_PRECOOL(0300901xTT 系);廠商→PMS ROOM_INF 0300TT1090/BILL_LIST 0300TT1190/RETURN 0300TT4290/ROOM_STA 系 0300TT4190/KeyBox 0300TT4390 |
+| Q5 | `thirdPartyCode` 實際值 + REAL 端點(GET 閘門版 vs REST 版)+ 鑑別 | ⏳ **= 2026-09-03 與 SA 確認「使用公版 API 的房控廠商」**(代碼 TT 為佔位;已做成案例參數 `third_party_code` 可覆寫) |
+| Q6 | `procStatus=false` 的錯誤處理與重送契約 | ⏳ sa10 僅檔案介面側註解(procStatus=false → xxx_ret_err.xml 不移檔) |
+| Q7 | 真實測試台房控設備前提(實體/模擬/無) | ⏳ RC3 的 REAL 驗證深度 |
 
 ---
 
@@ -97,8 +107,9 @@ orchestrator/runners.py              # module="roomcontrol" 案例(發砲端=模
 - **mock 路由行為**:解析 requestDataList 內 XML → ROOM_STA 更新 `mock_roomcontrol_db[room_no]` →
   回 `[{procStatus: true, responseBody: <SEND-CODE/RETN-CODE 0000 XML>}]`;ROOM_INF 回該房現況
   (形狀待 Q2,先最小對稱實作);XML 壞格式 → 417 ApiDataValidErrorResponse(對齊錯誤信封)。
-- **閉環斷言(房控版)**:`rc_room_status_push` 推位元串 → `rc_room_status_query` 查同房號 →
-  斷言查得的房況 = 推送的位元串(下命令→回讀,同 keycard checkinTime 模式)。
+- **閉環斷言(房控版;2026-09-03 依 sa10 修正)**:ROOM_INF 回的是「住客現況 + ROOM_STA(O/S/V)」,
+  不回 16 位房況字串——故閉環走 **push 落庫 → `GET /roomcontrol/internal/state` 回讀位元串一致**
+  (LOCAL only;前例 parking `/parking/internal/whitelist`);ROOM_INF 案則斷言一住客一 ROW + ROOM_STA + RETN-CODE 0000。
 - **XML 稽核**:發送時 `steps.request_body` 自然存原始 XML 字串(HTTP 稽核);
   runner 另以**結構化 dict**(room_no/action_cod/action_sta…)存 `request_payload` 供 JSON 稽核與 diff——
   種子與 diff 都對結構化形狀比對,不對整段 XML 字串 diff(避免宣告/空白噪音)。
@@ -120,9 +131,9 @@ orchestrator/runners.py              # module="roomcontrol" 案例(發砲端=模
 
 | 期 | 內容 | 工作量 | 前提 |
 |---|---|---|---|
-| **RC0(可立即動工)** | 模組骨架 + XML 管線(組裝/解析/417)+ ROOM_STA/ROOM_INF 兩案 + push→query 閉環 + 離線測試 + UI label | 約 1 天 | 無 |
-| **RC1** | REAL_QA/SIT 實測一輪(import-sync-files)+ 通關種子入庫 | 約 0.5 天 | Q5 鑑別資訊 |
-| **RC2** | 同族 action(CLEAN/RMTEMP)+ 位元級驗證 + 負面路徑補齊 | 約 1 天 | Q1/Q3/Q4 |
+| **RC0** | 模組骨架 + XML 管線(組裝/解析/417)+ ROOM_STA/ROOM_INF 兩案 + push 落庫閉環 + 離線測試 + UI label | ✅ **2026-09-03 完成**(7 新離線測試;實跑閉環/雙住客列/空房 V 列全過) | 無 |
+| **RC1** | REAL_QA/SIT 實測一輪(import-sync-files 或 GET 閘門版,依 Q5 結果)+ 通關種子入庫 | 約 0.5 天 | Q5(廠商/代碼/端點/鑑別) |
+| **RC2** | 同族 action(CLEAN/RMTEMP/KeyBox B5)+ 位元級驗證 + 負面路徑補齊 | 約 1 天 | —(sa10 已補齊 Q1/Q3/Q4) |
 | **RC3** | sa7 PMS→廠商房控面(讀取 ×3 + 高值寫入:unlockDoor/switchAC/mandatoryPower) | 約 1 天 | Q7 設備前提 |
 
 ---

@@ -1,0 +1,1076 @@
+┌─TABLE─┐
+ │ 同一家飯店，只能由交換機、房控、德安APP 來變更房間狀況，其餘只能來跟德安要房間狀況
+ │ 修訂歷程
+ │ 版本 │ 日期 │ 修訂者 │ 目的
+ │ V1.0 │ 2025/07/28 │ 蔡佳伶 │ 建立
+ │ V1.1 │ 2026.03.04 │ 蔡佳伶 │ 新增B8:房務入帳
+ │ V1.2 │ 2026.09.02 │ 蔡佳伶 │ 文件內容排版文字修正
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+ │  │  │  │ 
+└───────┘
+訊息交換呼叫方式
+HTTP執行流程(HTTP GET)
+德安網址?athena=25&hotel=01&thirdParty=TT&TxnData=<XML>&Randomstr=1&istom=1
+紅字區段由德安提供給廠商。
+實際串接URL於客戶環境準備好需測試時再提供。
+Parameter:
+athena:由德安提供客戶固定代號(必填)
+hotel: 由德安提供客戶固定代號(必填)
+thirdParty:由德安提供該廠商固定代號(必填)
+TxnData: 訊息之XML內容(必填)
+Randomstr: 預設1,隨機字串(避免Browser Cache)
+istom: 預設1(TxnData使用URLEncode), 4(TxnData使用Base64)
+廠商須提供一個URL，接收德安傳送的入住、退房、換房資訊
+舉例說明，IPTV提供URL ：
+接收C/I ，取得住客姓名等資訊，於IPTV系統自行決定呈現的歡迎詞
+接收C/O，清除房間的住客姓名等資訊
+訊息列表
+PMS：德安PMS系統
+TT  ：接收端，實際代號於上線前由德安資訊提供，文件內僅以TT來代表，非真正串接的代號
+傳送方向：PMS 傳送 至 廠商
+┌─TABLE─┐
+ │ 項次 │ 作業說明 ACTION_COD │ 訊息代碼 │ 說明與發送時機 │ 房控可串 │ IPTV迎賓詞可串
+ │ A1 │ CKI │ 03009010TT │ PMS執行C/I時傳送住客資訊，一房間只送一筆住客 │ V │ V
+ │ A2 │ CKO │ 03009020TT │ PMS執行C/O時傳送住客資訊，一房間只送一筆住客 │ V │ V
+ │ A3 │ RMC │ 03009030TT │ 執行換房時傳送住客資訊，一房間只送一筆住客 接收端需將舊房號的資訊換到新房號，舊房號清空變成未入住 │ V │ V
+ │ A4 │ CIX │ 03009011TT │ PMS執行C/I還原，變成未入住過， 一房間只送一筆住客，力廣若入住取消不改髒房就需要設定參數指定丟此指令 │ V │ V
+ │ A5 │ COX │ 03009021TT │ 在PMS執行C/O還原，一房間只送一筆住客 │ V │ V
+ │ B2 │ QUERY │ 03009041TT │ PMS詢問廠商房況 當PMS需要知道某個房間房控現況資料時 │ V │ 
+ │ B6 │ CLEAN_STA │ 03009043TT │ PMS傳送清掃狀況 （僅力廣使用） │ V │ 
+ │ B7 │ SET_PRECOOL │ 03009045TT │ 預冷功能 設定房間預冷 │ V │ 
+└───────┘
+傳送方向：廠商傳送 至 PMS
+┌─TABLE─┐
+ │ 項次 │ 作業說明 ACTION_COD │ 訊息代碼 25碼 │ 說明與發送時機 │ 房控可串 │ IPTV迎賓詞可串
+ │ A6 │ ROOM_INF │ 0300TT1090 │ 廠商跟PMS要求傳送某個房間現況住客資訊 發送時機： 例如: 房控廠商系統要重置住客資訊時, 呼叫 │ V │ V
+ │ A7 │ BILL_LIST │ 0300TT1190 │ 廠商跟PMS要求傳送某個房間帳務明細 A7沒有翻,  廣捷迎賓詞要用 │  │ 
+ │ A10 │ RETURN │ 0300TT4290 │ 廠商跟PMS要求傳送全部房況資料 用於看房間有沒有住人 傳送的房況有： A7沒有翻，力廣bridgeApp會用! │ Ｖ │ 
+ │ B4 │ ROOM_STA RMTEMP CLEAN ... │ 0300TT4190 │ 房況變化告知 當房況有變化時，主動通知PMS │ V │ 
+ │ B5 │  │ 0300TT4390 │ KeyBox現況 插什麼卡，當KeyBox有變化時，主動通知PMS │ V │ 
+└───────┘
+A1: 發送C/I資料
+時機：德安PMS系統執行C/I後發送，一房間只送一筆。
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009010TT
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：CKI
+ │ * │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ * │ ROOM_SER │ CHAR(1) │ C/I客人的序號 │ 一般為由1開始
+ │ * │ CI_SER │ CHAR(20) │ 帳務編號 │ 此為飯店帳務的唯一序號
+ │ * │ ALT_NAM │ CHAR(30) │ C/I的客人姓名 │ 若一間房間有兩人以上時，只會附上第一人的姓名
+ │  │ SALUTE_NAM │ CHAR(20) │ 稱謂名稱 │ 
+ │  │ SALUTE_TYP │ CHAR(1) │ 稱謂類別 │ 此稱謂是什麼型式，1:中式，2:西洋式，3:日式
+ │ * │ FIRST_NAM │ CHAR(30) │ 名 │ 
+ │ * │ LAST_NAM │ CHAR(30) │ 姓 │ 
+ │ * │ CI_DAT │ CHAR(10) │ C/I日期 │ FORMAT：YYYY/MM/DD
+ │ * │ ECO_DAT │ CHAR(10) │ 預計離開日 │ FORMAT：YYYY/MM/DD
+ │ * │ LANG_COD │ CHAR(20) │ 語言代碼 │ 依據 locale 命名規則：語言_地區名
+ │  │ LANG_NAM │ CHAR(20) │ 語言中文說明 │ 
+ │ * │ VIP_STA │ CHAR(4) │ 住客等級 │ 
+ │ * │ CI_TIM │ CHAR(8) │ C/I時間 │ HH24:MI:SS
+ │ * │ INFO_ISGROUP │ CHAR(4) │ 是否有團體影片 │ Y/N
+ │  │ INFO_REMARK │ CHAR(255) │ 團體影片名稱 │ INFO_ISGROUP=Y，才有值
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>03009010TT</REVE-CODE>
+<ACTION_COD>CKI</ACTION_COD>
+<ROOM_NOS>2403</ROOM_NOS>
+<ROOM_SER>1</ROOM_SER>
+<CI_SER>200605120002001</CI_SER>
+<ALT_NAM>張梅稜</ALT_NAM>
+<SALUTE_NAM>小姐</SALUTE_NAM>
+<SALUTE_TYP>1</SALUTE_TYP>
+<FIRST_NAM>梅稜</FIRST_NAM>
+<LAST_NAM>張</LAST_NAM>
+<CI_DAT>2009/05/20</CI_DAT>
+<ECO_DAT>2009/05/27</ECO_DAT>
+<LANG_COD>zh_TW</LANG_COD>
+<LANG_NAM>中文</LANG_NAM>
+<VIP_STA>1</VIP_STA>
+<CI_TIM>18:26:35</CI_TIM>
+<INFO_ISGROUP>N</INFO_ISGROUP>
+<INFO_REMARK></INFO_REMARK>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：CKI
+ │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>03009010TT</SEND-CODE>
+<ACTION_COD>CKI</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+A2: 發送C/O資料
+時機：德安PMS系統辦理房間退房後，發送
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009020TT
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：CKO
+ │ * │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>03009020TT</REVE-CODE>
+<ACTION_COD>CKO</ACTION_COD>
+<ROOM_NOS>2401</ROOM_NOS>
+<ACTION_DAT>2009/06/03 10:05:36</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：CKO
+ │ * │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ * │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ * │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ * │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>03009020TT</SEND-CODE>
+<ACTION_COD>CKO</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+A3: 發送換房資料
+時機：於德安PMS系統辦理換房時產生。原房間將變為空房，新房間將會變為住人
+換房一個房間只會送出一筆資料
+廠商必須將原房號的必要資訊改設定到新房號
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009030TT
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：RMC
+ │ * │ OROOM_NOS │ CHAR(6) │ 舊房號 │ 
+ │ * │ NROOM_NOS │ CHAR(6) │ 新房號 │ 
+ │ * │ ROOM_SER │ CHAR(1) │ C/I客人的序號 │ 一般為由1開始
+ │ * │ CI_SER │ CHAR(20) │ 帳務編號 │ 此為飯店帳務的唯一序號
+ │ * │ ALT_NAM │ CHAR(30) │ C/I的客人姓名 │ 若一間房間有兩人以上時，只會附上第一人的姓名
+ │  │ SALUTE_NAM │ CHAR(20) │ 稱謂名稱 │ 
+ │  │ SALUTE_TYP │ CHAR(1) │ 稱謂類別 │ 此稱謂是什麼型式，1:中式，2:西洋式，3:日式
+ │ * │ CI_DAT │ CHAR(10) │ C/I日期 │ FORMAT：YYYY/MM/DD
+ │ * │ ECO_DAT │ CHAR(10) │ 預計離開日 │ FORMAT：YYYY/MM/DD
+ │ * │ LANG_COD │ CHAR(20) │ 語言代碼 │ 依據 locale 命名規則：語言_地區名
+ │  │ LANG_NAM │ CHAR(20) │ 語言中文說明 │ 
+ │ * │ VIP_STA │ CHAR(4) │ 住客等級 │ 
+ │ * │ CI_TIM │ CHAR(8) │ C/I時間 │ HH24:MI:SS
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>03009030TT</REVE-CODE>
+<ACTION_COD>RMC</ACTION_COD>
+<OROOM_NOS>2403</OROOM_NOS>
+<NROOM_NOS>2404</NROOM_NOS>
+<ROOM_SER>1</ROOM_SER>
+<CI_SER>200605120002001</CI_SER>
+<ALT_NAM>張梅稜</ALT_NAM>
+<SALUTE_NAM>小姐</SALUTE_NAM>
+<SALUTE_TYP>1</SALUTE_TYP>
+<CI_DAT>2009/05/20</CI_DAT>
+<ECO_DAT>2009/05/27</ECO_DAT>
+<LANG_COD>zh_TW</LANG_COD>
+<LANG_NAM>中文</LANG_NAM>
+<VIP_STA>1</VIP_STA>
+<CI_TIM>18:26:35</CI_TIM>
+<ACTION_DAT>2009/06/03 10:43:20</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：RMC
+ │ * │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ * │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ * │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ * │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>0300903070</SEND-CODE>
+<ACTION_COD>RMC</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+A4: 發送C/I還原資料(客製)
+時機：當於德安PMS系統辦理C/I還原，入住改為不入住時發送，且重點為不改髒房。
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009011TT
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：CIX
+ │ * │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>0300901170</REVE-CODE>
+<ACTION_COD>CIX</ACTION_COD>
+<ROOM_NOS>2401  </ROOM_NOS>
+<ACTION_DAT>2009/06/03 10:05:36</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 欄位 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：CIX
+ │ * │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ * │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ * │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ * │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>0300901170</SEND-CODE>
+<ACTION_COD>CIX</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+A5: 發送C/O還原資料
+時機：客人於德安PMS系統辦理C/O還原，退房改回入住後發送，一房間只送一筆
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009021TT
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：COX
+ │ * │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ * │ ROOM_SER │ CHAR(1) │ C/I客人的序號 │ 一般為由1開始
+ │ * │ CI_SER │ CHAR(20) │ 帳務編號 │ 此為飯店帳務的唯一序號
+ │ * │ ALT_NAM │ CHAR(30) │ C/I的客人姓名 │ 若一間房間有兩人以上時，只會附上第一人的姓名
+ │  │ SALUTE_NAM │ CHAR(20) │ 稱謂名稱 │ 
+ │  │ SALUTE_TYP │ CHAR(1) │ 稱謂類別 │ 中式:1，西洋式:2，日式:3
+ │ * │ FIRST_NAM │ CHAR(30) │ 名 │ 
+ │ * │ LAST_NAM │ CHAR(30) │ 姓 │ 
+ │ * │ CI_DAT │ CHAR(10) │ C/I日期 │ FORMAT：YYYY/MM/DD
+ │ * │ ECO_DAT │ CHAR(10) │ 預計離開日 │ FORMAT：YYYY/MM/DD
+ │ * │ LANG_COD │ CHAR(20) │ 語言代碼 │ 依據 locale 命名規則：語言_地區名
+ │  │ LANG_NAM │ CHAR(20) │ 語言中文說明 │ 
+ │ * │ VIP_STA │ CHAR(4) │ 住客等級 │ 
+ │ * │ CI_TIM │ CHAR(8) │ C/I時間 │ HH24:MI:SS
+ │ * │ INFO_ISGROUP │ CHAR(4) │ 是否有團體影片 │ Y/N
+ │  │ INFO_REMARK │ CHAR(255) │ 團體影片名稱 │ INFO_ISGROUP=Y，才有值
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>03009021TT</REVE-CODE>
+<ACTION_COD>COX</ACTION_COD>
+<ROOM_NOS>2403</ROOM_NOS>
+<ROOM_SER>1</ROOM_SER>
+<CI_SER>200605120002001</CI_SER>
+<ALT_NAM>張梅稜</ALT_NAM>
+<SALUTE_NAM>小姐</SALUTE_NAM>
+<SALUTE_TYP>1</SALUTE_TYP>
+<FIRST_NAM>梅稜</FIRST_NAM>
+<LAST_NAM>張</LAST_NAM>
+<CI_DAT>2009/05/20</CI_DAT>
+<ECO_DAT>2009/05/27</ECO_DAT>
+<LANG_COD>zh_TW</LANG_COD>
+<LANG_NAM>中文</LANG_NAM>
+<VIP_STA>1</VIP_STA>
+<CI_TIM>18:26:35</CI_TIM>
+<INFO_ISGROUP>N</INFO_ISGROUP>
+<INFO_REMARK></INFO_REMARK>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：COX
+ │ * │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ * │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ * │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ * │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>03009021TT</SEND-CODE>
+<ACTION_COD>COX</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+A6:房間狀態查詢
+時機：連接廠商的系統主動向德安PMS系統要求取得房間資訊。
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：0300TT1090
+ │ * │ ACTION_COD │ CHAR(10) │ 動作說明 │ 固定值：ROOM_INF
+ │ * │ ROOM_NOS │ CHAR(6) │ 房號 │ 1212
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE1
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>0300TT1090</REVE-CODE>
+<ACTION_COD>ROOM_INF</ACTION_COD>
+<ROOM_NOS>1234</ROOM_NOS>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+Sample2:
+http://220.130.148.15/a6gw_teste6/GatewaySvc.aspx?TxnData=<?xml version="1.0"?><ROWSET><ROW><REVE-CODE>0300A61090</REVE-CODE><ACTION_COD>ROOM_INF</ACTION_COD><ROOM_NOS>1001</ROOM_NOS><ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT></ROW></ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 必填(未整理) │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │  │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │  │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：ROOM_INF
+ │  │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │  │ ROOM_SER │ CHAR(1) │ C/I客人的序號 │ 一般為由1開始
+ │  │ ROOM_STA │ CHAR(1) │ 房間現況 │ 房間的現狀：O:住人 S:參觀房(參觀用房，不會有人住在內) V:空房：沒有人住在內。
+ │  │ CI_SER │ CHAR(20) │ 帳務編號 │ 此為飯店帳務的唯一序號
+ │  │ ALT_NAM │ CHAR(30) │ C/I的客人姓名 │ 若一間房間有兩人以上時，會附上所有的姓名成多筆
+ │  │ SALUTE_NAM │ CHAR(20) │ 稱謂名稱 │ 
+ │  │ SALUTE_TYP │ CHAR(1) │ 稱謂類別 │ 中式:1，西洋式:2，日式:3
+ │  │ FIRST_NAM │ CHAR(30) │ 名 │ 
+ │  │ LAST_NAM │ CHAR(30) │ 姓 │ 
+ │  │ GUEST_STA │ CHAR(1) │ 住客帳狀態 │ K:關帳無法入帳 O:開帳可以入帳
+ │  │ CI_DAT │ CHAR(10) │ C/I日期 │ FORMAT：YYYY/MM/DD
+ │  │ CI_TIM │ CHAR(8) │ C/I時間 │ HH24:MI:SS
+ │  │ ECO_DAT │ CHAR(10) │ 預計離開日 │ FORMAT：YYYY/MM/DD
+ │  │ TEL_NOS │ CHAR(50) │ 連絡方式 │ 參照住客歷史參數
+ │  │ BIRTH_DAT │ CHAR(10) │ 生日 │ FORMAT：YYYY/MM/DD
+ │  │ ADVBAL_AMT │ CHAR(16) │ 應付金額 │ 總計 減去 預付金額-999999999999.99
+ │  │ CCARD_AMT │ CHAR(16) │ 預刷卡費用 │ -999999999999.99
+ │  │ LANG_COD │ CHAR(20) │ 語言代碼 │ 依據 locale 命名規則：語言_地區名
+ │  │ LANG_NAM │ CHAR(20) │ 語言中文說明 │ 
+ │  │ VIP_STA │ CHAR(4) │ 住客等級 │ 
+ │  │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD H24:MI:SS
+ │  │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │  │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │  │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │  │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>0300TT1090</SEND-CODE>
+<ACTION_COD>ROOM_INF</ACTION_COD>
+<ROOM_NOS>2403  </ROOM_NOS>
+<ROOM_SER>1</ROOM_SER>
+<ROOM_STA>O</ROOM_STA>
+<CI_SER>200605120002001</CI_SER>
+<ALT_NAM>張梅稜</ALT_NAM>
+<SALUTE_NAM>小姐</SALUTE_NAM>
+<SALUTE_TYP>1</SALUTE_TYP>
+<FIRST_NAM>梅稜</FIRST_NAM>
+<LAST_NAM>張</LAST_NAM>
+<GUEST_STA>O</GUEST_STA>
+<CI_DAT>2009/05/20</CI_DAT>
+<CI_TIM>18:26:35</CI_TIM>
+<ECO_DAT>2009/05/27</ECO_DAT>
+<TEL_NOS>0922123451</TEL_NOS>
+<BIRTH_DAT>1997/01/01</BIRTH_DAT>
+<ADVBAL_AMT>-3400</ADVBAL_AMT>
+<CCARD_AMT>0</CCARD_AMT>
+<LANG_COD> zh_TW </LANG_COD>
+<LANG_NAM>中文                </LANG_NAM>
+<VIP_STA>1</VIP_STA>
+<ACTION_DAT>2009/06/03 17:36:42</ACTION_DAT>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+</ROW>
+<ROW>
+<SEND-CODE>0300TT1090</SEND-CODE>
+<ACTION_COD>ROOM_INF</ACTION_COD>
+<ROOM_NOS>2403  </ROOM_NOS>
+<ROOM_SER>2</ROOM_SER>
+<ROOM_STA>O</ROOM_STA>
+<CI_SER>200605120003001</CI_SER>
+<ALT_NAM>張XX</ALT_NAM>
+<SALUTE_NAM>先生</SALUTE_NAM>
+<SALUTE_TYP>1</SALUTE_TYP>
+<GUEST_STA>O</GUEST_STA>
+<CI_DAT>2009/05/20</CI_DAT>
+<CI_TIM>18:26:35</CI_TIM>
+<ECO_DAT>2009/05/27</ECO_DAT>
+<TEL_NOS>0922175688</TEL_NOS>
+<BIRTH_DAT>1997/01/01</BIRTH_DAT>
+<ADVBAL_AMT>-1200</ADVBAL_AMT>
+<CCARD_AMT>0</CCARD_AMT>
+<LANG_COD> zh_TW </LANG_COD>
+<LANG_NAM>中文                </LANG_NAM>
+<VIP_STA>1</VIP_STA>
+<ACTION_DAT>2009/06/03 17:36:42</ACTION_DAT>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+</ROW>
+</ROWSET>
+A7:房間帳務未結帳明細查詢 (操作手冊為XML帳單顯示可限製查詢.DOC)
+時機：當連接系統需要PMS傳送某個房間未結帳務明細時。
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：0300TT1190
+ │ * │ ACTION_COD │ CHAR(10) │ 動作說明 │ 固定值：BILL_LIST
+ │ * │ ROOM_NOS │ CHAR(6) │ 房號 │ 房號1212
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>l
+<ROW>
+<REVE-CODE>0300TT1190</REVE-CODE>
+<ACTION_COD>BILL_LIST</ACTION_COD>
+<ROOM_NOS>2403</ROOM_NOS>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：BILL_LIST
+ │ * │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ * │ ROOM_SER │ CHAR(1) │ C/I客人的序號 │ 一般為由1開始
+ │ * │ CI_SER │ CHAR(20) │ 帳務編號 │ 此為飯店帳務的唯一序號
+ │ * │ ALT_NAM │ CHAR(30) │ C/I的客人姓名 │ 
+ │  │ SALUTE_NAM │ CHAR(20) │ 稱謂名稱 │ 
+ │  │ SALUTE_TYP │ CHAR(1) │ 稱謂類別 │ 中式:1，西洋式:2，日式:3
+ │ * │ BILL_DAT │ CHAR(10) │ 帳單日期 │ FORMAT：YYYY/MM/DD
+ │ * │ ITEM_NAM │ CHAR(30) │ 項目名稱 │ 
+ │  │ ITEM_SNA │ CHAR(30) │ 項目別名 │ 
+ │ * │ ITEM_AMT │ CHAR(16) │ 單價 │ -999999999999.99
+ │ * │ ITEM_QNT │ CHAR(12) │ 數量 │ -999999999999.99
+ │ * │ ITEM_TOT │ CHAR(16) │ 小計 │ -999999999999.99
+ │  │ REMARK │ CHAR(40) │ 備註 │ 
+ │ * │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ * │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ * │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ * │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>0300TT1190</SEND-CODE>
+<ACTION_COD>BILL_LIST</ACTION_COD>
+<ROOM_NOS>2403  </ROOM_NOS>
+<ROOM_SER>1</ROOM_SER>
+<CI_SER>200605120002001</CI_SER>
+<ALT_NAM>張梅稜</ALT_NAM>
+<SALUTE_NAM>小姐</SALUTE_NAM>
+<SALUTE_TYP>1</SALUTE_TYP>
+<BILL_DAT>2009/05/20</BILL_DAT>
+< ITEM_NAM >房租</ ITEM_NAM >
+< ITEM_SNA >房租</ ITEM_SNA >
+< ITEM_AMT >1200</ ITEM_AMT >
+< ITEM_QNT >1</ ITEM_QNT >
+< ITEM_TOT >1200</ ITEM_TOT >
+< REMARK >測試用</ REMARK >
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+<ROW>
+<SEND-CODE>0300TT1190</SEND-CODE>
+<ACTION_COD>BILL_LIST</ACTION_COD>
+<ROOM_NOS>2403  </ROOM_NOS>
+<ROOM_SER>2</ROOM_SER>
+<CI_SER>200605120002001</CI_SER>
+<ALT_NAM>張加加</ALT_NAM>
+<SALUTE_NAM>小姐</SALUTE_NAM>
+<SALUTE_TYP>1</SALUTE_TYP>
+<BILL_DAT>2009/05/20</BILL_DAT>
+< ITEM_NAM >房租</ ITEM_NAM >
+< ITEM_SNA >房租</ ITEM_SNA >
+< ITEM_AMT >1200</ ITEM_AMT >
+< ITEM_QNT >1</ ITEM_QNT >
+< ITEM_TOT >1200</ ITEM_TOT >
+< REMARK >測試用</ REMARK >
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+A10:房間狀態回傳
+時機：連結廠商系統依自己的需要向德安PMS詢求回傳全部的房況資訊。
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：0300TT4290
+ │ * │ ACTION_COD │ CHAR(10) │ 動作說明 │ 固定值：RETURN
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE1
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>0300TT4290</REVE-CODE>
+<ACTION_COD>RETURN</ACTION_COD>
+<ACTION_DAT>2015/08/05 20:00:00</ACTION_DAT>
+</ROW>
+</ROWSET>
+Sample2:
+http://118.163.122.183/a6gw_teste6/GatewaySvc.aspx?TxnData=<?xml version="1.0"?><ROWSET><ROW><REVE-CODE>0300TT4290</REVE-CODE><ACTION_COD>RETURN</ACTION_COD><ACTION_DAT>2015/08/05 20:00:00</ACTION_DAT></ROW></ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 必填 │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ * │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ * │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：RETURN
+ │ * │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ * │ ROOM_STA │ CHAR(1) │ 房間狀況 │ O:住人  V:空房  R:維修房 S:SHOW ROOM 展示房
+ │ * │ CLEAN_STA │ CHAR(1) │ 清掃狀況 │ D:髒房  C:乾淨房  S:待巡房
+ │ * │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+ │ * │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ * │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ * │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ * │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>0300TT4290</SEND-CODE>
+<ACTION_COD>RETURN</ACTION_COD>
+<ROOM_NOS>201  </ROOM_NOS>
+<ROOM_STA>O</ROOM_STA>
+<CLEAN_STA>D</ CLEAN_STA >
+<ACTION_DAT>2015/08/05 17:36:42</ACTION_DAT>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+</ROW>
+<ROW>
+<SEND-CODE>0300TT4290</SEND-CODE>
+<ACTION_COD>RETURN</ACTION_COD>
+<ROOM_NOS>202  </ROOM_NOS>
+<ROOM_STA>R</ROOM_STA>
+<CLEAN_STA>C</ CLEAN_STA >
+<ACTION_DAT>2015/08/05 17:36:42</ACTION_DAT>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+</ROW>
+<ROW>
+<SEND-CODE>0300TT4290</SEND-CODE>
+<ACTION_COD>RETURN</ACTION_COD>
+<ROOM_NOS>203  </ROOM_NOS>
+<ROOM_STA>V</ROOM_STA>
+<CLEAN_STA>S</ CLEAN_STA >
+<ACTION_DAT>2015/08/05 17:36:42</ACTION_DAT>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+</ROW></ROWSET>
+B1: 發送住客要求之動作給房控主機(很少用，大部分清掃跟DND是由廠商傳來)漢來宗亞有設
+時機：客人要求櫃檯人員設定服務狀態時，於德安設定後發送給房控主機
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009040TT
+ │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ ROOM_STA │ CHAR(1) │ 房間狀態 │ O:住人  R:修理 V:空房  S:參觀房
+ │ ACTION_COD │ CHAR(10) │ 動作說明 │ CLEAN：清掃 DND  ：勿擾 AIRCOND：冷氣
+ │ ACTION_STA │ CHAR(1) │ 動作狀態 │ 1：設定     0：清除
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>03009040TT </REVE-CODE>
+<ROOM_NOS>2403</ROOM_NOS>
+<ROOM_STA>V</ROOM_STA>
+<ACTION_COD>CLEAN</ACTION_COD>
+< ACTION_STA >1</ ACTION_STA >
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ ACTION_COD │ CHAR(10) │ 作業說明 │ 同上述觸發端之ACTION_COD
+ │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>03009040TT </SEND-CODE>
+<ACTION_COD>DNDX</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+B2: PMS需要知道某個房間房控現況資料時
+時機：當PMS無法確認房控狀態時，要求房控主機傳送房間現況時
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009041TT
+ │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ ACTION_COD │ CHAR(10) │ 動作說明 │ QUERY：詢問
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>03009041TT </REVE-CODE>
+<ROOM_NOS>2403</ROOM_NOS>
+<ACTION_COD>QUERY</ACTION_COD>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：QUERY
+ │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ ROOM_STA │ CHAR(200) │ 房況 │ 
+ │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>03009041TT </SEND-CODE>
+<ACTION_COD>QUERY</ACTION_COD>
+<ROOM_NOS>2403</ROOM_NOS>
+<ROOM_STA>1100100101010101</ROOM_STA>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+B3: PMS定期詢問房間房控現況資料時(新串接客戶不再使用此舊程式) (目前只有檔案式有串)
+時機：當PMS定期詢問房控狀態時，要求房控主機傳送房間現況時
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009042TT
+ │ ROOM_NOS │ CHAR(6) │ 房號 │ 固定值：ALL
+ │ ACTION_COD │ CHAR(10) │ 動作說明 │ QUERY：詢問
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>03009042TT </REVE-CODE>
+<ROOM_NOS>ALL</ROOM_NOS>
+<ACTION_COD>QUERY</ACTION_COD>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：QUERY
+ │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ ROOM_STA │ CHAR(200) │ 房況 │ 
+ │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>03009042TT</SEND-CODE>
+<ACTION_COD>QUERY</ACTION_COD>
+<ROOM_NOS>2403</ROOM_NOS>
+<ROOM_STA>1100100101010101</ROOM_STA>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+<ROW>
+<SEND-CODE>03009021TT</SEND-CODE>
+<ACTION_COD>QUERY</ACTION_COD>
+<ROOM_NOS>2404</ROOM_NOS>
+<ACTION_COD>1100100101010101</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+B4: 房況變化告知
+時機：當房況有變化時，主動通知PMS
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：0300TT4190
+ │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ INS_CARD_INF │ CHAR(20) │ 插卡資訊 │ 
+ │ INS_CARD_NO │ CHAR(20) │ 插卡卡號 │ 
+ │ ACTION_COD │ CHAR(200) │ 動作說明 │ CLEAN：清掃 見房間房況備註順序9 DND  ：勿擾 見房間房況備註順序10 DOOR：門  見房間房況備註順序11 EMG：緊急壓扣 見房間房況備註順序8 MAIN_POWER :總電源 見房間房況備註順序4 #ROOM_STA#ROOM_STA值#：見房間房況備註 #RMTEMP#房間室溫值#：現在室溫值(A7使用)，溫度值最多十個字，由廠商決定內容。
+ │ ACTION_STA │ CHAR(1) │ 動作狀態 │ 1：設定     0：清除 請依房間房況設定中的對應值來設定 EXAPLE: 勿擾0=關，1=勿擾開啟 緊急按鈕0 = 動作，1 = 無動作 房門    0 = 門開，1 = 門關 房間清潔1 = 請打掃， 2 = 打掃中3 = 待巡房 4= 巡房中0 = 清潔完成 德安接到0時會設定為乾淨房，其他都在德安設定/顯示為髒房。
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE1
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>0300TT4190 </REVE-CODE>
+<ROOM_NOS>2403</ROOM_NOS>
+<ACTION_COD>CLEAN</ACTION_COD>
+< ACTION_STA >1</ ACTION_STA > tag內容請見下方說明=> clean的action_sta內容：
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+clean的action_sta內容：
+SAMPLE2送全部房況
+<ROWSET>
+<ROW>
+<REVE-CODE>0300TT4190 </REVE-CODE>
+<ROOM_NOS>2403</ROOM_NOS>
+<INS_CARD_INF></INS_CARD_INF>
+<INS_CARD_NO></INS_CARD_NO>
+<ACTION_COD>#ROOM_STA#010101011001#</ACTION_COD>
+<ACTION_STA>1</ACTION_STA >
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+PS:貼在IE時可用%23ROOM_STA%23011000010000%23, %23表#
+SAMPLE3送房間室溫 26C(A7前台才有顯示)
+<ROWSET>
+<ROW>
+<REVE-CODE>0300TT4190 </REVE-CODE>
+<ROOM_NOS>2403</ROOM_NOS>
+<ACTION_COD>#RMTEMP#26C#</ACTION_COD>
+<ACTION_STA>1</ACTION_STA>(不處理，可省略)
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ ACTION_COD │ CHAR(10) │ 作業說明 │ 同上述觸發端之ACTION_COD
+ │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>0300TT4190 </SEND-CODE>
+<ACTION_COD>DND</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+SAMPLE 2
+<ROWSET>
+<ROW>
+<SEND-CODE>0300TT4190</SEND-CODE>
+<ACTION_COD>#ROOM_STA#0101001100100000#</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>1112 Set #ROOM_STA#0101001100100000# </RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+SAMPLE 3
+<ROWSET>
+<ROW>
+<SEND-CODE>0300TT4190</SEND-CODE>
+<ACTION_COD>#RMTEMP#26C#</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>1112 Set #RMTEMP#26C#</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+房間房況 預設值:#1000001100100000#
+┌─TABLE─┐
+ │ 房間房況順序說明
+ │ 1 │ Keyhouse │ 1 = 拔卡，0 = 插卡 │ 9 │ 房間清潔 │ 1 = 請打掃， 2 = 打掃中3 = 待巡房 4= 巡房中0 = 清潔完成
+ │ 2 │ Keybox │ 1 = 插卡，0 = 拔卡 │ 10 │ 勿擾 │ 1 = 動作，0 = 無動作
+ │ 3 │ 冷氣 │ 1 = 冷氣開，0 = 冷氣關 │ 11 │ 房門door │ 0 = 門開，1 = 門關
+ │ 4 │ 總電源main_power │ 1 = 電源開，0 = 電源關 │ 12 │ 保留 │ 1 = 動作，0 = 無動作
+ │ 5 │ 鐵捲門 │ 1 = 門開，0 = 門關 │ 13 │ 保留 │ 1 = 動作，0 = 無動作
+ │ 6 │ 一氧化碳 │ 1 = 動作，0 = 無動作 │ 14 │ 保留 │ 1 = 動作，0 = 無動作
+ │ 7 │ 防盜 1 │ 0 = 動作，1 = 無動作 │ 15 │ 保留 │ 1 = 動作，0 = 無動作
+ │ 8 │ 緊急按鈕 │ 0 = 動作，1 = 無動作 F:房間為OFF_LINE │ 16 │ 保留 │ 1 = 動作，0 = 無動作
+└───────┘
+B5: 節電器狀況訊息
+時機：當節電器有變化時，主動通知PMS
+發送端發送XML規格說明
+欄位說明：
+房號、卡片類別(房客or房務人員)、UID、持卡人(房務人員)、插/拔卡、插/拔卡時間
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ *REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：0300TT4390
+ │ *ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ *CARD_TYP │ CHAR(10) │ 卡片類別 │ GUEST：房客  SERVICE：房務人員
+ │ CARD_UID │ CHAR(20) │ 卡片UID │ 
+ │ INDOOR_NAME │ CHAR(30) │ 持卡人姓名 │ 
+ │ *ACTION_STA │ CHAR(1) │ 插/拔卡動作狀態 │ 1：插卡     0：拔卡
+ │ *ACTION_DAT │ CHAR(21) │ 插/拔卡時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>0300TT4390 </REVE-CODE>
+<ROOM_NOS>2403</ROOM_NOS>
+<CARD_TYP >SERVICE</CARD_TYP>
+<CARD_UID >1234567890</CARD_UID>
+<INDOOR_NAME >XXX</INDOOR_NAME>
+<ACTION_STA >1</ACTION_STA>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+sample2:
+<?xml version="1.0"?><ROWSET><ROW><REVE-CODE>0300TT4390</REVE-CODE><ROOM_NOS>813</ROOM_NOS><CARD_TYP>GUEST</CARD_TYP><CARD_UID>006263AFB0</CARD_UID><INDOOR_NAME>GUEST</INDOOR_NAME><ACTION_STA>1</ACTION_STA><ACTION_DAT>2015/06/21 09:46:32</ACTION_DAT></ROW></ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>0300TT4390 </SEND-CODE>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+B6: 發送清掃狀況資料 ps:penbay(僅力廣使用，不建議做雙向影響清掃，會有時間差問題)
+時機：清掃狀況有變時告之房控系統
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009043TT
+ │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：CLEAN_STA
+ │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ ROOM_STA │ CHAR(1) │ 房間狀態 │ O:住人  R:修理 V:空房  S:參觀房
+ │ CLEAN_STA │ CHAR(1) │ 清掃狀態 │ DIRTY或CLEAN或CHECK
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>03009043TT</REVE-CODE>
+<ACTION_COD>CLEAN_STA</ACTION_COD>
+<ROOM_NOS>2403</ROOM_NOS>
+<ROOM_STA>O</ ROOM _STA>
+<CLEAN_STA>DIRTY</CLEAN_STA>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：CLEAN_STA
+ │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>03009043TT</SEND-CODE>
+<ACTION_COD>CLEAN_STA</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>Transaction done successfully.</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+B7: 設定房間預冷
+時機：當ERP想設定房間預冷時傳給房控系統
+發送端發送XML規格說明
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ REVE-CODE │ CHAR(10) │ 訊息代號 │ 固定值：03009045TT
+ │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：SET_PRECOOL
+ │ ROOM_NOS │ CHAR(6) │ 房號 │ 
+ │ PRECOOL │ CHAR(10) │ 房間溫度 │ ON:一般預冷開啟  OFF:關閉  CYCLE_ON:循環預冷
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<REVE-CODE>03009045TT</REVE-CODE>
+<ACTION_COD>SET_PRECOOL</ACTION_COD>
+<ROOM_NOS>2403</ROOM_NOS>
+<PRECOOL>ON</PRECOOL>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>
+接收端回應XML規格
+欄位說明：
+┌─TABLE─┐
+ │ 欄位代號 │ TYPE │ 中文說明 │ 內容說明
+ │ SEND-CODE │ CHAR(10) │ 訊息代號 │ 固定值：同REVE-CODE
+ │ ACTION_COD │ CHAR(10) │ 作業說明 │ 固定值：SET_PRECOOL
+ │ RETN-CODE │ CHAR(4) │ 接收／處理結果代號 │ 0000：資料接收／處理正常 其他：資料處理異常
+ │ RETN-CODE-DESC │ CHAR(200) │ 接收／處理結果說明 │ 
+ │ MSG-ID │ CHAR(4) │  │ 固定值：0000
+ │ MSG-DESC │ CHAR(200) │  │ 固定值：Transaction done successfully
+ │ ACTION_DAT │ CHAR(21) │ 觸發時間 │ FORMAT：YYYY/MM/DD HH24:MI:SS
+└───────┘
+SAMPLE
+<?xml version="1.0"?>
+<ROWSET>
+<ROW>
+<SEND-CODE>03009045TT</SEND-CODE>
+<ACTION_COD>SET_PRECOOL</ACTION_COD>
+<RETN-CODE>0000</RETN-CODE>
+<RETN-CODE-DESC>2403 ON OK</RETN-CODE-DESC>
+<MSG-ID>0000</MSG-ID>
+<MSG-DESC>Transaction done successfully.</MSG-DESC>
+<ACTION_DAT>2009/06/03 10:06:43</ACTION_DAT>
+</ROW>
+</ROWSET>

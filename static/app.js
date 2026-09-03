@@ -261,7 +261,7 @@ function renderSetup() {
 }
 
 function moduleLabel(id) {
-  return { parking: '🚗 停車車辨', amenity: '🦏 房務備品', keycard: '🔑 門禁製卡' }[id] || id;
+  return { parking: '🚗 停車車辨', amenity: '🦏 房務備品', keycard: '🔑 門禁製卡', roomcontrol: '🌡️ 房控' }[id] || id;
 }
 
 // ---- 案例參數化表單(設計 §8:全程由 /scenarios 詮釋資料驅動,廠商視角零改動) ----

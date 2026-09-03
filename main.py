@@ -8,10 +8,11 @@ from flask import Flask, send_from_directory
 from orchestrator.api import orchestrator_bp
 # 🌐 ngrok 對外隧道控制(UI「對外隧道」卡後端;/tunnel/*)
 from sandbox_tunnel import tunnel_bp
-# 🔌 互動系統層（被測系統）：目前三個廠商模組，後續可擴充房控、刷卡等其他互動系統
+# 🔌 互動系統層（被測系統）：目前四個模組（停車/房務/門禁/房控）
 from server.parking.routes import parking_bp
 from server.amenity.routes import amenity_bp
 from server.keycard.routes import keycard_bp
+from server.roomcontrol.routes import roomcontrol_bp
 
 import logging
 
@@ -34,6 +35,7 @@ app.register_blueprint(tunnel_bp)          # 對外隧道控制(/tunnel/status|s
 app.register_blueprint(parking_bp)        # 互動系統 1：停車車辨
 app.register_blueprint(amenity_bp)        # 互動系統 2：房務備品
 app.register_blueprint(keycard_bp)        # 互動系統 3：門禁製卡
+app.register_blueprint(roomcontrol_bp)    # 互動系統 4：房控(A7 公版 XML 匯入介面)
 
 
 # ====================================================================

@@ -130,6 +130,9 @@ def build_run_context(environment: str) -> RunContext:
         # 💡 SA v1.2 公版單一端點:德安所有停車事件皆以同一 schema 打到廠商唯一 URL
         "parking_sync": f"{server_base}/parking/sync",
         "whitelist": f"{server_base}/parking/internal/whitelist",
+        # 🌡️ 房控 A7 公版 XML 介面(廠商→PMS,sa8/sa9 REST 端點)+ 沙盒內部回讀(LOCAL 閉環用)
+        "import_sync": f"{server_base}/third-party/import-sync-files",
+        "roomcontrol_internal": f"{server_base}/roomcontrol/internal/state",
         # PAYTRONEX 專屬路由（/parktron/hpms/services/roomer/*）
         "paytronex_add": f"{server_base}/parktron/hpms/services/roomer/add",
         "paytronex_find": f"{server_base}/parktron/hpms/services/roomer/findByLicensePlate",

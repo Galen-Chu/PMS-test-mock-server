@@ -44,7 +44,8 @@ def list_scenarios():
     參數化(設計 §3/§8):案例帶 ``params`` 詮釋資料驅動 UI 表單——動態預設求值展示
     + ``dynamic: true``;表單完全由本 API 驅動,未來廠商視角 UI 結構零改動。
     """
-    _MODULE_LABEL = {"parking": "🚗 停車車辨", "amenity": "🦏 房務備品", "keycard": "🔑 門禁製卡"}
+    _MODULE_LABEL = {"parking": "🚗 停車車辨", "amenity": "🦏 房務備品",
+                     "keycard": "🔑 門禁製卡", "roomcontrol": "🌡️ 房控"}
     disp_ctx = engine.build_run_context("LOCAL_OFFLINE")  # 動態預設求值展示用（時間戳類不依環境）
     out = []
     for module, scs in registry.by_module().items():
