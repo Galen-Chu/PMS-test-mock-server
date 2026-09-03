@@ -23,9 +23,24 @@ from datetime import datetime
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
-# 訊息代碼(文件中 TT 為佔位,實際代碼上線前由德安提供)
+# 訊息代碼:0300 + <2 碼廠商代號> + <4 碼動作>(sa10;文件以 TT 佔位)
+# 2026-09-03 使用者提供實際代碼:MINXON 民笙=81、CHAOFENG 超烽=86
 REVE_ROOM_STA = "0300TT4190"   # B4 房況變化告知(廠商→PMS)
 REVE_ROOM_INF = "0300TT1090"   # A6 房間現況住客資訊查詢(廠商→PMS)
+REVE_RETURN = "0300TT4290"     # A10 全部房況回傳查詢(廠商→PMS)
+
+
+def reve_room_sta(vendor_code="TT") -> str:
+    return f"0300{vendor_code}4190"
+
+
+def reve_room_inf(vendor_code="TT") -> str:
+    return f"0300{vendor_code}1090"
+
+
+def reve_return(vendor_code="TT") -> str:
+    return f"0300{vendor_code}4290"
+
 
 DEFAULT_STATUS_BITS = "1000001100100000"   # sa10 房間房況預設值
 MSG_DONE = "Transaction done successfully."
@@ -64,11 +79,11 @@ def parse_rowset_xml(xml_str: str):
     return rows
 
 
-def build_room_sta_push(room_nos, status_bits, action_dat=None) -> str:
+def build_room_sta_push(room_nos, status_bits, action_dat=None, vendor_code="TT") -> str:
     """B4 送全部房況(SAMPLE2 樣式,含 INS_CARD_INF/INS_CARD_NO 空欄位)。"""
     bits = status_bits.strip().strip("#")
     return build_rowset_xml({
-        "REVE-CODE": REVE_ROOM_STA,
+        "REVE-CODE": reve_room_sta(vendor_code),
         "ROOM_NOS": room_nos,
         "INS_CARD_INF": "",
         "INS_CARD_NO": "",
@@ -78,12 +93,21 @@ def build_room_sta_push(room_nos, status_bits, action_dat=None) -> str:
     })
 
 
-def build_room_inf_query(room_nos, action_dat=None) -> str:
-    """A6 房間狀態查詢請求。"""
+def build_room_inf_query(room_nos, action_dat=None, vendor_code="TT") -> str:
+    """A6 房間狀態查詢請求(單房現況住客資訊)。"""
     return build_rowset_xml({
-        "REVE-CODE": REVE_ROOM_INF,
+        "REVE-CODE": reve_room_inf(vendor_code),
         "ACTION_COD": "ROOM_INF",
         "ROOM_NOS": room_nos,
+        "ACTION_DAT": action_dat or action_dat_now(),
+    })
+
+
+def build_return_query(action_dat=None, vendor_code="TT") -> str:
+    """A10 全部房況回傳查詢請求(無房號欄位;回應為每房一 ROW)。"""
+    return build_rowset_xml({
+        "REVE-CODE": reve_return(vendor_code),
+        "ACTION_COD": "RETURN",
         "ACTION_DAT": action_dat or action_dat_now(),
     })
 

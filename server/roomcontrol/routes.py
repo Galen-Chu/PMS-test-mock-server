@@ -53,19 +53,46 @@ mock_room_guest_db = {
 }
 
 
-def _room_inf_rows(room_nos):
+def _room_inf_rows(room_nos, reve_code):
     """組 ROOM_INF 回應 ROW(有住客 → 每人一 ROW / ROOM_STA=O;查無 → 單 ROW / ROOM_STA=V)。"""
     guests = mock_room_guest_db.get(room_nos)
     now = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
     tail = {"ACTION_DAT": now, "RETN-CODE": "0000",
             "RETN-CODE-DESC": MSG_DONE + ".", "MSG-ID": "0000", "MSG-DESC": MSG_DONE + "."}
     if not guests:
-        return [{"SEND-CODE": "0300TT1090", "ACTION_COD": "ROOM_INF", "ROOM_NOS": room_nos,
+        return [{"SEND-CODE": reve_code, "ACTION_COD": "ROOM_INF", "ROOM_NOS": room_nos,
                  "ROOM_STA": "V", **tail}]
     rows = []
     for gst in guests:
-        rows.append({"SEND-CODE": "0300TT1090", "ACTION_COD": "ROOM_INF", "ROOM_NOS": room_nos,
+        rows.append({"SEND-CODE": reve_code, "ACTION_COD": "ROOM_INF", "ROOM_NOS": room_nos,
                      "ROOM_STA": "O", **gst, **tail})
+    return rows
+
+
+def _clean_sta_from_bits(bits) -> str:
+    """房況位元串第 9 位(房間清潔)→ A10 CLEAN_STA 值域(sa10:0=清潔完成→C、3=待巡房→S、其餘→D)。"""
+    try:
+        c = int(str(bits)[8])
+    except (ValueError, IndexError):
+        return "C"
+    return {0: "C", 3: "S"}.get(c, "D")
+
+
+def _return_rows(reve_code):
+    """組 A10 RETURN 回應:每房一 ROW(ROOM_STA O住人/V空房;CLEAN_STA 由位元串第 9 位推導)。"""
+    now = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+    tail = {"ACTION_DAT": now, "RETN-CODE": "0000",
+            "RETN-CODE-DESC": MSG_DONE + ".", "MSG-ID": "0000", "MSG-DESC": MSG_DONE + "."}
+    rooms = sorted(set(mock_room_guest_db) | set(mock_roomcontrol_state))
+    if not rooms:
+        rooms = ["2403"]   # 沙盒至少回一房,避免空 ROWSET
+    rows = []
+    for room in rooms:
+        state = mock_roomcontrol_state.get(room) or {}
+        rows.append({"SEND-CODE": reve_code, "ACTION_COD": "RETURN", "ROOM_NOS": room,
+                     "ROOM_STA": "O" if room in mock_room_guest_db else "V",
+                     "CLEAN_STA": _clean_sta_from_bits(state.get("status_bits", "")),
+                     **tail})
     return rows
 
 
@@ -123,7 +150,10 @@ def import_sync_files():
         logger.info(f"📥 [房控沙盒] 匯入 {file_name} ➔ REVE-CODE:【{reve}】ACTION_COD:【{action_cod}】房號:【{room}】")
 
         if action_cod == "ROOM_INF":
-            resp_xml = build_rowset_xml(_room_inf_rows(room))
+            resp_xml = build_rowset_xml(_room_inf_rows(room, reve))
+            proc = True
+        elif action_cod == "RETURN":
+            resp_xml = build_rowset_xml(_return_rows(reve))
             proc = True
         elif reve.endswith("4190") or action_cod:
             resp_xml, proc = _apply_b4_push(row)

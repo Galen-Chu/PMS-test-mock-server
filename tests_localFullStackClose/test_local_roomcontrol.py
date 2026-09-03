@@ -97,15 +97,15 @@ def test_mock_negative_gates(server_up):
 
 
 def test_orchestrator_closed_loop_via_runs_api(server_up):
-    """閉環③(編排端視角):/runs 帶覆寫跑兩案——推送落庫回讀 + 查詢合約,全 PASS。"""
+    """閉環③(編排端視角):/runs 帶覆寫跑雙廠商三案——推送落庫回讀 + 查詢合約 + 全房況,全 PASS。"""
     room = f"8{datetime.now().strftime('%H%M%S')}"
     bits = "1000001100100000"
     payload = {
         "environment": "LOCAL_OFFLINE",
-        "scenario_ids": ["rc_room_status_push", "rc_room_status_query"],
+        "scenario_ids": ["rc_minxon_room_sta_push", "rc_minxon_room_inf", "rc_chaofeng_return"],
         "overrides": {
-            "rc_room_status_push": {"room_no": room, "status_bits": bits},
-            "rc_room_status_query": {"room_no": "2403"},
+            "rc_minxon_room_sta_push": {"room_no": room, "status_bits": bits},
+            "rc_minxon_room_inf": {"room_no": "2403"},
         },
     }
     run = requests.post(f"{BASE}/runs", json=payload).json()
@@ -116,8 +116,14 @@ def test_orchestrator_closed_loop_via_runs_api(server_up):
             break
         time.sleep(0.3)
     results = {c["case_id"]: c for c in requests.get(f"{BASE}/runs/{run['run_id']}/results").json()}
-    push, query = results["rc_room_status_push"], results["rc_room_status_query"]
+    push = results["rc_minxon_room_sta_push"]
+    query = results["rc_minxon_room_inf"]
+    ret = results["rc_chaofeng_return"]
     assert push["status"] == "PASS"
     assert push["resolved_params"]["status_bits"] == bits
     assert push["response_payload"]["state_readback_bits"] == bits     # 編排端閉環回讀
     assert query["status"] == "PASS" and query["response_payload"]["row_count"] == 2
+    assert ret["status"] == "PASS" and ret["response_payload"]["row_count"] >= 1
+    # RETURN 應含本輪推送的房(位元串第 9 位=0 → CLEAN_STA=C)
+    ret_rooms = {r["ROOM_NOS"]: r for r in ret["response_payload"]["rows"]}
+    assert ret_rooms[room]["ROOM_STA"] == "V" and ret_rooms[room]["CLEAN_STA"] == "C"

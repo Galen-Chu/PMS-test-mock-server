@@ -21,7 +21,7 @@ from orchestrator import engine
 from server.roomcontrol import roomcontrol_bp
 from server.roomcontrol.routes import mock_roomcontrol_state, mock_room_guest_db
 from server.roomcontrol.vendors.vendor_A7_XML import (
-    build_room_sta_push, build_room_inf_query, parse_rowset_xml,
+    build_room_sta_push, build_room_inf_query, build_return_query, parse_rowset_xml,
     build_rowset_xml, DEFAULT_STATUS_BITS, REVE_ROOM_STA, REVE_ROOM_INF,
 )
 
@@ -107,34 +107,75 @@ def test_mock_route_negative_paths():
     assert r4.status_code == 400
 
 
+def test_mock_route_return_all_rooms_with_clean_sta_closure():
+    """A10 RETURN:全房一 ROW;推送位元串第 9 位(清潔)→ CLEAN_STA 推導(第二條閉環)。"""
+    c = _client()
+    # 推送:房 2601 位元串第 9 位=3(待巡房 → CLEAN_STA=S)
+    c.post("/third-party/import-sync-files",
+           json=_import_body(build_room_sta_push("2601", "1000001130100000")))
+    # 推送:房 2602 第 9 位=1(請打掃 → D 髒房)
+    c.post("/third-party/import-sync-files",
+           json=_import_body(build_room_sta_push("2602", "1000001110100000")))
+
+    r = c.post("/third-party/import-sync-files", json=_import_body(build_return_query()))
+    assert r.status_code == 200
+    item = r.get_json()[0]
+    rows = parse_rowset_xml(item["responseBody"])
+    by_room = {row["ROOM_NOS"]: row for row in rows}
+    assert by_room["2403"]["ROOM_STA"] == "O"          # 種子住客房
+    assert by_room["2601"]["ROOM_STA"] == "V" and by_room["2601"]["CLEAN_STA"] == "S"
+    assert by_room["2602"]["ROOM_STA"] == "V" and by_room["2602"]["CLEAN_STA"] == "D"
+    assert all(row["RETN-CODE"] == "0000" for row in rows)
+
+
 def test_registry_roomcontrol_module():
     by_mod = registry.by_module()
     assert "roomcontrol" in by_mod
     cases = {s.id: s for s in by_mod["roomcontrol"]}
-    assert {"rc_room_status_push", "rc_room_status_query"} <= set(cases)
+    # 2026-09-03 雙廠商 × 三動作:MINXON(81) / CHAOFENG(86) × push/room_inf/return
+    expected = {f"rc_{v}_{a}" for v in ("minxon", "chaofeng")
+                for a in ("room_sta_push", "room_inf", "return")}
+    assert expected == set(cases)
     assert all(s.implemented for s in by_mod["roomcontrol"])
-    assert all(s.vendor == "A7_XML" for s in by_mod["roomcontrol"])
-    push = cases["rc_room_status_push"]
-    keys = {sp.key for sp in push.params}
-    assert {"room_no", "status_bits", "third_party_code"} == keys
+    assert {s.vendor for s in by_mod["roomcontrol"]} == {"MINXON", "CHAOFENG"}
+    push = cases["rc_minxon_room_sta_push"]
+    assert {sp.key for sp in push.params} == {"room_no", "status_bits", "third_party_code"}
+    # third_party_code 預設帶實際代碼(MINXON=81、CHAOFENG=86),仍可覆寫
+    tp_default = {sp.key: sp.default for sp in push.params if sp.key == "third_party_code"}
+    assert tp_default["third_party_code"] == "81"
+    tp_cf = [sp for sp in cases["rc_chaofeng_room_inf"].params if sp.key == "third_party_code"][0]
+    assert tp_cf.default == "86"
+
+
+def test_vendor_codes_embedded_in_reve():
+    """REVE-CODE 依廠商代號組出:0300+<2碼>+動作碼。"""
+    from server.roomcontrol.vendors.vendor_A7_XML import (
+        reve_room_sta, reve_room_inf, reve_return, build_return_query,
+    )
+    assert reve_room_inf("81") == "0300811090"
+    assert reve_room_sta("86") == "0300864190"
+    assert reve_return("81") == "0300814290"
+    assert "<REVE-CODE>0300814290</REVE-CODE>" in build_return_query(vendor_code="81")
 
 
 def test_runner_assembles_xml_with_overrides():
     """離線(無 server)仍可驗證:覆寫貫穿 XML 組裝(step 在連線前即錄製 request_body)。"""
-    run = engine.start_run(["rc_room_status_query"], "LOCAL_OFFLINE",
-                           overrides={"rc_room_status_query": {"room_no": "2501"}})
+    run = engine.start_run(["rc_minxon_room_inf"], "LOCAL_OFFLINE",
+                           overrides={"rc_minxon_room_inf": {"room_no": "2501"}})
     cr = run.cases[0]
     assert cr.resolved_params["room_no"] == "2501"
     body = cr.steps[0]["request_body"]
-    assert body["thirdPartyCode"] == "TT"
+    assert body["thirdPartyCode"] == "81"
     xml_str = body["requestDataList"][0]["requestBody"]
+    assert "<REVE-CODE>0300811090</REVE-CODE>" in xml_str
     assert "<ACTION_COD>ROOM_INF</ACTION_COD>" in xml_str
     assert "<ROOM_NOS>2501</ROOM_NOS>" in xml_str
 
-    # push 案:位元串覆寫進 ACTION_COD(#...# 包裹)
-    run2 = engine.start_run(["rc_room_status_push"], "LOCAL_OFFLINE",
-                            overrides={"rc_room_status_push": {"status_bits": "010101011001"}})
+    # push 案:位元串覆寫進 ACTION_COD(#...# 包裹);CHAOFENG 代碼嵌 REVE
+    run2 = engine.start_run(["rc_chaofeng_room_sta_push"], "LOCAL_OFFLINE",
+                            overrides={"rc_chaofeng_room_sta_push": {"status_bits": "010101011001"}})
     xml2 = run2.cases[0].steps[0]["request_body"]["requestDataList"][0]["requestBody"]
+    assert "<REVE-CODE>0300864190</REVE-CODE>" in xml2
     assert "<ACTION_COD>#ROOM_STA#010101011001#</ACTION_COD>" in xml2
     assert "<ROOM_NOS>2403</ROOM_NOS>" in xml2     # 未覆寫欄位用預設
 

@@ -87,8 +87,8 @@ RoomCtrl 18 端點(強制供電/預冷/空調/溫度/風速/窗簾/燈迴/服務
 | Q2 | **ROOM_INF 回應 XML 形狀** | ✅ sa10 A6:一住客一 ROW;ROOM_STA CHAR(1) O住人/S參觀/V空房;GUEST_STA K關帳/O開帳;CI_SER/ALT_NAM/稱謂/姓名/CI_DAT/CI_TIM/ECO_DAT/TEL_NOS/BIRTH_DAT/ADVBAL_AMT/CCARD_AMT/LANG/VIP_STA + RETN 尾列 |
 | Q3 | `ACTION_STA` 值域與語意 | ✅ sa10 B4:1=設定、0=清除;逐 action 對照(勿擾/緊急/房門/清潔 0–4)已入 vendor 模組註解 |
 | Q4 | REVE-CODE/SEND-CODE 完整代碼表 | ✅ sa10 訊息列表(雙向全表):PMS→廠商 CKI/CKO/RMC/CIX/COX/QUERY/CLEAN_STA/SET_PRECOOL(0300901xTT 系);廠商→PMS ROOM_INF 0300TT1090/BILL_LIST 0300TT1190/RETURN 0300TT4290/ROOM_STA 系 0300TT4190/KeyBox 0300TT4390 |
-| Q5 | `thirdPartyCode` 實際值 + REAL 端點(GET 閘門版 vs REST 版)+ 鑑別 | ⏳ **= 2026-09-03 與 SA 確認「使用公版 API 的房控廠商」**(代碼 TT 為佔位;已做成案例參數 `third_party_code` 可覆寫) |
-| Q6 | `procStatus=false` 的錯誤處理與重送契約 | ⏳ sa10 僅檔案介面側註解(procStatus=false → xxx_ret_err.xml 不移檔) |
+| Q5 | `thirdPartyCode` 實際值 + REAL 端點 + 鑑別 | 🔶 **部分解(2026-09-03)**:廠商代碼已定——**MINXON 民笙=81、CHAOFENG 超烽=86**(掛雙廠商各三案);REAL_QA 實測:REST 端點 `/third-party/import-sync-files` 可用、免 Authorization(僅 bacchus 身分 Header)、**ROOM_INF 已回 XML 實料**(房 101→ROOM_STA=V、RETN 0000)。⚠️ 遺留:(a) **A10 RETURN 經 REST 回 procStatus=false+全 null**(雙廠皆同——支援方式待 SA 確認,測試已標 xfail);(b) QA 不驗 thirdParty 代碼(假代碼也收);(c) CHAOFENG 回應 data[] 混 [null 失敗殼, 成功實料](runner 已掃描挑項);(d) 回應 SEND-CODE 固定回 TT 模板形式(0300TT1090)而非回映廠商代碼——mock 維持 sa10 契約(同 REVE),實測差異記錄於此 |
+| Q6 | `procStatus=false` 的錯誤處理與重送契約 | ⏳ sa10 僅檔案介面側註解(procStatus=false → xxx_ret_err.xml 不移檔);REAL_QA 的 RETURN 失敗形狀已實錄(全 null 項) |
 | Q7 | 真實測試台房控設備前提(實體/模擬/無) | ⏳ RC3 的 REAL 驗證深度 |
 
 ---
@@ -131,8 +131,8 @@ orchestrator/runners.py              # module="roomcontrol" 案例(發砲端=模
 
 | 期 | 內容 | 工作量 | 前提 |
 |---|---|---|---|
-| **RC0** | 模組骨架 + XML 管線(組裝/解析/417)+ ROOM_STA/ROOM_INF 兩案 + push 落庫閉環 + 離線測試 + UI label | ✅ **2026-09-03 完成**(7 新離線測試;實跑閉環/雙住客列/空房 V 列全過) | 無 |
-| **RC1** | REAL_QA/SIT 實測一輪(import-sync-files 或 GET 閘門版,依 Q5 結果)+ 通關種子入庫 | 約 0.5 天 | Q5(廠商/代碼/端點/鑑別) |
+| **RC0** | 模組骨架 + XML 管線(組裝/解析/417)+ ROOM_STA/ROOM_INF 兩案 + push 落庫閉環 + 離線測試 + UI label | ✅ **2026-09-03 完成**;同日升級**雙廠商**(MINXON 81/CHAOFENG 86 × push/room_inf/return 六案)+ A10 RETURN mock(含位元串第 9 位→CLEAN_STA 推導閉環) | 無 |
+| **RC1** | REAL_QA 實測 + 通關種子入庫 | 🔶 **ROOM_INF 已驗證**(雙廠、回實料;`test_real_roomcontrol_qa.py` 2 passed);遺留:RETURN 支援方式(Q5a)、ROOM_STA 推送實測(經主控台手動) | Q5 遺留項 |
 | **RC2** | 同族 action(CLEAN/RMTEMP/KeyBox B5)+ 位元級驗證 + 負面路徑補齊 | 約 1 天 | —(sa10 已補齊 Q1/Q3/Q4) |
 | **RC3** | sa7 PMS→廠商房控面(讀取 ×3 + 高值寫入:unlockDoor/switchAC/mandatoryPower) | 約 1 天 | Q7 設備前提 |
 

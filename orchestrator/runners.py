@@ -1047,14 +1047,20 @@ def run_paytronex_find_unknown(ctx: RunContext) -> CaseResult:
 # ====================================================================
 # 🌡️ 房控(roomcontrol / A7 公版 XML 介面)— 對齊 sa_docs/sa10 V1.2
 # 方向:廠商→PMS(沙盒發砲端=模擬房控廠商;mock PMS 側在 server/roomcontrol/)。
-# RC0 兩案:B4 ROOM_STA 房況推送(16 位房況字串)、A6 ROOM_INF 房況查詢(住客現況)。
-# 傳輸:POST /third-party/import-sync-files(sa8/sa9 REST 版;
-#      GET TxnData 閘門版見 sa10,REAL 端點與 thirdParty 實際代碼待 SA 提供)。
+# 2026-09-03 起掛雙廠商:MINXON 民笙(thirdParty=81)、CHAOFENG 超烽(thirdParty=86),
+# 每家三案:B4 ROOM_STA 房況推送、A6 ROOM_INF 房況查詢、A10 RETURN 全部房況。
+# 傳輸:POST /third-party/import-sync-files(sa8/sa9 REST 版;GET TxnData 閘門版見 sa10)。
 # ====================================================================
 from server.roomcontrol.vendors.vendor_A7_XML import (
-    build_room_sta_push, build_room_inf_query, parse_rowset_xml,
+    build_room_sta_push, build_room_inf_query, build_return_query, parse_rowset_xml,
     DEFAULT_STATUS_BITS,
 )
+from server.roomcontrol.vendors import vendor_MINXON, vendor_CHAOFENG
+
+_RC_VENDORS = [
+    (vendor_MINXON.VENDOR_ID, vendor_MINXON.VENDOR_LABEL, vendor_MINXON.THIRD_PARTY_CODE),
+    (vendor_CHAOFENG.VENDOR_ID, vendor_CHAOFENG.VENDOR_LABEL, vendor_CHAOFENG.THIRD_PARTY_CODE),
+]
 
 
 def _a7_identity(ctx: RunContext):
@@ -1071,22 +1077,27 @@ def _a7_import_payload(ctx: RunContext, xml_str: str, third_party: str, file_nam
 
 
 def _a7_first_response_item(res):
-    """取回應首項與其 responseBody 解析列;失敗回 ({}, [])。
+    """取回應項與其 responseBody 解析列;失敗回 ({}, [])。
 
-    相容兩種回應形狀:
+    相容三種實況(2026-09-03 REAL_QA 實測):
     - sa8/sa9 swagger:200 → [VendorImportSyncDataResponse, ...](沙盒 mock)
-    - REAL_QA 實測(2026-09-03):Athena 標準信封 {"code":"2000","data":[...]} 包著同結構
+    - REAL_QA:Athena 標準信封 {"code":"2000","data":[...]} 包著同結構
+    - CHAOFENG(86) 實測:data 內可能混有 [全 null 的失敗殼, 成功實料] → 掃描挑首個
+      procStatus=true 或帶 responseBody 的項目,而非固定取 [0]
     """
     try:
         body = res.json()
     except Exception:
         body = None
-    if isinstance(body, dict) and isinstance(body.get("data"), list) and body["data"]:
-        item = body["data"][0]
-    elif isinstance(body, list) and body:
-        item = body[0]
+    if isinstance(body, dict) and isinstance(body.get("data"), list):
+        items = body["data"]
+    elif isinstance(body, list):
+        items = body
     else:
-        item = {}
+        items = []
+    item = next((it for it in items
+                 if isinstance(it, dict) and (it.get("procStatus") is True or it.get("responseBody"))),
+                (items[0] if items else {}))
     rows = []
     if item.get("responseBody"):
         try:
@@ -1096,84 +1107,129 @@ def _a7_first_response_item(res):
     return item, rows
 
 
-@register_scenario(
-    "rc_room_status_push", module="roomcontrol", vendor="A7_XML",
-    name="房況推送(ROOM_STA/B4)", endpoint="/third-party/import-sync-files",
-    params=[
-        ParamSpec("room_no", "房號", "str", "2403"),
-        ParamSpec("status_bits", "房況位元串", "str", DEFAULT_STATUS_BITS,
-                  hint="16 位:1Keyhouse 2Keybox 3冷氣 4總電源 5鐵捲門 6一氧化碳 7防盜 8緊急 9清潔(1請掃/2掃中/3待巡/4巡中/0完成) 10勿擾 11房門 12-16保留"),
-        ParamSpec("third_party_code", "廠商代碼", "str", "TT",
-                  hint="A7 公版 thirdParty 代碼;TT=sa10 佔位,實際值由德安上線前提供"),
-    ],
-)
-def run_rc_room_status_push(ctx: RunContext) -> CaseResult:
-    """B4 送全部房況:推 16 位房況字串 → 斷言 procStatus + RETN-CODE 0000 + "1112 Set";
-    LOCAL 再經內部回讀閉環驗證狀態已落庫(REAL 無內部端點,跳過回讀)。"""
-    import time as _t
-    scenario = registry.get("rc_room_status_push")
-    p = _p(ctx, "rc_room_status_push")
-    xml_str = build_room_sta_push(p["room_no"], p["status_bits"])
-    payload = _a7_import_payload(ctx, xml_str, p["third_party_code"])
-    t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
-    dur = int((_t.perf_counter() - t0) * 1000)
-    summary = {"room_no": p["room_no"], "action_cod": f"#ROOM_STA#{p['status_bits']}#"}
-    if err or res is None:
-        return _fail("rc_room_status_push", "", scenario, dur, request_payload=payload,
-                     response_payload={"__error__": err or "no response"})
-    item, rows = _a7_first_response_item(res)
-    retn = rows[0].get("RETN-CODE") if rows else None
-    summary.update({"procStatus": item.get("procStatus"), "retn_code": retn,
-                    "retn_desc": rows[0].get("RETN-CODE-DESC") if rows else None})
-    ok = res.status_code == 200 and item.get("procStatus") is True and retn == "0000"
-    # LOCAL 閉環:內部回讀斷言位元串已落庫(下命令→回讀,前例:keycard checkinTime)
-    if ok and not ctx.use_real:
-        res_rb, _ = execute_for_ctx(ctx, "GET", ctx.urls["roomcontrol_internal"])
-        if res_rb is not None and res_rb.status_code == 200:
-            state = (res_rb.json() or {}).get("room_control_state") or {}
-            summary["state_readback_bits"] = (state.get(p["room_no"]) or {}).get("status_bits")
-            ok = summary["state_readback_bits"] == p["status_bits"]
-    if ok:
-        return _ok("rc_room_status_push", "", scenario, dur, request_payload=payload, response_payload=summary)
-    return _fail("rc_room_status_push", "", scenario, dur, request_payload=payload, response_payload=summary)
+def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
+    """以閉包工廠為一家 A7 公版房控廠商註冊三案(push / room_inf / return)。
+
+    REVE-CODE 依廠商代號組出(0300+代號+動作碼);third_party_code 預設帶實際代碼仍可覆寫
+    (SIT/MAS 等環境代碼若不同,UI 直接改)。
+    """
+    slug = vendor_id.lower()
+
+    def _room_sta_push(ctx: RunContext) -> CaseResult:
+        import time as _t
+        case_id = f"rc_{slug}_room_sta_push"
+        scenario = registry.get(case_id)
+        p = _p(ctx, case_id)
+        xml_str = build_room_sta_push(p["room_no"], p["status_bits"], vendor_code=tp_code)
+        payload = _a7_import_payload(ctx, xml_str, p["third_party_code"])
+        t0 = _t.perf_counter()
+        res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
+        dur = int((_t.perf_counter() - t0) * 1000)
+        summary = {"room_no": p["room_no"], "action_cod": f"#ROOM_STA#{p['status_bits']}#"}
+        if err or res is None:
+            return _fail(case_id, "", scenario, dur, request_payload=payload,
+                         response_payload={"__error__": err or "no response"})
+        item, rows = _a7_first_response_item(res)
+        retn = rows[0].get("RETN-CODE") if rows else None
+        summary.update({"procStatus": item.get("procStatus"), "retn_code": retn,
+                        "retn_desc": rows[0].get("RETN-CODE-DESC") if rows else None})
+        ok = res.status_code == 200 and item.get("procStatus") is True and retn == "0000"
+        # LOCAL 閉環:內部回讀斷言位元串已落庫(下命令→回讀,前例:keycard checkinTime)
+        if ok and not ctx.use_real:
+            res_rb, _ = execute_for_ctx(ctx, "GET", ctx.urls["roomcontrol_internal"])
+            if res_rb is not None and res_rb.status_code == 200:
+                state = (res_rb.json() or {}).get("room_control_state") or {}
+                summary["state_readback_bits"] = (state.get(p["room_no"]) or {}).get("status_bits")
+                ok = summary["state_readback_bits"] == p["status_bits"]
+        if ok:
+            return _ok(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+        return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+
+    def _room_inf_query(ctx: RunContext) -> CaseResult:
+        import time as _t
+        case_id = f"rc_{slug}_room_inf"
+        scenario = registry.get(case_id)
+        p = _p(ctx, case_id)
+        xml_str = build_room_inf_query(p["room_no"], vendor_code=tp_code)
+        payload = _a7_import_payload(ctx, xml_str, p["third_party_code"], file_name="C002.xml")
+        t0 = _t.perf_counter()
+        res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
+        dur = int((_t.perf_counter() - t0) * 1000)
+        if err or res is None:
+            return _fail(case_id, "", scenario, dur, request_payload=payload,
+                         response_payload={"__error__": err or "no response"})
+        item, rows = _a7_first_response_item(res)
+        summary = {"procStatus": item.get("procStatus"), "row_count": len(rows),
+                   "rows": rows,   # 結構化住客列(JSON 稽核可直接檢視;HTTP 稽核另有原始 XML)
+                   "response_body_raw": item.get("responseBody")}
+        first = rows[0] if rows else {}
+        ok = (res.status_code == 200 and item.get("procStatus") is True
+              and rows and first.get("ROOM_STA") in ("O", "S", "V", "R")
+              and first.get("RETN-CODE") == "0000")
+        if ok:
+            return _ok(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+        return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+
+    def _return_all(ctx: RunContext) -> CaseResult:
+        import time as _t
+        case_id = f"rc_{slug}_return"
+        scenario = registry.get(case_id)
+        p = _p(ctx, case_id)
+        xml_str = build_return_query(vendor_code=tp_code)
+        payload = _a7_import_payload(ctx, xml_str, p["third_party_code"], file_name="C003.xml")
+        t0 = _t.perf_counter()
+        res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
+        dur = int((_t.perf_counter() - t0) * 1000)
+        if err or res is None:
+            return _fail(case_id, "", scenario, dur, request_payload=payload,
+                         response_payload={"__error__": err or "no response"})
+        item, rows = _a7_first_response_item(res)
+        summary = {"procStatus": item.get("procStatus"), "row_count": len(rows),
+                   "rows": rows, "response_body_raw": item.get("responseBody")}
+        first = rows[0] if rows else {}
+        ok = (res.status_code == 200 and item.get("procStatus") is True
+              and rows and first.get("ROOM_STA") in ("O", "V", "R", "S")
+              and first.get("RETN-CODE") == "0000")
+        if ok:
+            return _ok(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+        return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+
+    bits_hint = ("16 位:1Keyhouse 2Keybox 3冷氣 4總電源 5鐵捲門 6一氧化碳 7防盜 "
+                 "8緊急 9清潔(1請掃/2掃中/3待巡/4巡中/0完成) 10勿擾 11房門 12-16保留")
+    registry.register(
+        f"rc_{slug}_room_sta_push", module="roomcontrol", vendor=vendor_id,
+        name=f"房況推送 ROOM_STA/B4({vendor_label})", endpoint="/third-party/import-sync-files",
+        runner=_room_sta_push,
+        params=[
+            ParamSpec("room_no", "房號", "str", "2403"),
+            ParamSpec("status_bits", "房況位元串", "str", DEFAULT_STATUS_BITS, hint=bits_hint),
+            ParamSpec("third_party_code", "廠商代碼", "str", tp_code,
+                      hint=f"A7 公版 thirdParty 代碼;{vendor_label}={tp_code}(他環境不同時可覆寫)"),
+        ],
+    )
+    registry.register(
+        f"rc_{slug}_room_inf", module="roomcontrol", vendor=vendor_id,
+        name=f"房況查詢 ROOM_INF/A6({vendor_label})", endpoint="/third-party/import-sync-files",
+        runner=_room_inf_query,
+        params=[
+            ParamSpec("room_no", "房號", "str", "2403", hint="查無住客的房號會回 ROOM_STA=V(空房)單列"),
+            ParamSpec("third_party_code", "廠商代碼", "str", tp_code,
+                      hint=f"A7 公版 thirdParty 代碼;{vendor_label}={tp_code}"),
+        ],
+    )
+    registry.register(
+        f"rc_{slug}_return", module="roomcontrol", vendor=vendor_id,
+        name=f"全房況查詢 RETURN/A10({vendor_label})", endpoint="/third-party/import-sync-files",
+        runner=_return_all,
+        params=[
+            ParamSpec("third_party_code", "廠商代碼", "str", tp_code,
+                      hint=f"A7 公版 thirdParty 代碼;{vendor_label}={tp_code}"),
+        ],
+    )
 
 
-@register_scenario(
-    "rc_room_status_query", module="roomcontrol", vendor="A7_XML",
-    name="房況查詢(ROOM_INF/A6)", endpoint="/third-party/import-sync-files",
-    params=[
-        ParamSpec("room_no", "房號", "str", "2403", hint="查無住客的房號會回 ROOM_STA=V(空房)單列"),
-        ParamSpec("third_party_code", "廠商代碼", "str", "TT",
-                  hint="A7 公版 thirdParty 代碼;TT=sa10 佔位,實際值由德安上線前提供"),
-    ],
-)
-def run_rc_room_status_query(ctx: RunContext) -> CaseResult:
-    """A6 房間狀態查詢:ROOM_INF → 斷言 procStatus + 每住客一 ROW + ROOM_STA(O/S/V)+ RETN-CODE 0000。"""
-    import time as _t
-    scenario = registry.get("rc_room_status_query")
-    p = _p(ctx, "rc_room_status_query")
-    xml_str = build_room_inf_query(p["room_no"])
-    payload = _a7_import_payload(ctx, xml_str, p["third_party_code"], file_name="C002.xml")
-    t0 = _t.perf_counter()
-    res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
-    dur = int((_t.perf_counter() - t0) * 1000)
-    if err or res is None:
-        return _fail("rc_room_status_query", "", scenario, dur, request_payload=payload,
-                     response_payload={"__error__": err or "no response"})
-    item, rows = _a7_first_response_item(res)
-    summary = {
-        "procStatus": item.get("procStatus"),
-        "row_count": len(rows),
-        "rows": rows,   # 結構化住客列(JSON 稽核可直接檢視;HTTP 稽核另有原始 XML)
-    }
-    first = rows[0] if rows else {}
-    ok = (res.status_code == 200 and item.get("procStatus") is True
-          and rows and first.get("ROOM_STA") in ("O", "S", "V", "R")
-          and first.get("RETN-CODE") == "0000")
-    if ok:
-        return _ok("rc_room_status_query", "", scenario, dur, request_payload=payload, response_payload=summary)
-    return _fail("rc_room_status_query", "", scenario, dur, request_payload=payload, response_payload=summary)
+for _vid, _vlabel, _tp in _RC_VENDORS:
+    _register_rc_vendor_cases(_vid, _vlabel, _tp)
 
 
 # （原本 checkin_sync/whitelist_update/car_arrival_retry 的 UNIMPLEMENTED 註冊已由上方實作取代）
