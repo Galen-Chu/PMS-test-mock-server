@@ -132,7 +132,7 @@ orchestrator/runners.py              # module="roomcontrol" 案例(發砲端=模
 | 期 | 內容 | 工作量 | 前提 |
 |---|---|---|---|
 | **RC0** | 模組骨架 + XML 管線(組裝/解析/417)+ ROOM_STA/ROOM_INF 兩案 + push 落庫閉環 + 離線測試 + UI label | ✅ **2026-09-03 完成**;同日升級**雙廠商**(MINXON 81/CHAOFENG 86 × push/room_inf/return 六案)+ A10 RETURN mock(含位元串第 9 位→CLEAN_STA 推導閉環) | 無 |
-| **RC1** | REAL_QA 實測 + 通關種子入庫 | 🔶 **ROOM_INF 已驗證**(雙廠、回實料;`test_real_roomcontrol_qa.py` 2 passed);遺留:RETURN 支援方式(Q5a)、ROOM_STA 推送實測(經主控台手動) | Q5 遺留項 |
+| **RC1** | REAL_QA 實測 + 通關種子入庫 | ✅ **2026-09-04 SA 確認收尾**:ROOM_INF 雙廠回實料(`test_real_roomcontrol_qa.py` 2 passed)+ ROOM_STA 推送經主控台手動實測 OK(2026-09-03);廠商×模組架構已有雛型。遺留(不阻塞,追蹤於 Q5a):A10 RETURN 經 REST 回 procStatus=false+全 null——支援方式待 SA(測試已標 xfail) | — |
 | **RC2** | 同族 action(CLEAN/RMTEMP/KeyBox B5)+ 位元級驗證 + 負面路徑補齊 | 約 1 天 | —(sa10 已補齊 Q1/Q3/Q4) |
 | **RC3** | sa7 PMS→廠商房控面(讀取 ×3 + 高值寫入:unlockDoor/switchAC/mandatoryPower) | 約 1 天 | Q7 設備前提 |
 
