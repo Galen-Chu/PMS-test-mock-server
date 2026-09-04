@@ -4,7 +4,7 @@
 對齊現有「廠商 Strategy 模式」但補上「案例層」的掛點：
 - 新增廠商 → 加 server/<mod>/vendors/vendor_XXX.py（現狀）
 - 新增案例 → 在該模組下用 @register_scenario(...) 掛 runner
-- 新增模組 → 加 blueprint（現狀��+ 在 runners.py 登錄該模組的案例
+- 新增模組 → 加 blueprint（現狀��+ 在 runners/ 各模組檔登錄該模組的案例
 
 三種擴充都變成「加檔案 + 註冊」，不再改編排核心。
 """

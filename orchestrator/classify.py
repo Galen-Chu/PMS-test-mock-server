@@ -38,7 +38,7 @@ _REMEDY = {
     STATUS_CODE: "檢查狀態碼與回應內容（常見 401/403 鑑別失敗、404/417 資料不存在、400 欄位錯誤）。",
     TIMEOUT: "檢查目標環境 URL 是否可達、認證憑證是否有效、網路/VPN 是否通。",
     FIELD_MISMATCH: "對照下方 Diff 表，修正 request payload 對應欄位後重試。",
-    UNIMPLEMENTED: "該案例尚無執行器（runner），請至 orchestrator/runners.py 補上。",
+    UNIMPLEMENTED: "該案例尚無執行器（runner），請至 orchestrator/runners/ 各模組檔補上。",
     "UNKNOWN_SCENARIO": "case_id 未在 registry 註冊，檢查呼叫端傳的案例 ID。",
 }
 
