@@ -31,6 +31,8 @@ import config
 
 from server.roomcontrol.vendors.vendor_A7_XML import (
     build_room_inf_query, build_return_query,
+    build_clean_push, build_rmtemp_push, build_keybox_push,
+    build_rowset_xml, action_dat_now, reve_room_sta, reve_room_inf,
 )
 from server.roomcontrol.vendors import vendor_MINXON, vendor_CHAOFENG
 
@@ -104,3 +106,102 @@ def test_qa_return_all_rooms(vid, vlabel, code):
     rb = _assert_query_response(res, f"QA RETURN {vlabel}({code})")
     if rb:
         assert "<ROOM_STA>" in rb      # 有實料:至少帶房況欄位
+
+
+# ====================================================================
+# RC2 實測輪(2026-09-04,引擎發砲 12 案後固化;雙廠行為一致)
+# QA 實況:
+# - CLEAN / #RMTEMP# 推送:200+信封,procStatus=false + RETN 9999 + DESC「ADD item」→ 待 SA(Q5)
+# - B5 KeyBox(REVE 4390):data[] 全 null 失敗殼(同 A10 RETURN 形狀)→ Q5
+# - 壞 XML / 未知 ACTION_COD:不回 417/9999 XML,一律 200 + 全 null 殼(QA 拒收風格)
+# - ROOM_INF 缺 ROOM_NOS:200 + procStatus=false + RETN 9999 + 「Room configuration not found…Room null」
+# mock 維持 sa10 契約(417 / 9999 XML);下方 PASS 測試=QA 現況守護,xfail=待 SA 修復項。
+# ====================================================================
+QA_PUSH_ROOM = os.environ.get("A7_PUSH_ROOM_NO", "9901")   # RC2 推送用隔離房號,避免動 QA 既有房況
+
+
+def _envelope_items(res, action_label):
+    """解 Athena 信封 → data 項 list(共用;非 JSON/非 200 形狀即斷言失敗)。"""
+    print(f"\n[{action_label}] HTTP {res.status_code}")
+    print(f"[{action_label}] body: {res.text[:600]}")
+    assert res.status_code not in (404, 405), "REST 端點不存在——Q5 需與 SA 確認 REAL 端點"
+    payload = res.json() if res.headers.get("content-type", "").startswith("application/json") else None
+    assert payload is not None, f"回應非 JSON:{res.headers.get('content-type')}"
+    items = payload.get("data") if isinstance(payload, dict) else payload
+    assert isinstance(items, list) and items, f"信封內無 data 陣列:{str(payload)[:200]}"
+    return items
+
+
+@_QA_ONLY
+@pytest.mark.parametrize("vid,vlabel,code", VENDORS, ids=[v[0] for v in VENDORS])
+@pytest.mark.xfail(reason="QA 2026-09-04 實測:CLEAN 推送回 procStatus=false + RETN 9999「ADD item」(雙廠)——"
+                          "支援方式待 SA 確認(Q5);修復後轉 XPASS 即可移除",
+                   strict=False)
+def test_qa_clean_push(vid, vlabel, code):
+    """RC2 B4 CLEAN:{vlabel} 推清掃狀態(ACTION_STA=1 請打掃)至隔離房。"""
+    res = _post_qa(build_clean_push(QA_PUSH_ROOM, "1", vendor_code=code), code, "C001.xml")
+    rb = _assert_query_response(res, f"QA CLEAN {vlabel}({code}) 房{QA_PUSH_ROOM}")
+    assert "<RETN-CODE>0000</RETN-CODE>" in rb
+
+
+@_QA_ONLY
+@pytest.mark.parametrize("vid,vlabel,code", VENDORS, ids=[v[0] for v in VENDORS])
+@pytest.mark.xfail(reason="QA 2026-09-04 實測:#RMTEMP# 推送回 procStatus=false + RETN 9999「ADD item」(雙廠)——"
+                          "支援方式待 SA 確認(Q5);修復後轉 XPASS 即可移除",
+                   strict=False)
+def test_qa_rmtemp_push(vid, vlabel, code):
+    """RC2 B4 RMTEMP:{vlabel} 推室溫 26C 至隔離房。"""
+    res = _post_qa(build_rmtemp_push(QA_PUSH_ROOM, "26C", vendor_code=code), code, "C001.xml")
+    rb = _assert_query_response(res, f"QA RMTEMP {vlabel}({code}) 房{QA_PUSH_ROOM}")
+    assert "<RETN-CODE>0000</RETN-CODE>" in rb
+
+
+@_QA_ONLY
+@pytest.mark.parametrize("vid,vlabel,code", VENDORS, ids=[v[0] for v in VENDORS])
+@pytest.mark.xfail(reason="QA 2026-09-04 實測:B5 KeyBox(4390)回 data[] 全 null 失敗殼(同 A10 RETURN 形狀)——"
+                          "支援方式待 SA 確認(Q5);修復後轉 XPASS 即可移除",
+                   strict=False)
+def test_qa_keybox_push(vid, vlabel, code):
+    """RC2 B5 KeyBox:{vlabel} 推插卡現況(SERVICE 卡)至隔離房。"""
+    res = _post_qa(build_keybox_push(QA_PUSH_ROOM, "SERVICE", "1234567890", "王小美", "1",
+                                     vendor_code=code), code, "C001.xml")
+    rb = _assert_query_response(res, f"QA KEYBOX {vlabel}({code}) 房{QA_PUSH_ROOM}")
+    assert "<RETN-CODE>0000</RETN-CODE>" in rb
+
+
+@_QA_ONLY
+@pytest.mark.parametrize("vid,vlabel,code", VENDORS, ids=[v[0] for v in VENDORS])
+def test_qa_bad_xml_rejected_as_null_shell(vid, vlabel, code):
+    """RC2 負面:壞 XML——QA 拒收風格=200 + 信封內 procStatus=false 全 null 殼(非 417;mock 契約差異記錄)。"""
+    res = _post_qa("<ROWSET><ROW>不是完整XML", code, "C001.xml")
+    items = _envelope_items(res, f"QA bad_xml {vlabel}({code})")
+    assert all(isinstance(it, dict) and it.get("procStatus") is False and not it.get("responseBody")
+               for it in items), "QA 現況應為全 null 失敗殼;若改回 417/XML 錯誤信封請更新本測試"
+
+
+@_QA_ONLY
+@pytest.mark.parametrize("vid,vlabel,code", VENDORS, ids=[v[0] for v in VENDORS])
+def test_qa_unknown_action_rejected_as_null_shell(vid, vlabel, code):
+    """RC2 負面:未知 ACTION_COD——QA 現況回全 null 殼(非 RETN 9999 XML;mock 契約差異記錄)。"""
+    xml = build_rowset_xml({"REVE-CODE": reve_room_sta(code), "ROOM_NOS": QA_PUSH_ROOM,
+                            "ACTION_COD": "NOSUCH", "ACTION_STA": "1",
+                            "ACTION_DAT": action_dat_now()})
+    res = _post_qa(xml, code, "C001.xml")
+    items = _envelope_items(res, f"QA unknown_action {vlabel}({code})")
+    assert all(isinstance(it, dict) and it.get("procStatus") is False and not it.get("responseBody")
+               for it in items), "QA 現況應為全 null 失敗殼;若改回 RETN 9999 XML 請更新本測試"
+
+
+@_QA_ONLY
+@pytest.mark.parametrize("vid,vlabel,code", VENDORS, ids=[v[0] for v in VENDORS])
+def test_qa_missing_room_nos_retn9999(vid, vlabel, code):
+    """RC2 負面:ROOM_INF 缺 ROOM_NOS——QA 現況:procStatus=false + RETN 9999 + Room null 錯誤訊息。"""
+    xml = build_rowset_xml({"REVE-CODE": reve_room_inf(code), "ACTION_COD": "ROOM_INF",
+                            "ACTION_DAT": action_dat_now()})
+    res = _post_qa(xml, code, "C002.xml")
+    items = _envelope_items(res, f"QA missing_room_nos {vlabel}({code})")
+    ok_item = next((it for it in items if isinstance(it, dict) and it.get("responseBody")), None)
+    assert ok_item is not None, "應回帶 responseBody 的錯誤 XML(Room null)"
+    rb = ok_item["responseBody"]
+    assert "<RETN-CODE>9999</RETN-CODE>" in rb
+    assert "Room" in rb       # QA 錯誤訊息現況:「Room configuration not found … Room null.」
