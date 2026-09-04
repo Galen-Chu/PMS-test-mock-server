@@ -1,11 +1,14 @@
 # tests_localFullStackClose/test_roomcontrol.py
-"""🌡️ 房控模組(A7 公版 XML 介面,sa_docs/sa10)RC0 離線測試。
+"""🌡️ 房控模組(A7 公版 XML 介面,sa_docs/sa10)RC0+RC2 離線測試。
 
 涵蓋:
-- XML 工具組裝/解析往返(ROWSET>ROW、多列回應)
+- XML 工具組裝/解析往返(ROWSET>ROW、多列回應;RC2:CLEAN/RMTEMP/KeyBox 組裝器)
 - mock PMS 路由契約(POST /third-party/import-sync-files):ROOM_STA 落庫、ROOM_INF 住客列、
   壞 XML → 417、缺識別 → 400;內部回讀端點
-- registry:roomcontrol 模組兩案已實作且宣告 ParamSpec
+- RC2:單值族 action 更新對應房況位元(CLEAN→位9)、RMTEMP 室溫落庫、
+  B5 KeyBox(REVE 4390,插/拔卡→位2+卡片資訊,回應無 ACTION_COD)、
+  未知 ACTION_COD → procStatus=false+RETN 9999、缺 ROOM_NOS/B5 必填 → 417
+- registry:roomcontrol 模組各案已實作且宣告 ParamSpec
 - runner 離線組裝(連線失敗仍錄製 request_body → 斷言 XML 內容與覆寫貫穿)
 """
 import os
@@ -21,8 +24,10 @@ from orchestrator import engine
 from server.roomcontrol import roomcontrol_bp
 from server.roomcontrol.routes import mock_roomcontrol_state, mock_room_guest_db
 from server.roomcontrol.vendors.vendor_A7_XML import (
-    build_room_sta_push, build_room_inf_query, build_return_query, parse_rowset_xml,
-    build_rowset_xml, DEFAULT_STATUS_BITS, REVE_ROOM_STA, REVE_ROOM_INF,
+    build_room_sta_push, build_room_inf_query, build_return_query,
+    build_clean_push, build_rmtemp_push, build_keybox_push,
+    parse_rowset_xml, build_rowset_xml, DEFAULT_STATUS_BITS,
+    REVE_ROOM_STA, REVE_ROOM_INF, REVE_KEYBOX, reve_keybox,
 )
 
 
@@ -128,13 +133,117 @@ def test_mock_route_return_all_rooms_with_clean_sta_closure():
     assert all(row["RETN-CODE"] == "0000" for row in rows)
 
 
+def test_same_family_builders_and_b5_contract():
+    """RC2 組裝器:CLEAN(SAMPLE1 樣式)/RMTEMP(SAMPLE3)/KeyBox(B5,訊息無 ACTION_COD)。"""
+    clean = parse_rowset_xml(build_clean_push("2403", "3", vendor_code="81"))
+    assert clean[0]["REVE-CODE"] == "0300814190"
+    assert clean[0]["ACTION_COD"] == "CLEAN" and clean[0]["ACTION_STA"] == "3"
+    assert "INS_CARD_INF" not in clean[0]          # SAMPLE1 樣式無插卡欄位
+
+    temp = parse_rowset_xml(build_rmtemp_push("2403", "26C", vendor_code="86"))
+    assert temp[0]["REVE-CODE"] == "0300864190"
+    assert temp[0]["ACTION_COD"] == "#RMTEMP#26C#"
+
+    kb = parse_rowset_xml(build_keybox_push("2403", "SERVICE", "1234567890", "王小美", "1",
+                                            vendor_code="81"))
+    assert kb[0]["REVE-CODE"] == reve_keybox("81") == "0300814390"
+    assert REVE_KEYBOX == "0300TT4390"               # 常數為 TT 樣板(同 REVE_ROOM_STA 慣例)
+    assert kb[0]["CARD_TYP"] == "SERVICE" and kb[0]["CARD_UID"] == "1234567890"
+    assert kb[0]["ACTION_STA"] == "1" and "ACTION_COD" not in kb[0]   # B5 訊息無 ACTION_COD
+
+
+def test_mock_route_clean_updates_bit9_and_return_clean_sta():
+    """RC2:CLEAN 推送 → 位元 9 更新 + A10 CLEAN_STA 推導鏈(3=待巡房→S)。"""
+    c = _client()
+    r = c.post("/third-party/import-sync-files",
+               json=_import_body(build_clean_push("2701", "3")))
+    assert r.status_code == 200
+    item = r.get_json()[0]
+    assert item["procStatus"] is True
+    rows = parse_rowset_xml(item["responseBody"])
+    assert rows[0]["RETN-CODE"] == "0000"
+    assert rows[0]["RETN-CODE-DESC"] == "Transaction done successfully."   # 單值 action 非 Set 類
+    bits = mock_roomcontrol_state["2701"]["status_bits"]
+    assert len(bits) == 16 and bits[8] == "3"
+    # 位元 9 推導鏈:A10 RETURN 的 CLEAN_STA
+    r2 = c.post("/third-party/import-sync-files", json=_import_body(build_return_query()))
+    by_room = {row["ROOM_NOS"]: row for row in parse_rowset_xml(r2.get_json()[0]["responseBody"])}
+    assert by_room["2701"]["CLEAN_STA"] == "S"
+
+
+def test_mock_route_rmtemp_updates_temperature():
+    """RC2:RMTEMP 推送 → 室溫落庫 + 回應 "1112 Set"(Set 類)。"""
+    c = _client()
+    r = c.post("/third-party/import-sync-files",
+               json=_import_body(build_rmtemp_push("2702", "26C")))
+    assert r.status_code == 200
+    item = r.get_json()[0]
+    assert item["procStatus"] is True
+    rows = parse_rowset_xml(item["responseBody"])
+    assert rows[0]["RETN-CODE"] == "0000"
+    assert "1112 Set #RMTEMP#26C#" in rows[0]["RETN-CODE-DESC"]
+    assert mock_roomcontrol_state["2702"]["temperature"] == "26C"
+
+
+def test_mock_route_keybox_updates_bit2():
+    """RC2:B5 KeyBox 插卡 → 位元 2 更新 + 卡片資訊落庫;回應無 ACTION_COD(sa10 B5 樣本)。"""
+    c = _client()
+    r = c.post("/third-party/import-sync-files",
+               json=_import_body(build_keybox_push("2703", "SERVICE", "ABC123", "王小美", "1")))
+    assert r.status_code == 200
+    item = r.get_json()[0]
+    assert item["procStatus"] is True
+    rows = parse_rowset_xml(item["responseBody"])
+    assert rows[0]["SEND-CODE"] == "0300TT4390"
+    assert rows[0]["RETN-CODE"] == "0000"
+    assert "ACTION_COD" not in rows[0]            # B5 回應契約無 ACTION_COD 欄位
+    st = mock_roomcontrol_state["2703"]
+    assert st["status_bits"][1] == "1"            # 位元 2 Keybox=插卡
+    assert st["keybox"]["card_typ"] == "SERVICE" and st["keybox"]["card_uid"] == "ABC123"
+
+
+def test_mock_route_unknown_action_retn9999():
+    """RC2 負面:未知 ACTION_COD → procStatus=false + RETN-CODE 9999。"""
+    c = _client()
+    xml = build_rowset_xml({"REVE-CODE": REVE_ROOM_STA, "ROOM_NOS": "2403",
+                            "ACTION_COD": "NOSUCH", "ACTION_STA": "1",
+                            "ACTION_DAT": "2026/09/04 12:00:00"})
+    r = c.post("/third-party/import-sync-files", json=_import_body(xml))
+    assert r.status_code == 200
+    item = r.get_json()[0]
+    assert item["procStatus"] is False
+    rows = parse_rowset_xml(item["responseBody"])
+    assert rows[0]["RETN-CODE"] == "9999"
+    assert "Unknown ACTION_COD" in rows[0]["RETN-CODE-DESC"]
+
+
+def test_mock_route_missing_required_fields():
+    """RC2 負面:ROOM_INF 缺 ROOM_NOS → 417;B5 缺 CARD_TYP / ACTION_STA → 417。"""
+    c = _client()
+    r = c.post("/third-party/import-sync-files",
+               json=_import_body(build_rowset_xml({"REVE-CODE": REVE_ROOM_INF,
+                                                   "ACTION_COD": "ROOM_INF",
+                                                   "ACTION_DAT": "2026/09/04 12:00:00"})))
+    assert r.status_code == 417 and r.get_json()["code"] == "417"
+    r2 = c.post("/third-party/import-sync-files",
+                json=_import_body(build_keybox_push("2704", "", "X", "Y", "1")))
+    assert r2.status_code == 417
+    r3 = c.post("/third-party/import-sync-files",
+                json=_import_body(build_rowset_xml({"REVE-CODE": "0300TT4390",
+                                                    "ROOM_NOS": "2705", "CARD_TYP": "GUEST",
+                                                    "ACTION_DAT": "2026/09/04 12:00:00"})))
+    assert r3.status_code == 417
+
+
 def test_registry_roomcontrol_module():
     by_mod = registry.by_module()
     assert "roomcontrol" in by_mod
     cases = {s.id: s for s in by_mod["roomcontrol"]}
-    # 2026-09-03 雙廠商 × 三動作:MINXON(81) / CHAOFENG(86) × push/room_inf/return
+    # RC0 三案 + RC2 六案,雙廠商:MINXON(81) / CHAOFENG(86)
     expected = {f"rc_{v}_{a}" for v in ("minxon", "chaofeng")
-                for a in ("room_sta_push", "room_inf", "return")}
+                for a in ("room_sta_push", "room_inf", "return",
+                          "clean", "rmtemp", "keybox",
+                          "bad_xml", "unknown_action", "missing_room_nos")}
     assert expected == set(cases)
     assert all(s.implemented for s in by_mod["roomcontrol"])
     assert {s.vendor for s in by_mod["roomcontrol"]} == {"MINXON", "CHAOFENG"}
@@ -178,6 +287,13 @@ def test_runner_assembles_xml_with_overrides():
     assert "<REVE-CODE>0300864190</REVE-CODE>" in xml2
     assert "<ACTION_COD>#ROOM_STA#010101011001#</ACTION_COD>" in xml2
     assert "<ROOM_NOS>2403</ROOM_NOS>" in xml2     # 未覆寫欄位用預設
+
+    # RC2:RMTEMP 溫度覆寫貫穿(#RMTEMP#28C#)
+    run3 = engine.start_run(["rc_minxon_rmtemp"], "LOCAL_OFFLINE",
+                            overrides={"rc_minxon_rmtemp": {"temperature": "28C"}})
+    xml3 = run3.cases[0].steps[0]["request_body"]["requestDataList"][0]["requestBody"]
+    assert "<REVE-CODE>0300814190</REVE-CODE>" in xml3
+    assert "<ACTION_COD>#RMTEMP#28C#</ACTION_COD>" in xml3
 
 
 def test_run_context_has_roomcontrol_urls():

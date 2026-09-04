@@ -127,3 +127,54 @@ def test_orchestrator_closed_loop_via_runs_api(server_up):
     # RETURN 應含本輪推送的房(位元串第 9 位=0 → CLEAN_STA=C)
     ret_rooms = {r["ROOM_NOS"]: r for r in ret["response_payload"]["rows"]}
     assert ret_rooms[room]["ROOM_STA"] == "V" and ret_rooms[room]["CLEAN_STA"] == "C"
+
+
+def _run_and_results(payload):
+    run = requests.post(f"{BASE}/runs", json=payload).json()
+    assert run.get("run_id"), run
+    for _ in range(60):
+        snap = requests.get(f"{BASE}/runs/{run['run_id']}").json()
+        if snap["status"] != "RUNNING":
+            break
+        time.sleep(0.3)
+    results = requests.get(f"{BASE}/runs/{run['run_id']}/results").json()
+    return {c["case_id"]: c for c in results}
+
+
+def test_orchestrator_closed_loop_rc2_same_family(server_up):
+    """閉環④(RC2):CLEAN→位元9 / RMTEMP→室溫 / KeyBox→位元2+卡片資訊,經 /runs 全 PASS。"""
+    room = f"7{datetime.now().strftime('%H%M%S')}"
+    results = _run_and_results({
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["rc_minxon_clean", "rc_chaofeng_rmtemp", "rc_minxon_keybox"],
+        "overrides": {
+            "rc_minxon_clean": {"room_no": room, "clean_state": "3"},
+            "rc_chaofeng_rmtemp": {"room_no": room, "temperature": "27C"},
+            "rc_minxon_keybox": {"room_no": room, "card_uid": f"KB{room}", "action_sta": "1"},
+        },
+    })
+    clean, temp, kb = results["rc_minxon_clean"], results["rc_chaofeng_rmtemp"], results["rc_minxon_keybox"]
+    assert clean["status"] == "PASS"
+    assert clean["response_payload"]["state_readback_bit9"] == "3"
+    assert temp["status"] == "PASS"
+    assert temp["response_payload"]["state_readback_temperature"] == "27C"
+    assert kb["status"] == "PASS"
+    assert kb["response_payload"]["state_readback_bit2"] == "1"
+    assert kb["response_payload"]["state_readback_keybox"]["card_uid"] == f"KB{room}"
+
+
+def test_orchestrator_closed_loop_rc2_negatives(server_up):
+    """閉環⑤(RC2 負面):壞XML→417 / 未知動作→RETN 9999 / 缺房號→417,經 /runs 全 PASS(反向斷言)。"""
+    results = _run_and_results({
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["rc_minxon_bad_xml", "rc_chaofeng_unknown_action",
+                         "rc_chaofeng_missing_room_nos"],
+    })
+    bad, unknown, missing = (results["rc_minxon_bad_xml"],
+                             results["rc_chaofeng_unknown_action"],
+                             results["rc_chaofeng_missing_room_nos"])
+    assert bad["status"] == "PASS"
+    assert unknown["status"] == "PASS"
+    assert unknown["response_payload"]["procStatus"] is False
+    assert unknown["response_payload"]["retn_code"] == "9999"
+    assert missing["status"] == "PASS"

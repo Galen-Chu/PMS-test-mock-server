@@ -86,6 +86,16 @@
 | rc_{vendor}_room_inf | 房況查詢 ROOM_INF/A6(民笙…) | 房況查詢(A6・ROOM_INF) |
 | rc_{vendor}_return | 全房況查詢 RETURN/A10(民笙…) | 全房況查詢(A10・RETURN) |
 
+### 🌡️ roomcontrol RC2 新增(2026-09-04,新案直接依規則命名,非改名)
+| case_id | 名稱 | 說明 |
+|---|---|---|
+| rc_{vendor}_clean | 清潔狀態推送(B4・CLEAN) | ACTION_STA=位元9 值域 0-4 |
+| rc_{vendor}_rmtemp | 室溫推送(B4・RMTEMP) | #RMTEMP#26C#;A7 前台顯示 |
+| rc_{vendor}_keybox | 插拔卡現況推送(B5・KeyBox) | REVE 4390;ACTION_STA 1插/0拔 |
+| rc_{vendor}_bad_xml | 無效XML(417) | 負面:壞格式 XML |
+| rc_{vendor}_unknown_action | 無效動作代碼(RETN・9999) | 負面:未知 ACTION_COD |
+| rc_{vendor}_missing_room_nos | 缺房號欄位(417) | 負面:ROOM_NOS 缺欄 |
+
 ## 新案例 checklist(DoD)
 
 新增案例時:名稱照 §規則 1–5;PR 自查「同名 across 模組是否語意混淆」「括號標籤順序是否一致」;

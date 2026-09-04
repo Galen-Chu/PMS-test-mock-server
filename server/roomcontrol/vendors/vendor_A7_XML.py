@@ -28,6 +28,11 @@ from xml.sax.saxutils import escape
 REVE_ROOM_STA = "0300TT4190"   # B4 房況變化告知(廠商→PMS)
 REVE_ROOM_INF = "0300TT1090"   # A6 房間現況住客資訊查詢(廠商→PMS)
 REVE_RETURN = "0300TT4290"     # A10 全部房況回傳查詢(廠商→PMS)
+REVE_KEYBOX = "0300TT4390"     # B5 節電器(KeyBox)現況告知(廠商→PMS)
+
+# B4 單值 action → 房況位元索引(0 基;sa10「房間房況順序說明」對應位)
+#   CLEAN=位9清潔(ACTION_STA 0-4)/ DND=位10勿擾 / DOOR=位11房門 / EMG=位8緊急 / MAIN_POWER=位4總電源
+B4_SINGLE_BIT_INDEX = {"CLEAN": 8, "DND": 9, "DOOR": 10, "EMG": 7, "MAIN_POWER": 3}
 
 
 def reve_room_sta(vendor_code="TT") -> str:
@@ -42,6 +47,24 @@ def reve_return(vendor_code="TT") -> str:
     return f"0300{vendor_code}4290"
 
 
+def reve_keybox(vendor_code="TT") -> str:
+    return f"0300{vendor_code}4390"
+
+
+def is_b4_action(action_cod: str) -> bool:
+    """是否為 B4 已知 action(單值族 CLEAN/DND/DOOR/EMG/MAIN_POWER 或 #...# 帶值族)。"""
+    if action_cod in B4_SINGLE_BIT_INDEX:
+        return True
+    return action_cod.startswith("#ROOM_STA#") or action_cod.startswith("#RMTEMP#")
+
+
+def set_status_bit(bits: str, index: int, value) -> str:
+    """更新 16 位房況字串指定位置(0 基)為單字元值;非 16 位或索引超界 → 原樣回傳(防禦)。"""
+    if len(bits) != 16 or not (0 <= index < 16):
+        return bits
+    return bits[:index] + str(value) + bits[index + 1:]
+
+
 DEFAULT_STATUS_BITS = "1000001100100000"   # sa10 房間房況預設值
 MSG_DONE = "Transaction done successfully."
 
@@ -52,14 +75,19 @@ def action_dat_now() -> str:
 
 
 def build_rowset_xml(rows) -> str:
-    """組 sa10 樣式的 ROWSET>ROW XML(單列給 dict、多列給 list[dict];欄位依 dict 順序)。"""
+    """組 sa10 樣式的 ROWSET>ROW XML(單列給 dict、多列給 list[dict];欄位依 dict 順序)。
+
+    值為 None 的欄位整個省略(B5 回應契約無 ACTION_COD,據此省略該 tag);空字串仍輸出空 tag。
+    """
     if isinstance(rows, dict):
         rows = [rows]
     lines = ['<?xml version="1.0"?>', "<ROWSET>"]
     for fields in rows:
         lines.append("<ROW>")
         for k, v in fields.items():
-            lines.append(f"<{k}>{escape('' if v is None else str(v))}</{k}>")
+            if v is None:
+                continue
+            lines.append(f"<{k}>{escape(str(v))}</{k}>")
         lines.append("</ROW>")
     lines.append("</ROWSET>")
     return "\n".join(lines)
@@ -112,15 +140,51 @@ def build_return_query(action_dat=None, vendor_code="TT") -> str:
     })
 
 
+def build_clean_push(room_nos, clean_state, action_dat=None, vendor_code="TT") -> str:
+    """B4 SAMPLE1:清掃動作(ACTION_COD=CLEAN;ACTION_STA=清潔狀態,即位元 9 值域 0-4)。"""
+    return build_rowset_xml({
+        "REVE-CODE": reve_room_sta(vendor_code),
+        "ROOM_NOS": room_nos,
+        "ACTION_COD": "CLEAN",
+        "ACTION_STA": str(clean_state),
+        "ACTION_DAT": action_dat or action_dat_now(),
+    })
+
+
+def build_rmtemp_push(room_nos, temperature, action_dat=None, vendor_code="TT") -> str:
+    """B4 SAMPLE3:房間室溫(#RMTEMP#26C#;A7 前台顯示;ACTION_STA 契約不處理可省略,依樣本補 1)。"""
+    return build_rowset_xml({
+        "REVE-CODE": reve_room_sta(vendor_code),
+        "ROOM_NOS": room_nos,
+        "ACTION_COD": f"#RMTEMP#{temperature}#",
+        "ACTION_STA": "1",
+        "ACTION_DAT": action_dat or action_dat_now(),
+    })
+
+
+def build_keybox_push(room_nos, card_typ, card_uid, indoor_name, action_sta,
+                      action_dat=None, vendor_code="TT") -> str:
+    """B5 節電器現況(REVE 0300xx4390;無 ACTION_COD 欄位,以 CARD_TYP/ACTION_STA 表插拔卡)。"""
+    return build_rowset_xml({
+        "REVE-CODE": reve_keybox(vendor_code),
+        "ROOM_NOS": room_nos,
+        "CARD_TYP": card_typ,
+        "CARD_UID": card_uid,
+        "INDOOR_NAME": indoor_name,
+        "ACTION_STA": str(action_sta),
+        "ACTION_DAT": action_dat or action_dat_now(),
+    })
+
+
 def build_ack_response_xml(reve_code, action_cod, retn_desc=None, action_dat=None) -> str:
     """通用回應 XML(RETN-CODE 0000;Set 類請帶 retn_desc='1112 Set <ACTION_COD>')。"""
     return build_rowset_xml({
         "SEND-CODE": reve_code,
         "ACTION_COD": action_cod,
         "RETN-CODE": "0000",
-        "RETN-CODE-DESC": retn_desc or (MSG_DONE + "."),
+        "RETN-CODE-DESC": retn_desc or (MSG_DONE),
         "MSG-ID": "0000",
-        "MSG-DESC": MSG_DONE + ".",
+        "MSG-DESC": MSG_DONE,
         "ACTION_DAT": action_dat or action_dat_now(),
     })
 
@@ -133,6 +197,6 @@ def build_error_response_xml(reve_code, action_cod, retn_code, retn_desc) -> str
         "RETN-CODE": retn_code,
         "RETN-CODE-DESC": retn_desc,
         "MSG-ID": "0000",
-        "MSG-DESC": MSG_DONE + ".",
+        "MSG-DESC": MSG_DONE,
         "ACTION_DAT": action_dat_now(),
     })
