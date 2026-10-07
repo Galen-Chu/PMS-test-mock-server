@@ -47,15 +47,7 @@ def _room_inf_xml(room):
     )
 
 
-@pytest.fixture(scope="module")
-def server_up():
-    """前置:本地沙盒須在線,否則整檔跳過(與 test_local_api 同策略)。"""
-    try:
-        r = requests.get(f"{BASE}/scenarios", timeout=3)
-        assert r.status_code == 200
-    except Exception:
-        pytest.skip("本地 Flask 沙盒未啟動(先 python main.py)")
-    return True
+# server_up fixture 移至 conftest.py 共用(test_local_api / test_local_scenario 同款)
 
 
 def test_closed_loop_room_sta_push_and_readback(server_up):

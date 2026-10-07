@@ -1,11 +1,25 @@
-# test_real_official_scenario.py
+# test_real_ngrok_scenario.py
+import os
+import sys
+
 import pytest
 import requests
-import config
 from datetime import datetime
+
+# 確保專案根目錄在 sys.path,讓 `pytest`(非 `python -m pytest`)也能 import config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config  # noqa: E402
+
+# 真實雲端測試:只在指向 REAL_QA / REAL_UG 時執行(同 test_real_scenario.py 慣例),
+# 避免本地沙盒或 CI(LOCAL_OFFLINE)誤觸對外發砲
+_REAL_ONLY = pytest.mark.skipif(
+    not config.USE_REAL_SERVER,
+    reason="僅在 ENV_SWITCH 指向 REAL_* 雲端時執行。",
+)
 
 print(f"\n🚀 [真實官方 Schema 攻堅] 目前目標環境：{'【真實 QA 雲端】' if config.USE_REAL_SERVER else '【本地 Flask】'}")
 
+@_REAL_ONLY
 def test_official_pms_checkin_and_car_arrival_flow():
     # ----------------------------------------------------------------===
     # 【官方真實 Schema 聯調測試】
@@ -62,7 +76,7 @@ def test_official_pms_checkin_and_car_arrival_flow():
     print(f"\n[步驟 1] 正在向官方 Check-in 端點發送複雜 JSON 資料...")
     print(f" -> 動態生成的 ciSerial: {dynamic_ci_serial}")
     
-    res1 = requests.post(config.URL_CHECKIN, json=official_checkin_payload, headers=headers, params=config.CURRENT_PARAMS)
+    res1 = requests.post(config.REAL_URL_CHECKIN, json=official_checkin_payload, headers=headers, params=config.CURRENT_PARAMS_PARKING)
     
     print(f" -> 步驟 1 回應狀態碼: {res1.status_code}")
     print(f" -> 步驟 1 回應內容: {res1.text}")
@@ -86,7 +100,7 @@ def test_official_pms_checkin_and_car_arrival_flow():
     }
     
     print(f"\n[步驟 2] 正在向車輛抵達端點發送回傳資料...")
-    res2 = requests.post(config.URL_CAR_ARRIVAL, json=car_payload, headers=headers, params=config.CURRENT_PARAMS)
+    res2 = requests.post(config.REAL_URL_CAR_ARRIVAL, json=car_payload, headers=headers, params=config.CURRENT_PARAMS_PARKING)
     
     print(f" -> 步驟 2 回應狀態碼: {res2.status_code}")
     print(f" -> 步驟 2 回應內容: {res2.text}")

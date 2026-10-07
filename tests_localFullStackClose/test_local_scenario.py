@@ -10,7 +10,7 @@ URL_VENDOR_TO_PMS = "http://127.0.0.1:5000/external/vendor-sync-data/car-arrival
 # 💡 沙盒實際驗證的是裸字串 Token（比照 hardware/simulate_camera.py 的用法），不帶 "Bearer " 前綴
 MOCK_TOKEN = config.LOCAL_TOKEN
 
-def test_full_hotel_stay_scenario():
+def test_full_hotel_stay_scenario(server_up):
     """
     【情境整合測試】
     目標：驗證從住客 Check-in 到車輛抵達的完整雙向資料鏈
