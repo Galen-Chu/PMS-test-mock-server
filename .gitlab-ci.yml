@@ -1,6 +1,9 @@
 # .gitlab-ci.yml — PMS mock server CI
-# 第一階段:只跑純離線單元測試(不需 Flask 伺服器、不對外發砲)。
-# ENV_SWITCH=LOCAL_OFFLINE 確保 real 雲端測試被 @skipif 跳過。
+# 兩個 job 皆 ENV_SWITCH=LOCAL_OFFLINE:不對外發送任何請求。
+#   1. offline-unit-tests:全量收集離線可跑測試——需沙盒在線的 local 三檔由
+#      conftest.py 的 server_up fixture 自動 skip;REAL_* 雲端測試由 @skipif 防護跳過。
+#      (房控 test_roomcontrol、參數化 test_param_override 等離線測試自此納入保護)
+#   2. local-closed-loop:CI 內啟動沙盒引擎後單跑 local 三檔,讓閉環測試真的執行。
 
 stages:
   - test
@@ -12,6 +15,20 @@ offline-unit-tests:
   stage: test
   image: python:3.12-slim
   before_script:
-    - pip install --no-cache-dir pytest requests responses
+    - pip install --no-cache-dir -r requirements.txt
   script:
-    - pytest tests_localFullStackClose/test_local_sandbox.py tests_localFullStackClose/test_mock.py tests_localFullStackClose/test_orchestrator.py -v
+    - pytest tests_localFullStackClose/ -v
+
+local-closed-loop:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - pip install --no-cache-dir -r requirements.txt
+  script:
+    # 背景啟動沙盒引擎(同 job 屬同一 shell,PID 可跨行使用)
+    - PYTHONUTF8=1 python main.py > server.log 2>&1 &
+    - SERVER_PID=$!
+    # 就緒輪詢(最多 30 秒;python:3.12-slim 無 curl,用 python 探測)
+    - i=0; until python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/', timeout=1)" 2>/dev/null; do i=$((i+1)); if [ $i -gt 30 ]; then echo "!! 沙盒引擎 30 秒內未就緒"; cat server.log; exit 1; fi; sleep 1; done
+    - pytest tests_localFullStackClose/test_local_api.py tests_localFullStackClose/test_local_scenario.py tests_localFullStackClose/test_local_roomcontrol.py -v
+    - kill $SERVER_PID
