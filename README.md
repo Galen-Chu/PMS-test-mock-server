@@ -11,20 +11,23 @@
 ```text
 PMS-test-mock-server/
 │
-├── config.py                 # ⚙️ 全域設定檔（四模式戰略總開關 + 環境矩陣）
-├── main.py                   # ⚡ Flask 沙盒引擎唯一入口（註冊三藍圖，監聽 :5000）
-├── app_dashboard.py          # 🎛️ Streamlit Web 控制台（視覺化聯調／閉環測試／資產檢視）
+├── config.py                 # ⚙️ 全域設定檔（戰略總開關 ENV_SWITCH + 六環境矩陣）
+├── main.py                   # ⚡ Flask 沙盒引擎唯一入口（orchestrator＋隧道＋四模組藍圖，監聽 :5000）
+├── orchestrator/             # 🧭 第 0 層測試編排協調層（/environments /scenarios /runs）
+│   ├── api.py                #    編排 REST API + 案例參數化 overrides
+│   ├── engine.py             #    發砲引擎（各環境 URLs 矩陣 + 鑑別 Header 注入）
+│   ├── registry.py           #    @register_scenario 案例註冊表 + ParamSpec 詮釋資料
+│   └── runners/              #    各模組案例（parking / amenity / keycard / roomcontrol）
+├── static/                   # 🖥️ 測試主控台前端（vanilla ES modules SPA，Flask 直接 serve 於 /）
+├── app_dashboard.py          # 🧰（legacy）舊版 Streamlit 控制台——已由 static/ 主控台取代
+├── sandbox_tunnel.py         # 🌐 ngrok 隧道控制（/tunnel/*，主控台「對外隧道」卡後端）
 ├── requirements.txt          # 📦 Python 依賴清單
-├── ngrok.exe                 # 🌐 邊緣端 Ngrok 通道（本地沙盒對外暴露用）
+├── ngrok.exe                 # 🌐 邊緣端 Ngrok 通道（不入庫自行下載；本地沙盒對外暴露用）
 │
+├── docs/                     # 📚 設計與分期規劃（參數化／案例命名／房控模組／廠商擴張）
+├── sa_docs/                  # 📄 SA 端契約文件（sa6～sa10）
 ├── troubleshoot/             # 📝 各模組維運與狀態機踩坑日誌
-│   ├── Troubleshooting_SHIN_YEONG.md   # 🚗 模組一：新詠停車場
-│   ├── TroubleShooting_BR_AILLEO.md    # 🦏 模組二：小美犀房務備品
-│   └── TroubleShooting_LIVEAM.md       # 🔑 模組三：華豫寧門禁製卡
-│
-├── tests_data_pool/          # 🏗️ 大一統測試資產數據池（與業務程式碼完全平級）
-│   ├── aiello_product_fixtures.json    # 🦏 小美犀備品料號與財務科目清單
-│   └── verified_payload_logs.json      # 📈 歷史通關 Payload 戰績落庫
+├── tests_data_pool/          # 🏗️ 大一統測試資產數據池（通關 payload 種子／備品 fixtures）
 │
 ├── hardware/                 # 📡 邊緣端／廠商主動發砲模擬腳本庫
 │   ├── simulate_camera.py    # 🚗 模擬地下室車辨相機拍牌抵達
@@ -44,21 +47,25 @@ PMS-test-mock-server/
 │   │       ├── base.py                    # 房務策略基底類別
 │   │       └── vendor_BR_AIELLO.py        # 小美犀 12 大核心欄位與 JSON 語意洗滌
 │   │
-│   └── keycard/              # 🔑 【模組三：華豫寧門禁製卡鎖系統】
-│       ├── routes.py         # 內置訂單／卡片庫，迎擊製卡／消卡／逆查指令
+│   ├── keycard/              # 🔑 【模組三：華豫寧門禁製卡鎖系統】
+│   │   ├── routes.py         # 內置訂單／卡片庫，迎擊製卡／消卡／逆查指令
+│   │   └── vendors/
+│   │       ├── base.py                    # 門禁策略基底類別
+│   │       └── vendor_WAFERLOCK_LIVEAM.py # 華豫寧 Token 簽發與訂單狀態機維護
+│   │
+│   └── roomcontrol/          # 🌡️ 【模組四：房控】A7 公版 XML 介面（廠商→PMS 方向）
+│       ├── routes.py         # POST /third-party/import-sync-files（mock PMS 側）+ 內部回讀
 │       └── vendors/
-│           ├── base.py                    # 門禁策略基底類別
-│           └── vendor_WAFERLOCK_LIVEAM.py # 華豫寧 Token 簽發與訂單狀態機維護
+│           ├── vendor_A7_XML.py           # A7 公版 XML 組裝／解析策略（sa10 V1.2）
+│           ├── vendor_MINXON.py           # 民笙（thirdPartyCode=81）
+│           └── vendor_CHAOFENG.py         # 超烽（thirdPartyCode=86）
 │
-└── tests_localFullStackClose/        # 🧪 【本地閉環測試】
-    ├── test_local_api.py             # 本地 Mock API 整合測試（需 server 在線）
-    ├── test_local_scenario.py        # 完整住宿情境雙向鏈路測試（需 server 在線）
-    ├── test_mock.py                  # responses mock 單元測試（離線可跑）
-    ├── test_mock_server.py
-    ├── test_mock_server_double_close.py
-    ├── test_real_api.py              # 真實雲端整合測試（需網路＋有效 Token）
-    ├── test_real_ngrok_scenario.py
-    ├── test_real_scenario.py
+└── tests_localFullStackClose/        # 🧪 【測試】（自動 skip 慣例見下方「測試資產與閉環測試」節）
+    ├── conftest.py                   # 共用前置：server_up 沙盒在線探測（未開自動 skip）
+    ├── test_mock*.py                 # 離線單元測試（responses 攔截，不需網路與 server）
+    ├── test_local_api / test_local_scenario / test_local_roomcontrol   # 本地閉環（需 server 在線；離線自動 skip）
+    ├── test_roomcontrol / test_param_override / test_orchestrator 等   # 各模組離線規格比對
+    ├── test_real_*.py                # 真實雲端（僅 ENV_SWITCH=REAL_* 執行，@skipif 防護）
     └── test_waferlock_liveam_pipeline.py  # 華豫寧門禁全管線測試
 ```
 
@@ -71,7 +78,7 @@ PMS-test-mock-server/
 | 模式 | 用途 | 是否對外發送請求 |
 |------|------|------------------|
 | `LOCAL_OFFLINE` | 🔒 **閉環規格比對**——路由組好 Payload 後直接回傳供比對 SA 文件欄位，**完全不出站** | ❌ 否 |
-| `LOCAL` | 🔵 本地隔離沙盒——走 Ngrok 邊��端轉發 | ✅ 是（Ngrok） |
+| `LOCAL` | 🔵 本地隔離沙盒——走 Ngrok 邊緣端轉發 | ✅ 是（Ngrok） |
 | `REAL_QA` | 🟠 真實德安 QA 雲端 E2E 串接（**2026-09-03 起預設**；後續測試資料以 QA 環境為主） | ✅ 是（QA 雲） |
 | `REAL_UG` | 🟢 真實德安 UG 雲端 E2E 串接 | ✅ 是（UG 雲） |
 
@@ -90,10 +97,11 @@ pip install -r requirements.txt
 # 2. 啟動 Flask 沙盒引擎（監聯 http://127.0.0.1:5000）
 python main.py
 
-# 3.（選用）啟動 Streamlit Web 控制台
-streamlit run app_dashboard.py
+# 3. 開啟測試主控台（Flask 內建 serve，無需另外啟動）
+#    瀏覽器開 http://127.0.0.1:5000/ ——環境切換／案例參數／發砲／結果分析／隧道控制都在這裡
+#    （舊版 Streamlit 控制台 app_dashboard.py 已列 legacy，僅備查）
 
-# 4. 跑閉環測試
+# 4. 跑測試（離線可跑的自動執行；需沙盒在線的自動 skip，不再假紅）
 pytest tests_localFullStackClose/
 ```
 
@@ -104,7 +112,11 @@ pytest tests_localFullStackClose/
 
 ---
 
-## 🎛️ Streamlit Dashboard 架構設計
+## 🧰（legacy）舊版 Streamlit 控制台
+
+> ⚠️ **歷史備查**：主控台已由 Flask 直接 serve 的 `static/` SPA 取代——`python main.py` 後開
+> <http://127.0.0.1:5000/>，環境切換／案例參數化／發砲／結果分析／ngrok 隧道控制皆在其中。
+> `app_dashboard.py` 自 2026-08 起不再隨模組演進維護（不含房控模組、案例參數化、隧道卡），僅保留早期聯調參考。
 
 `app_dashboard.py` 是疊在沙盒引擎之上的**單檔 Web 控制台**——用最少的程式碼把後端的 `config` 戰略總開關、模擬發射腳本與測試資產，全部收攏成一個可點擊的操作介面。設計上不引入任何前端工程，直接以 Python 操縱後端單例。
 
@@ -135,21 +147,30 @@ pytest tests_localFullStackClose/
 
 ## 🧩 模組與廠商策略對應
 
-每個領域藍圖下掛多個**廠商策略**，新增廠商只需實作 `vendors/base.py` 的介面，不必改動路由層：
+每個領域藍圖下掛多個**廠商策略**，新增廠商只需實作該模組 `vendors/` 的策略介面（`base.py`；房控為 `vendor_A7_XML.py`），不必改動路由層：
 
 | 模組 | 藍圖 | 已實作廠商策略 |
 |------|------|----------------|
 | 🚗 停車車辨 | `parking_bp` | `vendor_SHIN_YEONG`（新詠）、`vendor_PAYTRONEX`（博辰） |
 | 🦏 房務備品 | `amenity_bp` | `vendor_BR_AIELLO`（小美犀） |
 | 🔑 門禁製卡 | `keycard_bp` | `vendor_WAFERLOCK_LIVEAM`（華豫寧） |
+| 🌡️ 房控 | `roomcontrol_bp` | `vendor_A7_XML`（A7 公版 XML）＋ `vendor_MINXON`（民笙 81）、`vendor_CHAOFENG`（超烽 86） |
 
 ---
 
 ## 🧪 測試資產與閉環測試
 
-- **離線��跑**：`test_mock.py` 以 `responses` 函式庫 攔截 HTTP，純單元測試，不需網路與 server。
-- **需 server 在線**：`test_local_api.py`、`test_local_scenario.py`、`test_local_roomcontrol.py`（房控閉環）打 `127.0.0.1:5000`，請先 `python main.py`（建議設 `LOCAL_OFFLINE` 模式以離線驗證）。
-- **需網路＋有效 Token**：`test_real_*.py` 直打真實德安雲端，日常 CI 不建議常駐執行；`test_real_roomcontrol_qa.py` 為房控 A7 公版 REAL_QA 串接探測（僅 `ENV_SWITCH=REAL_QA` 時執行；thirdParty 實際代碼到位後設 `A7_THIRD_PARTY` 環境變數重跑即轉正式斷言）。
+- **離線可跑（不需網路與 server）**：`test_mock*.py` 以 `responses` 攔截 HTTP 的單元測試，加上
+  `test_local_sandbox.py`、`test_orchestrator.py`、`test_roomcontrol.py`（房控規格比對）、
+  `test_param_override.py`（參數化）、`test_waferlock_liveam_pipeline.py`（門禁管線）等離線測試。
+- **需沙盒在線**：`test_local_api.py`、`test_local_scenario.py`、`test_local_roomcontrol.py`（房控閉環）
+  打 `127.0.0.1:5000`，請先 `python main.py`（建議設 `LOCAL_OFFLINE` 模式）；沙盒未開時經
+  `conftest.py` 的 `server_up` fixture **自動 skip**，不再噴 ConnectionRefused 假紅。
+- **需網路＋有效 Token**：`test_real_*.py` 直打真實德安雲端，一律以 `@pytest.mark.skipif` 防護
+  （僅 `ENV_SWITCH=REAL_*` 時執行），CI／離線不會誤觸；`test_real_roomcontrol_qa.py` 為房控 A7 公版
+  REAL_QA 串接探測（thirdParty 實際代碼到位後設 `A7_THIRD_PARTY` 環境變數重跑即轉正式斷言）。
+- **CI**：`.gitlab-ci.yml` 兩個 job 皆 `LOCAL_OFFLINE`——`offline-unit-tests` 全量收集（前提不足者自動
+  skip）；`local-closed-loop` 在 CI 內啟動沙盒引擎，讓 local 三檔閉環真的執行。
 
 ---
 
@@ -168,7 +189,7 @@ UI 表單預填 SA 合法預設值、測試者改一個欄位即可重發；**�
   ```
   驗證採「刻意寬鬆」：擋未知案例／未知參數鍵／型別轉換失敗／超過 64 字元（400 附可用清單），
   但**不擋不合法值**——填壞值就是在測負面路徑（417/1000），分類器會接住。
-- **新增案例欄位**：在 `orchestrator/runners.py` 的 `@register_scenario(..., params=[ParamSpec(...)])`
+- **新增案例欄位**：在 `orchestrator/runners/<module>.py` 的 `@register_scenario(..., params=[ParamSpec(...)])`
   加一行宣告即可，`/scenarios` 自動帶出、UI 免改。負面路徑案例（缺欄位/壞格式/查無）刻意不開放覆寫。
 - **Diff 分級**：覆寫造成的回應差異標「參數覆寫」（灰），真差異維持「真差異」（紅）、缺欄琥珀色；
   期望值種子的 echo 欄位會先以本次參數回填再比對（避免誤報淹死真差異）。

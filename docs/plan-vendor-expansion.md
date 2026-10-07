@@ -25,7 +25,7 @@
 - 沙盒路由(`server/keycard/routes.py`)其實**比案例多**:另有 read-card、delete-card、door-card、door-cards、`/api/Operation/getToken` 五條已實作、無案例。
 - 策略檔 `vendor_WAFERLOCK_LIVEAM.py`:登入鑑權(帳密/專案)、訂單 payload 洗滌、卡片資訊回應——新增端點沿用此模式。
 - 引擎側(`engine.py` urls)已有 keycard_login / roomid / getcardinfo / order / ordercard 五組 URL;新端點加一行即可。
-- 回歸基準:`tests_localFullStackClose/` 現 33 測試(離線可跑 26)全綠——含 2026-09-02 參數化 Phase 1 新增 11 檔。
+- 回歸基準:`tests_localFullStackClose/` 全量 70 測試(2026-10-07 計;local 三檔離線自動 skip、real 檔 @skipif 防護)全綠——含 2026-09-02 參數化 Phase 1 新增 11 檔。
 
 ---
 
@@ -137,7 +137,7 @@ sa6「德安製卡作業/流程」定義的 ACTION_COD 動作,逐一對照 `runn
 1. 沙盒路由契約(請求/回應/錯誤碼)逐欄對齊 sa7 Swagger(schema 名稱可對照),偏離處註明原因。
 2. `@register_scenario` + **ParamSpec 宣告**(hint 用 sa6/sa7 術語,echo_fields 標回映欄位)——參數化設計 §9/§12 硬性約束。
 3. expected 種子入庫,LOCAL_OFFLINE 規格比對可跑。
-4. 新案例補離線測試;`tests_localFullStackClose/` 全量(現 33,離線 26)全綠。
+4. 新案例補離線測試;`tests_localFullStackClose/` 全量(2026-10-07 計 70)全綠。
 5. LOCAL(loopback)實跑通,含負面斷言(如換房後舊房卡應失效的驗證)。
 6. REAL(LiveAM 測試台)至少實測一輪;設備/前提不足處明確標「待驗」。
 7. UI 零改動(詮釋資料驅動);需要改 UI 即架構警訊,先回設計。

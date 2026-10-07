@@ -157,5 +157,5 @@ orchestrator/runners.py              # module="roomcontrol" 案例(發砲端=模
    偏離處註明原因;XML 宣告與 UTF-8 編碼一致。
 3. 斷言雙層:HTTP procStatus **且** responseBody 內 RETN-CODE=0000(任一不符即 FAIL)。
 4. 種子入 `tests_data_pool/verified_payload_logs.json`(結構化形狀);新案例補離線測試,
-   `tests_localFullStackClose/` 全量(現 33,離線 26)全綠;無 overrides 行為不變。
+   `tests_localFullStackClose/` 全量(2026-10-07 計 70;local 三檔離線自動 skip、real 檔 @skipif 防護)全綠;無 overrides 行為不變。
 5. LOCAL(loopback)閉環實跑通(push→query 回讀一致);REAL 至少一輪(RC1),前提不足處標「待驗」。
