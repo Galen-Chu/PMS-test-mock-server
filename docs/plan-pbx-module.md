@@ -146,7 +146,7 @@ orchestrator/runners/pbx_ui.py    # M1 案例(vendor=PMS_UI:模擬 PMS0210027 �
 |---|---|---|---|---|
 | **M0** | 模組骨架 + 記錄編解碼 + mock 交換機狀態機 + 十案 + 雙層負面 + 內部回讀閉環 + 離線/閉環測試 + UI label | — | 無(三份文件) | ✅ **2026-10-12 完成**:離線 13 測試 + 閉環 3 測試全綠(全量 66 passed/0 failed);REAL 案例自動 SKIP |
 | **M1** | ~~PMS REST API 發砲~~→ **PMS 側業務層模擬**(Q1 結案後改向):`server/pbx/pms_side.py` 動作端點(入住/退房/開關電話/限撥/勿擾/設刪晨喚/換房)+ 排程 tick(宏興SD 1.2 五規則)+ in-process 下達交換機側 + 七案(全鏈/取消已傳/退房連動/換房重送/過時 SKIP/負面二) | — | Q1 結案(SD 證實無 REST) | ✅ **2026-10-12 完成**:離線 9 測試 + 閉環 1 測試全綠 |
-| **M2** | 重送(1030)/換房深鏈/設定語言(CKO+CKI+重入晨呼)/晨喚異常生成與已處理/RMS 房況回報(3hr);MCS 回報 1-5 模擬(ring 觸發+回應五規則+pbx_err) | 約 1.5 天 | 文件已齊(④SA規格 2026-10-12 到);僅剩 Q7 環境資訊影響 REAL 驗證深度 |
+| **M2** | 重送(1030)/晨喚異常+已處理/MCS 回報 1-5 模擬(ring 觸發+SA 五規則+pbx_err)/RMS 房況(3hr 效期) | — | 文件已齊(④) | ✅ **2026-10-12 完成**:`POST /pbx/ring`(撥號回報→handle_mcs_response 五規則)、`GET /pbx/pms/mcall-anomalies`+`/ack`(當天+TRANS+sta∈{2,3,4,5}+未處理)、pbx_err(ERR/回應∉{0,1,3})、resend 動作(住人房 CKO→CKI+DND/TCE 重設+晨喚 NOT_TRANS 重送)、`POST /pbx/rms`(3hr+C/S/D/B 映射);五案+離線 6 測試+閉環 1 測試,全量 83 passed/0 failed |
 | **M3** | 真檔案交換(HOST2PMS/PMS2HOST 四檔 + W/P cycle 輪替)或帳務面(MBT/PTX/GFT) | 視需求 | Q6/Q9 + 環境 |
 
 ---
