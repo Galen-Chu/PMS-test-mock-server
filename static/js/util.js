@@ -3,7 +3,7 @@ import { el } from './el.js';
 import { state } from './state.js';
 
 export function moduleLabel(id) {
-  return { parking: '🚗 停車車辨', amenity: '🦏 房務備品', keycard: '🔑 門禁製卡', roomcontrol: '🌡️ 房控' }[id] || id;
+  return { parking: '🚗 停車車辨', amenity: '🦏 房務備品', keycard: '🔑 門禁製卡', roomcontrol: '🌡️ 房控', pbx: '☎️ 交換機晨喚' }[id] || id;
 }
 
 // 收集「已勾選案例」的 overrides(只有動過的欄位會進 payload)

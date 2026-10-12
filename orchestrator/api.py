@@ -45,7 +45,8 @@ def list_scenarios():
     + ``dynamic: true``;表單完全由本 API 驅動,未來廠商視角 UI 結構零改動。
     """
     _MODULE_LABEL = {"parking": "🚗 停車車辨", "amenity": "🦏 房務備品",
-                     "keycard": "🔑 門禁製卡", "roomcontrol": "🌡️ 房控"}
+                     "keycard": "🔑 門禁製卡", "roomcontrol": "🌡️ 房控",
+                     "pbx": "☎️ 交換機晨喚"}
     disp_ctx = engine.build_run_context("LOCAL_OFFLINE")  # 動態預設求值展示用（時間戳類不依環境）
     out = []
     for module, scs in registry.by_module().items():

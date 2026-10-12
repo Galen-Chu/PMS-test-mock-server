@@ -14,4 +14,4 @@
 import 本 package 即觸發全部註冊(orchestrator/__init__.py 的 ``from . import runners`` 不變);
 新增模組案例 → 加一支子模組檔 + 在此 import。
 """
-from . import amenity, parking, roomcontrol, keycard  # noqa: F401
+from . import amenity, parking, roomcontrol, keycard, pbx  # noqa: F401
