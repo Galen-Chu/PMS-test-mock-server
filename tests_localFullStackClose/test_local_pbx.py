@@ -20,6 +20,42 @@ BASE = "http://127.0.0.1:5000"
 COMMANDS_URL = f"{BASE}/pbx/host-commands"
 STATE_URL = f"{BASE}/pbx/internal/state"
 RESET_URL = f"{BASE}/pbx/internal/reset"
+PMS_RESET_URL = f"{BASE}/pbx/pms/internal/reset"
+
+
+def test_orchestrator_m1_full_chain_via_runs(server_up):
+    """M1 閉環:頁面動作全鏈經 /runs 編排(入住→設定→排程→MCS 下達→雙側回讀)。"""
+    requests.post(RESET_URL)
+    requests.post(PMS_RESET_URL)
+    dat = datetime.now().strftime("%Y%m%d")
+    tim = (datetime.now() + timedelta(minutes=40)).strftime("%H%M%S")
+    results = _run_and_results({
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["pbx_ui_set_mcall_full_flow", "pbx_ui_del_mcall_after_trans",
+                         "pbx_ui_checkout_cancels_pending", "pbx_ui_room_change_reschedules",
+                         "pbx_ui_mcall_expire_skip", "pbx_ui_open_tel_vacant_denied",
+                         "pbx_ui_del_past_mcall_denied"],
+        "overrides": {
+            "pbx_ui_set_mcall_full_flow": {"room_no": "0101", "mcall_dat": dat, "mcall_tim": tim},
+            "pbx_ui_del_mcall_after_trans": {"room_no": "0102", "mcall_dat": dat, "mcall_tim": tim},
+            "pbx_ui_checkout_cancels_pending": {"room_no": "0103", "mcall_dat": dat, "mcall_tim": tim},
+            "pbx_ui_room_change_reschedules": {"room_no": "0104", "new_room_no": "0105",
+                                               "mcall_dat": dat, "mcall_tim": tim},
+            "pbx_ui_mcall_expire_skip": {"room_no": "0109"},
+            "pbx_ui_open_tel_vacant_denied": {"room_no": "0108"},
+            "pbx_ui_del_past_mcall_denied": {"room_no": "0106"},
+        },
+    })
+    for cid, c in results.items():
+        assert c["status"] == "PASS", (cid, c.get("response_payload"))
+    full = results["pbx_ui_set_mcall_full_flow"]["response_payload"]
+    assert full["pms_mcall"]["trans_pbx_sta"] == "TRANS"
+    assert full["sw_mcall"]["mcall_sta"] == "0"            # 交換機側已收到 MCS
+    rc = results["pbx_ui_room_change_reschedules"]["response_payload"]
+    assert rc["mcall_after_change"]["trans_pbx_sta"] == "NOT_TRANS"   # 換房→重送
+    assert rc["mcall_after_resend"]["trans_pbx_sta"] == "TRANS"
+    skip = results["pbx_ui_mcall_expire_skip"]["response_payload"]
+    assert skip["pms_mcall"]["trans_pbx_sta"] == "SKIP"
 
 from server.pbx.vendors.vendor_PABX import (  # noqa: E402
     build_host_record, parse_record, parse_response_fields,

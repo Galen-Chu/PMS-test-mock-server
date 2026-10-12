@@ -136,6 +136,10 @@ def build_run_context(environment: str) -> RunContext:
         # ☎️ 交換機 mock(德安 HOST→交換機方向;pbx_interface 檔案介面以 HTTP 承載)+ 內部回讀
         "pbx_commands": f"{server_base}/pbx/host-commands",
         "pbx_internal": f"{server_base}/pbx/internal/state",
+        # ☎️ 交換機 PMS 側業務層(M1:頁面動作/排程/內部回讀;模擬 PMS0210027 + 宏興SD 狀態機)
+        "pbx_pms_actions": f"{server_base}/pbx/pms-actions",
+        "pbx_pms_tick": f"{server_base}/pbx/pms-scheduler/tick",
+        "pbx_pms_internal": f"{server_base}/pbx/pms/internal/state",
         # PAYTRONEX 專屬路由（/parktron/hpms/services/roomer/*）
         "paytronex_add": f"{server_base}/parktron/hpms/services/roomer/add",
         "paytronex_find": f"{server_base}/parktron/hpms/services/roomer/findByLicensePlate",

@@ -229,9 +229,8 @@ def test_registry_pbx_module():
     expected = {"pbx_checkin_open_tel", "pbx_morning_call_set", "pbx_morning_call_cancel",
                 "pbx_dnd_set", "pbx_tce_set", "pbx_checkout_close_tel", "pbx_room_change",
                 "pbx_unknown_room", "pbx_bad_record", "pbx_dnd_without_guest"}
-    assert expected == set(cases)
+    assert expected == {i for i, s in cases.items() if s.vendor == "PABX"}   # M0 十案
     assert all(s.implemented for s in by_mod["pbx"])
-    assert {s.vendor for s in by_mod["pbx"]} == {"PABX"}
     # 正向七案宣告 ParamSpec;負面三案固定劇本(參數化「不開放」原則)
     for sid in expected - {"pbx_unknown_room", "pbx_bad_record", "pbx_dnd_without_guest"}:
         assert cases[sid].params, sid
