@@ -39,11 +39,11 @@ def test_orchestrator_m1_full_chain_via_runs(server_up):
             "pbx_ui_set_mcall_full_flow": {"room_no": "0101", "mcall_dat": dat, "mcall_tim": tim},
             "pbx_ui_del_mcall_after_trans": {"room_no": "0102", "mcall_dat": dat, "mcall_tim": tim},
             "pbx_ui_checkout_cancels_pending": {"room_no": "0103", "mcall_dat": dat, "mcall_tim": tim},
-            "pbx_ui_room_change_reschedules": {"room_no": "0104", "new_room_no": "0105",
+            "pbx_ui_room_change_reschedules": {"room_no": "0104", "new_room_no": "0106",
                                                "mcall_dat": dat, "mcall_tim": tim},
             "pbx_ui_mcall_expire_skip": {"room_no": "0109"},
             "pbx_ui_open_tel_vacant_denied": {"room_no": "0108"},
-            "pbx_ui_del_past_mcall_denied": {"room_no": "0106"},
+            "pbx_ui_del_past_mcall_denied": {"room_no": "0107"},
         },
     })
     for cid, c in results.items():
@@ -56,6 +56,39 @@ def test_orchestrator_m1_full_chain_via_runs(server_up):
     assert rc["mcall_after_resend"]["trans_pbx_sta"] == "TRANS"
     skip = results["pbx_ui_mcall_expire_skip"]["response_payload"]
     assert skip["pms_mcall"]["trans_pbx_sta"] == "SKIP"
+
+
+def test_orchestrator_m2_ring_anomaly_resend_rms(server_up):
+    """M2 閉環:撥號回報/晨喚異常/重送/RMS 經 /runs 編排全 PASS。"""
+    requests.post(RESET_URL)
+    requests.post(PMS_RESET_URL)
+    dat = datetime.now().strftime("%Y%m%d")
+    tim = (datetime.now() + timedelta(minutes=40)).strftime("%H%M%S")
+    results = _run_and_results({
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["pbx_ui_mcs_ring_answered", "pbx_ui_mcs_ring_busy_anomaly_ack",
+                         "pbx_ui_mcs_ring_no_time_earliest", "pbx_ui_resend_full",
+                         "pbx_ui_rms_room_status"],
+        "overrides": {
+            "pbx_ui_mcs_ring_answered": {"room_no": "0101", "mcall_dat": dat, "mcall_tim": tim},
+            "pbx_ui_mcs_ring_busy_anomaly_ack": {"room_no": "0102", "mcall_dat": dat, "mcall_tim": tim},
+            "pbx_ui_mcs_ring_no_time_earliest": {"room_no": "0103", "mcall_dat": dat, "mcall_tim": tim},
+            "pbx_ui_resend_full": {"room_no": "0104", "mcall_dat": dat, "mcall_tim": tim},
+            "pbx_ui_rms_room_status": {"room_no": "0105"},
+        },
+    })
+    for cid, c in results.items():
+        assert c["status"] == "PASS", (cid, c.get("response_payload"))
+    ring_ok = results["pbx_ui_mcs_ring_answered"]["response_payload"]
+    assert ring_ok["pms_mcall"]["mcall_sta"] == "1" and ring_ok["anomaly_count"] == 0
+    busy = results["pbx_ui_mcs_ring_busy_anomaly_ack"]["response_payload"]
+    assert busy["anomaly_before"] == 1 and busy["anomaly_after"] == 0
+    assert busy["pbx_err_tail"][-1]["error_cod"] == "Busy"
+    rs = results["pbx_ui_resend_full"]["response_payload"]
+    assert rs["mcall_after_resend"]["trans_pbx_sta"] == "NOT_TRANS"   # 重送後先重設未傳送
+    assert rs["mcall_after_retick"]["trans_pbx_sta"] == "TRANS"       # 再 tick 後重新下達
+    rms = results["pbx_ui_rms_room_status"]["response_payload"]
+    assert rms["rms_fresh"]["pbx_dt.check_sta"] == "C"
 
 from server.pbx.vendors.vendor_PABX import (  # noqa: E402
     build_host_record, parse_record, parse_response_fields,

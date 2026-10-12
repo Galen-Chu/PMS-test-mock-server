@@ -36,6 +36,30 @@ def _pms_state(ctx):
     return res.json() if res is not None and res.status_code == 200 else None
 
 
+def _ring(ctx, **fields):
+    body = {"athenaId": "25", "hotelCode": "01"}
+    body.update(fields)
+    return execute_for_ctx(ctx, "POST", ctx.urls["pbx_ring"], json_body=body)
+
+
+def _rms(ctx, **fields):
+    body = {"athenaId": "25", "hotelCode": "01"}
+    body.update(fields)
+    return execute_for_ctx(ctx, "POST", ctx.urls["pbx_rms"], json_body=body)
+
+
+def _anomalies(ctx):
+    res, _ = execute_for_ctx(ctx, "GET", ctx.urls["pbx_anomalies"])
+    return res.json() if res is not None and res.status_code == 200 else {}
+
+
+def _json(res):
+    try:
+        return res.json() if res is not None else {}
+    except Exception:
+        return {}
+
+
 def _act_ok(res):
     try:
         return bool((res.json() or {}).get("ok"))
@@ -240,3 +264,140 @@ _register_ui_case("pbx_ui_open_tel_vacant_denied", "空房開電話(拒絕)",
                   _steps_open_tel_vacant_denied, [_room_param("0108")])
 _register_ui_case("pbx_ui_del_past_mcall_denied", "取消已過時晨喚(拒絕)",
                   _steps_del_past_mcall_denied, [_room_param("0109")])
+
+
+# ====================================================================
+# M2(2026-10-12):回報/異常/重送/RMS 案例(依 SA規格 v1.16 五規則 + PMS0210120 Ver1.4/v1.6)
+# ====================================================================
+def _steps_mcs_ring_answered(ctx, p):
+    """撥號回應:晨喚全鏈後 ring sta=1 → mcall_mn 更新為 1,無 pbx_err、無異常。"""
+    room, dat, tim = p["room_no"], p["mcall_dat"], p["mcall_tim"]
+    res_ck, _ = _pms_action(ctx, "checkin", room_nos=room)
+    _pms_action(ctx, "set_mcall", room_nos=room, mcall_dat=dat, mcall_tim=tim)
+    _pms_tick(ctx)
+    res_ring, _ = _ring(ctx, room_nos=room, mcall_dat=dat, mcall_tim=tim, mcall_sta="1")
+    ring = _json(res_ring)
+    summary = {"room_no": room, "checkin_ok": _act_ok(res_ck),
+               "ring": ring, "ring_ok": ring.get("ok")}
+    mc = _find_mcall(_pms_state(ctx), room, dat, tim)
+    err_tail = (_pms_state(ctx) or {}).get("pbx_err_tail", [])
+    summary.update({"pms_mcall": mc, "pbx_err_tail": err_tail,
+                    "anomaly_count": _anomalies(ctx).get("count")})
+    ok = (summary["checkin_ok"] and ring.get("ok") is True
+          and mc and mc.get("mcall_sta") == "1"
+          and not err_tail and summary["anomaly_count"] == 0)
+    return ok, summary
+
+
+def _steps_mcs_ring_busy_anomaly_ack(ctx, p):
+    """撥號忙線:ring sta=2 → mcall=2 + pbx_err 一筆 + 晨喚異常 1 筆 → ack 後歸零。"""
+    room, dat, tim = p["room_no"], p["mcall_dat"], p["mcall_tim"]
+    _pms_action(ctx, "checkin", room_nos=room)
+    _pms_action(ctx, "set_mcall", room_nos=room, mcall_dat=dat, mcall_tim=tim)
+    _pms_tick(ctx)
+    res_ring, _ = _ring(ctx, room_nos=room, mcall_sta="2")
+    ring = _json(res_ring)
+    anom = _anomalies(ctx)
+    items = anom.get("items") or []
+    ack_body = None
+    if items:
+        it = items[0]
+        res_ack, _ = execute_for_ctx(ctx, "POST", ctx.urls["pbx_anomalies"] + "/ack",
+                                     json_body={"room_nos": it["room_nos"],
+                                                "mcall_dat": it["mcall_dat"],
+                                                "mcall_tim": it["mcall_tim"]})
+        ack_body = _json(res_ack)
+    after = _anomalies(ctx)
+    mc = _find_mcall(_pms_state(ctx), room, dat, tim)
+    err_tail = (_pms_state(ctx) or {}).get("pbx_err_tail", [])
+    summary = {"room_no": room, "ring": ring, "anomaly_before": anom.get("count"),
+               "ack": ack_body, "anomaly_after": after.get("count"),
+               "pms_mcall": mc, "pbx_err_tail": err_tail}
+    ok = (ring.get("ok") is True and anom.get("count") == 1
+          and (ack_body or {}).get("ok") is True and after.get("count") == 0
+          and mc and mc.get("mcall_sta") == "2"
+          and err_tail and err_tail[-1].get("error_cod") == "Busy")
+    return ok, summary
+
+
+def _steps_mcs_ring_no_time_earliest(ctx, p):
+    """回報未帶時間:僅更新已傳送(TRANS)那一筆(排程規則3 保證是最接近時間);
+    另一筆 NOT_TRANS 不受影響(SA 規則2:只更 TRANS+sta0)。"""
+    room, dat = p["room_no"], p["mcall_dat"]
+    tim_near, tim_far = p["mcall_tim"], (datetime.now() + timedelta(hours=2)).strftime("%H%M%S")
+    _pms_action(ctx, "checkin", room_nos=room)
+    _pms_action(ctx, "set_mcall", room_nos=room, mcall_dat=dat, mcall_tim=tim_near)
+    _pms_action(ctx, "set_mcall", room_nos=room, mcall_dat=dat, mcall_tim=tim_far)
+    _pms_tick(ctx)
+    res_ring, _ = _ring(ctx, room_nos=room, mcall_sta="3")     # 不帶 dat/tim
+    ring = _json(res_ring)
+    state = _pms_state(ctx)
+    near, far = _find_mcall(state, room, dat, tim_near), _find_mcall(state, room, dat, tim_far)
+    summary = {"room_no": room, "ring": ring, "near": near, "far": far}
+    ok = (ring.get("ok") is True
+          and near and near.get("mcall_sta") == "3"
+          and far and far.get("trans_pbx_sta") == "NOT_TRANS"
+          and far.get("mcall_sta") == "0")
+    return ok, summary
+
+
+def _steps_resend_full(ctx, p):
+    """交換機重送(1030):住人房 CKO→CKI+狀態重設;未來晨喚 NOT_TRANS→tick 再度下達。"""
+    room, dat, tim = p["room_no"], p["mcall_dat"], p["mcall_tim"]
+    res_ck, _ = _pms_action(ctx, "checkin", room_nos=room)
+    _pms_action(ctx, "dnd", room_nos=room, status_typ="1")
+    _pms_action(ctx, "set_mcall", room_nos=room, mcall_dat=dat, mcall_tim=tim)
+    _pms_tick(ctx)
+    res_rs, _ = _pms_action(ctx, "resend", room_nos=room,
+                            include_vacant=False, include_occupied=True)
+    rs = _json(res_rs)
+    mc_mid = _find_mcall(_pms_state(ctx), room, dat, tim)
+    _pms_tick(ctx)
+    mc_after = _find_mcall(_pms_state(ctx), room, dat, tim)
+    sw = _readback(ctx)
+    summary = {"room_no": room, "checkin_ok": _act_ok(res_ck), "resend": rs.get("resend"),
+               "mcall_after_resend": mc_mid, "mcall_after_retick": mc_after,
+               "sw_tel_sta": ((sw or {}).get("pbx_dt") or {}).get(room, {}).get("tel_sta")}
+    ok = (summary["checkin_ok"] and (rs.get("resend") or {}).get("occupied_cki", 0) >= 1
+          and mc_mid and mc_mid.get("trans_pbx_sta") == "NOT_TRANS"
+          and mc_after and mc_after.get("trans_pbx_sta") == "TRANS"
+          and summary["sw_tel_sta"] == "1")
+    return ok, summary
+
+
+def _steps_rms_room_status(ctx, p):
+    """RMS 房況:3 小時內 C → clean C/check C;逾 3 小時 → 不收(入 pbx_err)。"""
+    room = p["room_no"]
+    res_ck, _ = _pms_action(ctx, "checkin", room_nos=room)
+    res_ok, _ = _rms(ctx, room_nos=room, room_sta="C")
+    old_ts = (datetime.now() - timedelta(hours=4)).strftime("%Y-%m-%d %H:%M:%S")
+    res_old, _ = _rms(ctx, room_nos=room, room_sta="D", ins_dat=old_ts)
+    ok_body, old_body = _json(res_ok), _json(res_old)
+    state = _pms_state(ctx)
+    err_tail = state.get("pbx_err_tail", [])
+    summary = {"room_no": room, "rms_fresh": ok_body, "rms_expired": old_body,
+               "check_sta": ((state.get("pbx_dt") or {}).get(room) or {}).get("check_sta"),
+               "pbx_err_tail": err_tail}
+    ok = (_act_ok(res_ck)
+          and ok_body.get("processed") is True and ok_body.get("pbx_dt.check_sta") == "C"
+          and old_body.get("processed") is False and "三小時" in str(old_body.get("message", ""))
+          and summary["check_sta"] == "C"      # 逾時的 D 未覆蓋
+          and err_tail and err_tail[-1].get("error_cod") == "已超過三小時,不收")
+    return ok, summary
+
+
+_register_ui_case("pbx_ui_mcs_ring_answered", "撥號回應(ring・1=Answered,無異常)",
+                  _steps_mcs_ring_answered,
+                  [_room_param("0101"), _dat_param, _tim_param])
+_register_ui_case("pbx_ui_mcs_ring_busy_anomaly_ack", "撥號忙線→晨喚異常→已處理(ring・2=Busy)",
+                  _steps_mcs_ring_busy_anomaly_ack,
+                  [_room_param("0101"), _dat_param, _tim_param])
+_register_ui_case("pbx_ui_mcs_ring_no_time_earliest", "回報未帶時間(僅更已傳送筆,SA規則2/3)",
+                  _steps_mcs_ring_no_time_earliest,
+                  [_room_param("0102"), _dat_param, _tim_param])
+_register_ui_case("pbx_ui_resend_full", "交換機重送(1030・CKO→CKI+晨喚重送)",
+                  _steps_resend_full,
+                  [_room_param("0101"), _dat_param, _tim_param])
+_register_ui_case("pbx_ui_rms_room_status", "RMS房況回報(3小時效期,C/逾時不收)",
+                  _steps_rms_room_status,
+                  [_room_param("0103")])

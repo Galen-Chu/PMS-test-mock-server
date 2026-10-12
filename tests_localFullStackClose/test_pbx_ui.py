@@ -194,9 +194,9 @@ def test_negative_actions_denied():
 def test_registry_pbx_module_m1():
     by_mod = registry.by_module()
     cases = {s.id: s for s in by_mod["pbx"]}
-    assert len(cases) == 17
+    assert len(cases) >= 17                          # M0 10 + M1 7(M2 再加,M2 測試另有精確斷言)
     assert sum(1 for s in cases.values() if s.vendor == "PABX") == 10
-    assert sum(1 for s in cases.values() if s.vendor == "PMS_UI") == 7
+    assert sum(1 for s in cases.values() if s.vendor == "PMS_UI") >= 7
     assert all(s.implemented for s in cases.values())
     ui = cases["pbx_ui_set_mcall_full_flow"]
     assert {sp.key for sp in ui.params} == {"room_no", "mcall_dat", "mcall_tim"}
@@ -224,3 +224,127 @@ def test_runner_ui_assembles_and_real_skips():
     assert actions[:2] == ["checkin", "set_mcall"]      # 前兩步為入住+設定
     run2 = engine.start_run(["pbx_ui_set_mcall_full_flow"], "REAL_QA")
     assert run2.cases[0].status == "SKIP" and run2.cases[0].error_category == "REAL_NOT_SUPPORTED"
+
+
+# ---- M2:回報/異常/重送/RMS(SA規格 v1.16 五規則 + PMS0210120 Ver1.4/v1.6) ----
+from server.pbx.pms_side import handle_mcs_response, mock_pms_pbx_err
+
+
+def test_m2_ring_answered_no_anomaly():
+    c = _client()
+    _reset(c)
+    dat, tim = _future()
+    _act(c, "checkin", room_nos="0101")
+    _act(c, "set_mcall", room_nos="0101", mcall_dat=dat, mcall_tim=tim)
+    _tick(c)
+    r = c.post("/pbx/ring", json={"athenaId": "25", "hotelCode": "01",
+                                  "room_nos": "0101", "mcall_sta": "1"}).get_json()
+    assert r["ok"] is True
+    mc = _find(_pms_state(c), "0101", dat, tim)
+    assert mc["mcall_sta"] == "1"                       # 五規則:更新 TRANS+sta0
+    assert _pms_state(c)["pbx_err_tail"] == []          # 1=Answered 不入 err
+    assert c.get("/pbx/pms/mcall-anomalies").get_json()["count"] == 0
+
+
+def test_m2_ring_busy_pbx_err_anomaly_ack():
+    c = _client()
+    _reset(c)
+    dat, tim = _future()
+    _act(c, "checkin", room_nos="0102")
+    _act(c, "set_mcall", room_nos="0102", mcall_dat=dat, mcall_tim=tim)
+    _tick(c)
+    r = c.post("/pbx/ring", json={"athenaId": "25", "hotelCode": "01",
+                                  "room_nos": "0102", "mcall_sta": "2"}).get_json()
+    assert r["ok"] is True
+    st = _pms_state(c)
+    assert st["pbx_err_tail"][-1]["error_cod"] == "Busy"        # 規則5:∉{0,1,3} 入 pbx_err
+    anom = c.get("/pbx/pms/mcall-anomalies").get_json()
+    assert anom["count"] == 1 and anom["items"][0]["mcall_sta"] == "2"
+    # 已處理:N→Y;再 ack 顯示訊息不異動
+    ack = c.post("/pbx/pms/mcall-anomalies/ack",
+                 json={"room_nos": "0102", "mcall_dat": dat, "mcall_tim": tim}).get_json()
+    assert ack["ok"] is True and ack["mcall"]["proc_sta"] == "Y"
+    assert c.get("/pbx/pms/mcall-anomalies").get_json()["count"] == 0
+    again = c.post("/pbx/pms/mcall-anomalies/ack",
+                   json={"room_nos": "0102", "mcall_dat": dat, "mcall_tim": tim}).get_json()
+    assert again["ok"] is False and "已為已處理" in again["message"]
+
+
+def test_m2_ring_earliest_and_pbx_insert_rule():
+    c = _client()
+    _reset(c)
+    dat = datetime.now().strftime("%Y%m%d")
+    near = (datetime.now() + timedelta(minutes=30)).strftime("%H%M%S")
+    far = (datetime.now() + timedelta(hours=2)).strftime("%H%M%S")
+    _act(c, "checkin", room_nos="0103")
+    _act(c, "set_mcall", room_nos="0103", mcall_dat=dat, mcall_tim=near)
+    _act(c, "set_mcall", room_nos="0103", mcall_dat=dat, mcall_tim=far)
+    _tick(c)
+    st = _pms_state(c)
+    assert _find(st, "0103", dat, near)["trans_pbx_sta"] == "TRANS"    # 排程只送最接近一筆
+    assert _find(st, "0103", dat, far)["trans_pbx_sta"] == "NOT_TRANS"
+    r = c.post("/pbx/ring", json={"athenaId": "25", "hotelCode": "01",
+                                  "room_nos": "0103", "mcall_sta": "3"}).get_json()
+    assert r["ok"] is True
+    st2 = _pms_state(c)
+    assert _find(st2, "0103", dat, near)["mcall_sta"] == "3"
+    assert _find(st2, "0103", dat, far)["mcall_sta"] == "0"            # 未傳送筆不受影響
+    # 規則4:回報 sta=0 且無此筆 → 由 PBX 自建(INS_USR='PBX', TRANS)
+    _reset(c)
+    summary, updated = handle_mcs_response("0105", "20261013", "070000", "0")
+    assert updated is True and summary["rule_applied"] == "insert_by_pbx_report"
+    mc = _find(_pms_state(c), "0105", "20261013", "070000")
+    assert mc["trans_pbx_sta"] == "TRANS" and mc.get("ins_usr") == "PBX"
+
+
+def test_m2_resend_action():
+    c = _client()
+    _reset(c)
+    dat, tim = _future()
+    _act(c, "checkin", room_nos="0104")
+    _act(c, "dnd", room_nos="0104", status_typ="1")
+    _act(c, "set_mcall", room_nos="0104", mcall_dat=dat, mcall_tim=tim)
+    _tick(c)
+    r = _act(c, "resend", room_nos="0104", include_vacant=False, include_occupied=True)
+    assert r["ok"] is True
+    rs = r["resend"]
+    assert rs["occupied_cki"] == 1 and rs["mcall_reset"] == 1 and rs["status_resend"] == 1
+    mc = _find(_pms_state(c), "0104", dat, tim)
+    assert mc["trans_pbx_sta"] == "NOT_TRANS"      # 未來晨喚重設未傳送
+    _tick(c)
+    assert _find(_pms_state(c), "0104", dat, tim)["trans_pbx_sta"] == "TRANS"
+    sw = _sw_state(c)
+    assert sw["pbx_dt"]["0104"]["tel_sta"] == "1" and sw["pbx_dt"]["0104"]["dnd_cod"] == "1"
+
+
+def test_m2_rms_receive_and_expiry():
+    c = _client()
+    _reset(c)
+    _act(c, "checkin", room_nos="0106")
+    r = c.post("/pbx/rms", json={"athenaId": "25", "hotelCode": "01",
+                                 "room_nos": "0106", "room_sta": "C"}).get_json()
+    assert r["processed"] is True and r["pbx_dt.check_sta"] == "C"
+    st = _pms_state(c)
+    assert st["clean_sta"]["0106"] == "C" and st["pbx_dt"]["0106"]["check_sta"] == "C"
+    # 逾 3 小時:不收,狀態不被覆蓋,入 pbx_err
+    old = (datetime.now() - timedelta(hours=4)).strftime("%Y-%m-%d %H:%M:%S")
+    r2 = c.post("/pbx/rms", json={"athenaId": "25", "hotelCode": "01", "room_nos": "0106",
+                                  "room_sta": "D", "ins_dat": old}).get_json()
+    assert r2["processed"] is False and "三小時" in r2["message"]
+    st2 = _pms_state(c)
+    assert st2["pbx_dt"]["0106"]["check_sta"] == "C"
+    assert st2["pbx_err_tail"][-1]["error_cod"] == "已超過三小時,不收"
+    # B(No baggage)不處理;壞值域/未知房號 → 400
+    r3 = c.post("/pbx/rms", json={"athenaId": "25", "hotelCode": "01",
+                                  "room_nos": "0106", "room_sta": "B"}).get_json()
+    assert r3["processed"] is True and "不處理" in r3["message"]
+    assert c.post("/pbx/rms", json={"room_nos": "0106", "room_sta": "X"}).status_code == 400
+    assert c.post("/pbx/rms", json={"room_nos": "9999", "room_sta": "C"}).status_code == 400
+
+
+def test_registry_pbx_module_m2():
+    by_mod = registry.by_module()
+    cases = {s.id: s for s in by_mod["pbx"]}
+    assert len(cases) == 22                          # M0 PABX 10 + M1 7 + M2 5
+    assert sum(1 for s in cases.values() if s.vendor == "PMS_UI") == 12
+    assert all(s.implemented for s in cases.values())

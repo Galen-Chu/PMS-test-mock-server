@@ -208,6 +208,38 @@ def host_commands():
     return jsonify({"responses": responses, "results": results}), 200
 
 
+@pbx_bp.route('/pbx/ring', methods=['POST'])
+def ring_mcall():
+    """☎️ 晨喚時間到:交換機撥號並回報 MCS 結果(1-5 等)——M2 模擬觸發點。
+
+    交換機側:更新自身 mcall 狀態 → 轉發 PMS 側 handle_mcs_response(依 SA 五規則
+    更新 mcall_mn/入 pbx_err)。body:{room_nos, mcall_sta(預設'1'), mcall_dat?, mcall_tim?}。
+    """
+    from .pms_side import handle_mcs_response   # 延遲 import(pms_side 亦引用本模組)
+    body = request.get_json(silent=True) or {}
+    room, sta = body.get("room_nos"), str(body.get("mcall_sta", "1"))
+    if room not in mock_pbx_dt:
+        return jsonify({"code": "400", "message": f"unknown room: {room}"}), 400
+    if sta not in ("0", "1", "2", "3", "4", "5", "C", "D", "F"):
+        return jsonify({"code": "400", "message": f"invalid mcall_sta: {sta}"}), 400
+    dat, tim = body.get("mcall_dat"), body.get("mcall_tim")
+    # 交換機側:精準指定或該房首筆未回應(sta=0)晨喚
+    cands = [(k, v) for k, v in mock_pbx_mcall.items()
+             if k[0] == room and v["mcall_sta"] == "0"]
+    if dat:
+        cands = [(k, v) for k, v in cands if k[1] == dat]
+        if tim:
+            cands = [(k, v) for k, v in cands if k[2] == tim]
+    if not cands:
+        return jsonify({"ok": False, "message": f"房號:{room} 無未回應晨喚可回報"}), 200
+    key = min(cands, key=lambda kv: (kv[0][1], kv[0][2]))[0]
+    mock_pbx_mcall[key]["mcall_sta"] = sta
+    summary, updated = handle_mcs_response(room, key[1], key[2], sta)
+    return jsonify({"ok": updated, "switchboard_mcall": {"room_nos": key[0], "mcall_dat": key[1],
+                                                         "mcall_tim": key[2], "mcall_sta": sta},
+                    "pms_handling": summary}), 200
+
+
 @pbx_bp.route('/pbx/internal/state', methods=['GET'])
 def get_internal_state():
     """沙盒內部回讀(LOCAL 閉環驗證用;前例:roomcontrol /roomcontrol/internal/state)。"""

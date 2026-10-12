@@ -140,6 +140,10 @@ def build_run_context(environment: str) -> RunContext:
         "pbx_pms_actions": f"{server_base}/pbx/pms-actions",
         "pbx_pms_tick": f"{server_base}/pbx/pms-scheduler/tick",
         "pbx_pms_internal": f"{server_base}/pbx/pms/internal/state",
+        # ☎️ M2:晨喚撥號回報(ring)/RMS 房況/晨喚異常查詢與已處理
+        "pbx_ring": f"{server_base}/pbx/ring",
+        "pbx_rms": f"{server_base}/pbx/rms",
+        "pbx_anomalies": f"{server_base}/pbx/pms/mcall-anomalies",
         # PAYTRONEX 專屬路由（/parktron/hpms/services/roomer/*）
         "paytronex_add": f"{server_base}/parktron/hpms/services/roomer/add",
         "paytronex_find": f"{server_base}/parktron/hpms/services/roomer/findByLicensePlate",

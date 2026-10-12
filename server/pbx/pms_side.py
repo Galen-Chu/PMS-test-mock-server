@@ -43,11 +43,76 @@ mock_pms_pbx_dt = {
     for room in PBX_ROOMS
 }
 
-# mcall_mn(key=(room, dat YYYYMMDD, tim HHMMSS) → {mcall_sta, trans_pbx_sta, ikey, ins_dat})
+# mcall_mn(key=(room, dat YYYYMMDD, tim HHMMSS) → {mcall_sta, trans_pbx_sta, ikey, ins_dat, proc_sta})
 mock_pms_mcall_mn = {}
 
 # pbx_mn(交換機交換檔:list,seq/inst_cod/room_nos/data_rmk/sent_at)
 mock_pms_pbx_mn = []
+
+# pbx_err(介面錯誤表:ERR 回應或 MCS 回應∉{0,1,3} 時入檔;SA規格「指令失敗--請重試」機制)
+mock_pms_pbx_err = []
+
+# room_mn 的清掃狀況(RMS 回報更新;C/S/D 對映 pbx_dt.check_sta)
+mock_pms_clean_sta = {room: "D" for room in PBX_ROOMS}
+
+# MCS 回應狀態 → 說明(SA規格 wf_read_pms CHOOSE CASE)
+MCALL_STA_DESC = {"0": "Set ", "1": "Answered ", "2": "Busy ", "3": "No Answer ",
+                  "4": "Block ", "5": "Call Termination to ATTCON ",
+                  "C": "Close Account ", "D": "Delete set "}
+
+
+def _pbx_err(inst_cod, room_nos, error_cod, data_rmk=""):
+    """入 pbx_err(SA規格:依原指令 seq 回撈記錄;mock 簡化為事件當下記錄)。"""
+    mock_pms_pbx_err.append({
+        "err_dat": _now().strftime("%Y-%m-%d %H:%M:%S"),
+        "inst_cod": inst_cod, "room_nos": room_nos,
+        "error_cod": error_cod, "data_rmk": (data_rmk or "")[:104],
+    })
+
+
+def handle_mcs_response(room, mcall_dat, mcall_tim, mcall_sta):
+    """交換機回報 MCS → 依 SA規格(wf_read_pns)五規則更新 mcall_mn。
+
+    1. mcall_dat 空白/無效 → 以回應時的日期代(v1.6)
+    2. 只更新 trans_pbx_sta='TRANS' 且 mcall_sta='0'(v1.12)
+    3. 有給 mcall_tim → 精準對應;沒給 → 該房當日 TRANS+sta0 最小時間一筆(v1.14/1.9)
+    4. 回報 sta='0' 且無此筆 → INSERT mcall_mn(INS_USR='PBX',TRANS)
+    5. 回應 sta∉{0,1,3} → 入 pbx_err(ERROR_COD=狀態說明)
+    回 (處理摘要 dict, 是否更新到)。
+    """
+    if not mcall_dat or len(str(mcall_dat)) != 8 or not str(mcall_dat).isdigit():
+        mcall_dat = _now().strftime("%Y%m%d")            # 規則 1
+    sta = str(mcall_sta)
+    rule = None
+    if sta == "0":
+        key = (room, mcall_dat, str(mcall_tim or ""))
+        if mock_pms_mcall_mn.get(key) is None:
+            mock_pms_mcall_mn[key] = {"mcall_sta": "0", "trans_pbx_sta": "TRANS",
+                                      "ikey": mock_pms_room.get(room, {}).get("ikey", ""),
+                                      "ins_dat": _now().strftime("%Y-%m-%d %H:%M:%S"),
+                                      "proc_sta": "N", "ins_usr": "PBX"}   # 規則 4
+            rule = "insert_by_pbx_report"
+        else:
+            rule = "already_exists"
+    else:
+        cands = [(k, mc) for k, mc in mock_pms_mcall_mn.items()
+                 if k[0] == room and k[1] == mcall_dat
+                 and mc["mcall_sta"] == "0" and mc["trans_pbx_sta"] == "TRANS"]   # 規則 2
+        if mcall_tim:
+            precise = [(k, mc) for k, mc in cands if k[2] == str(mcall_tim)]
+            target = precise[0][0] if precise else None                 # 規則 3(精準)
+        else:
+            target = min(cands, key=lambda km: km[0][2])[0] if cands else None    # 規則 3(最小時間)
+        if target is None:
+            rule = "no_candidate"
+        else:
+            mock_pms_mcall_mn[target]["mcall_sta"] = sta
+            rule = f"updated({'precise' if mcall_tim else 'earliest'})"
+        if sta not in ("0", "1", "3"):                                   # 規則 5
+            _pbx_err("MCS", room, MCALL_STA_DESC.get(sta, "UnDefine").strip(),
+                     f"{mcall_dat}{mcall_tim or ''} sta={sta}")
+    return {"room_nos": room, "mcall_dat": mcall_dat, "mcall_tim": mcall_tim,
+            "mcall_sta": sta, "rule_applied": rule}, rule.startswith("updated") or rule == "insert_by_pbx_report"
 
 
 def _now():
@@ -125,7 +190,8 @@ def _act_set_mcall(body):
         return {"ok": False, "message": f"房號:{room} {dat}{tim} 已有設定中晨喚,不重複入"}
     mock_pms_mcall_mn[key] = {"mcall_sta": "0", "trans_pbx_sta": "NOT_TRANS",
                               "ikey": mock_pms_room[room]["ikey"],
-                              "ins_dat": _now().strftime("%Y-%m-%d %H:%M:%S")}
+                              "ins_dat": _now().strftime("%Y-%m-%d %H:%M:%S"),
+                              "proc_sta": "N"}
     return {"ok": True}
 
 
@@ -202,12 +268,45 @@ def _act_room_change(body):
     return {"ok": ok, "sent": summary}
 
 
+def _act_resend(body):
+    """交換機重送(1030;PMS0210120 Ver1.4):空房重送關電話(CKO);
+    住人房 CKO→CKI(→依 pbx_dt 重設 DND/TCE)+ 未來晨喚 NOT_TRANS 讓排程重送。"""
+    include_vacant = body.get("include_vacant", True)
+    include_occupied = body.get("include_occupied", True)
+    sent = {"vacant_cko": 0, "occupied_cko": 0, "occupied_cki": 0,
+            "status_resend": 0, "mcall_reset": 0}
+    for room, rm in mock_pms_room.items():
+        if rm["room_sta"] == "V" and include_vacant:
+            _enqueue_and_send("CKO", {"phone_nos": room}, room)
+            sent["vacant_cko"] += 1
+        elif rm["room_sta"] == "O" and include_occupied:
+            _enqueue_and_send("CKO", {"phone_nos": room}, room)
+            _enqueue_and_send("CKI", {"phone_nos": room,
+                                      "lang_cod": mock_pms_pbx_dt[room]["lang_cod"] or "001",
+                                      "vip_sta": "N", "master_nos": room,
+                                      "guest_nam": "Mr. TEST,GUEST",
+                                      "account_nos": "CI20261012001"}, room)
+            sent["occupied_cko"] += 1
+            sent["occupied_cki"] += 1
+            for inst, field in (("DND", "dnd_cod"), ("TCE", "tce_cod")):
+                if mock_pms_pbx_dt[room][field] == "1":
+                    _enqueue_and_send(inst, {"phone_nos": room, "status_typ": "1"}, room)
+                    sent["status_resend"] += 1
+    # 未來且未回應的晨喚改 NOT_TRANS(入住房重設晨呼SQL語意)
+    for key, mc in mock_pms_mcall_mn.items():
+        if (mc["mcall_sta"] == "0" and mc["trans_pbx_sta"] == "TRANS"
+                and not _mcall_expired(key[1], key[2])):
+            mc["trans_pbx_sta"] = "NOT_TRANS"
+            sent["mcall_reset"] += 1
+    return {"ok": True, "resend": sent}
+
+
 _ACTIONS = {
     "checkin": _act_checkin, "checkout": _act_checkout,
     "set_mcall": _act_set_mcall, "del_mcall": _act_del_mcall,
     "open_tel": _act_open_tel, "close_tel": _act_close_tel,
     "tce": lambda b: _act_tce_dnd(b, "TCE"), "dnd": lambda b: _act_tce_dnd(b, "DND"),
-    "room_change": _act_room_change,
+    "room_change": _act_room_change, "resend": _act_resend,
 }
 
 
@@ -281,10 +380,71 @@ def pms_internal_state():
     return jsonify({
         "room_mn": mock_pms_room,
         "pbx_dt": mock_pms_pbx_dt,
+        "clean_sta": mock_pms_clean_sta,
         "mcall_mn": [{"room_nos": k[0], "mcall_dat": k[1], "mcall_tim": k[2], **v}
                      for k, v in sorted(mock_pms_mcall_mn.items())],
         "pbx_mn_tail": mock_pms_pbx_mn[-30:],
+        "pbx_err_tail": mock_pms_pbx_err[-20:],
     }), 200
+
+
+@pms_bp.route('/pbx/pms/mcall-anomalies', methods=['GET'])
+def mcall_anomalies():
+    """晨喚異常查詢(PMS0210120 v1.6):當天 + TRANS + mcall_sta∈{2,3,4,5} + 未處理;
+    排序:未處理優先 → 日期 → 時間 → 房號。"""
+    today = _now().strftime("%Y%m%d")
+    items = [{"room_nos": k[0], "mcall_dat": k[1], "mcall_tim": k[2], **v}
+             for k, v in mock_pms_mcall_mn.items()
+             if k[1] == today and v["trans_pbx_sta"] == "TRANS"
+             and v["mcall_sta"] in ("2", "3", "4", "5") and v.get("proc_sta", "N") == "N"]
+    items.sort(key=lambda x: (x["mcall_dat"], x["mcall_tim"], len(x["room_nos"].strip()), x["room_nos"]))
+    return jsonify({"count": len(items), "items": items}), 200
+
+
+@pms_bp.route('/pbx/pms/mcall-anomalies/ack', methods=['POST'])
+def mcall_anomaly_ack():
+    """晨喚異常已處理:N→Y(已為 Y 顯示訊息不異動;PMS0210120 7.6.3.5)。"""
+    body = request.get_json(silent=True) or {}
+    room, dat, tim = body.get("room_nos"), body.get("mcall_dat"), body.get("mcall_tim")
+    mc = mock_pms_mcall_mn.get((room, dat, tim))
+    if mc is None:
+        return jsonify({"ok": False, "message": f"查無晨喚 {room} {dat}{tim}"}), 200
+    if mc.get("proc_sta") == "Y":
+        return jsonify({"ok": False, "message": "此筆晨喚資料處理狀態已為已處理"}), 200
+    mc.update({"proc_sta": "Y",
+               "proc_dat": _now().strftime("%Y-%m-%d %H:%M:%S"),
+               "proc_usr": body.get("proc_usr", "TESTER")})
+    return jsonify({"ok": True, "mcall": {k: v for k, v in mc.items()}}), 200
+
+
+@pms_bp.route('/pbx/rms', methods=['POST'])
+def rms_receive():
+    """接收 RMS 房況(交換機→德安;SA規格 7.3):3 小時內才處理;
+    C→clean C/check C、S→clean D/check S、D→clean D/check D、B 不處理。"""
+    body = request.get_json(silent=True) or {}
+    room, sta = body.get("room_nos"), str(body.get("room_sta", "")).strip()
+    if room not in mock_pms_room:
+        return jsonify({"code": "400", "message": f"unknown room: {room}"}), 400
+    if sta not in ("C", "B", "S", "D"):
+        return jsonify({"code": "400", "message": f"room_sta must be C/B/S/D, got {sta!r}"}), 400
+    sent_at = body.get("ins_dat")            # 傳送時間(YYYY-MM-DD HH:MM:SS);缺省視為現在
+    try:
+        age_ok = (not sent_at) or (_now() - datetime.strptime(sent_at, "%Y-%m-%d %H:%M:%S")
+                                   <= timedelta(hours=3))
+    except ValueError:
+        age_ok = False
+    if not age_ok:
+        _pbx_err("RMS", room, "已超過三小時,不收", f"Room Status Set:{sta}")
+        return jsonify({"ok": False, "processed": False,
+                        "message": f"已超過三小時,不收 Room_nos:{room} Room Status Set:{sta}"}), 200
+    mapping = {"C": ("C", "C"), "S": ("D", "S"), "D": ("D", "D")}
+    if sta == "B":
+        return jsonify({"ok": True, "processed": True, "message": "No baggage 不處理"}), 200
+    clean, check = mapping[sta]
+    mock_pms_clean_sta[room] = clean
+    mock_pms_pbx_dt[room]["check_sta"] = check
+    return jsonify({"ok": True, "processed": True,
+                    "room_mn.clean_sta": clean, "pbx_dt.check_sta": check}), 200
 
 
 @pms_bp.route('/pbx/pms/internal/reset', methods=['POST'])
@@ -296,4 +456,6 @@ def pms_reset():
                                       "tce_cod": "0", "lang_cod": ""})
     mock_pms_mcall_mn.clear()
     mock_pms_pbx_mn.clear()
+    mock_pms_pbx_err.clear()
+    mock_pms_clean_sta.update({room: "D" for room in PBX_ROOMS})
     return jsonify({"code": "2000", "message": "pbx pms-side state reset"}), 200
