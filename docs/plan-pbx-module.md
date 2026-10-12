@@ -128,12 +128,12 @@ orchestrator/runners/pbx_ui.py    # M1 案例(vendor=PMS_UI:模擬 PMS0210027 �
 | # | 問題 | 狀態 |
 |---|---|---|
 | Q1 | ~~PMS0210120 REST API SD~~ | ✅ **2026-10-12 結案(SD文件_PMS0210027_交換機.xlsx)**:交換機**無對外 REST 面**——網頁版按鈕(0200 新增/0300 刪除/1010 開關電話/1020 限撥/1030 勿擾)規則全指向「入 pbx_mn + 宏興SD」,經框架 func_id 直入 DB,不暴露雲端端點;值域表(trans_pbx_sta/mcall_sta)與本模組 M0 契約完全一致。**故 REAL 雲端發砲路不存在,M1 改為沙盒內 PMS 側業務層全鏈模擬(已完成)** |
-| Q2 | Msg_cod 值域 | 🔶 SA規格補:ERR 回應→pbx_err 機制定案(ERROR_COD='指令失敗--請重試');值域列舉仍缺——沙盒自擴 GUEST_NOT_IN/TEL_NOT_OPEN/MCALL_NOT_FOUND 維持 |
+| Q2 | Msg_cod 值域 | ✅ **自定義定案(2026-10-12 裁定,mock 依功能自訂不待 SA)**:契約列舉 ROOM_NOT_FOUND/MSG_FORMAT/TIME_OUT 之外,沙盒自擴 GUEST_NOT_IN(空房前置)/TEL_NOT_OPEN(電話未開前置)/MCALL_NOT_FOUND(取消無設定)——語意自明,SA 若日後列舉值域再對齊 |
 | Q3 | 刪晨喚的介面形狀 | ✅ 大致證實:SA規格 MCS 雙向 sta 值域含 'D'(Delete set)/'C'(Close Account);M0/M1 的 MCS+D 實作方向正確 |
 | Q4 | ~~mcall_mn PK 定義分歧~~ | ✅ 結案:**IKEY 版**——SA規格 v1.9/v1.14 更新 SQL 以 (mcall_dat, mcall_tim, room_nos, ikey) 為鍵 |
-| Q5 | CKO 後晨呼回報值 | 🔶 SA規格證實 'C'=Close Account(**關帳**語意)且為 MCS 回報成員;PMS 側 CKO 僅將 NOT_TRANS→'D'(宏興SD)。mock M0 於 CKO 將 TRANS 晨喚標 'C' = 模擬交換機清除行為,真實 CKO 對 TRANS 晨喚最終狀態仍待確認 |
+| Q5 | CKO 後晨呼回報值 | ✅ **自定義定案(2026-10-12 裁定)**:PMS 側 CKO 僅 NOT_TRANS→'D'(宏興SD 原文);交換機側 mock 於 CKO 將 sta=0 晨喚標 'C'(SA 值域成員,模擬交換機清除晨呼的回報)——兩側各按文件行為,差異即測試觀察點 |
 | Q6 | index 檔 W/P cycle 輪替機制 | 🔶 SA規格補齊實作依據(idx 檢查 192/3000、雙方 cycle 比對、retry、實例);M0 未模擬(HTTP 承載無覆寫風險);真檔案交換屬 M3 |
-| Q7 | QA 環境前提 | ⏳ Option PMS_PBX/HOTEL_SVAL_MN.smdr_online 是否開、測試台有無(模擬)交換機、實際交換機廠商型號 |
+| Q7 | QA 環境前提 | ✅ **自定義定案(2026-10-12 裁定,不阻塞)**:沙盒自持房號 universe(0101-0109)+room_mn 視景,LOCAL 模擬不依賴環境;Option PMS_PBX/smdr_online/交換機廠商型號僅影響未來 REAL 驗證深度(現無 REAL 路,見 Q1) |
 | Q8 | ~~MWL 留言燈~~ | ✅ 結案:**A7 未做**(SA規格「未做之功能就 bypass」清單含 MWL/RIU/OOO/留言族/帳務顯示族)——不案例化 |
 | Q9 | 帳務/房況/留言面 | 🔶 SA規格補齊 RMS(3hr 效期)與 PTX 入帳全規則;A7 未做留言/顯示族——屬 M2(RMS)/M3(PTX 帳務) |
 | Q10 | 檔案編碼 ANSI(中文 2 bytes) | ⏳ SA規格明載 host2pms/pms2host 為 ANSI 非 UTF8(A7 現況標問號)——M3 檔案化時的硬前提 |
