@@ -12,7 +12,7 @@
 PMS-test-mock-server/
 │
 ├── config.py                 # ⚙️ 全域設定檔（戰略總開關 ENV_SWITCH + 六環境矩陣）
-├── main.py                   # ⚡ Flask 沙盒引擎唯一入口（orchestrator＋隧道＋四模組藍圖，監聽 :5000）
+├── main.py                   # ⚡ Flask 沙盒引擎唯一入口（orchestrator＋隧道＋五模組藍圖，監聽 :5000）
 ├── orchestrator/             # 🧭 第 0 層測試編排協調層（/environments /scenarios /runs）
 │   ├── api.py                #    編排 REST API + 案例參數化 overrides
 │   ├── engine.py             #    發砲引擎（各環境 URLs 矩陣 + 鑑別 Header 注入）
@@ -53,18 +53,23 @@ PMS-test-mock-server/
 │   │       ├── base.py                    # 門禁策略基底類別
 │   │       └── vendor_WAFERLOCK_LIVEAM.py # 華豫寧 Token 簽發與訂單狀態機維護
 │   │
-│   └── roomcontrol/          # 🌡️ 【模組四：房控】A7 公版 XML 介面（廠商→PMS 方向）
-│       ├── routes.py         # POST /third-party/import-sync-files（mock PMS 側）+ 內部回讀
+│   ├── roomcontrol/          # 🌡️ 【模組四：房控】A7 公版 XML 介面（廠商→PMS 方向）
+│   │   ├── routes.py         # POST /third-party/import-sync-files（mock PMS 側）+ 內部回讀
+│   │   └── vendors/
+│   │       ├── vendor_A7_XML.py           # A7 公版 XML 組裝／解析策略（sa10 V1.2）
+│   │       ├── vendor_MINXON.py           # 民笙（thirdPartyCode=81）
+│   │       └── vendor_CHAOFENG.py         # 超烽（thirdPartyCode=86）
+│   │
+│   └── pbx/                  # ☎️ 【模組五：交換機晨喚】pbx_interface 192-byte 檔案記錄介面
+│       ├── routes.py         # POST /pbx/host-commands（mock 交換機側）+ 內部回讀／重置
 │       └── vendors/
-│           ├── vendor_A7_XML.py           # A7 公版 XML 組裝／解析策略（sa10 V1.2）
-│           ├── vendor_MINXON.py           # 民笙（thirdPartyCode=81）
-│           └── vendor_CHAOFENG.py         # 超烽（thirdPartyCode=86）
+│           └── vendor_PABX.py             # 固定長度記錄編解碼（CKI/CKO/MCS/DND/TCE/RMC…）
 │
 └── tests_localFullStackClose/        # 🧪 【測試】（自動 skip 慣例見下方「測試資產與閉環測試」節）
     ├── conftest.py                   # 共用前置：server_up 沙盒在線探測（未開自動 skip）
     ├── test_mock*.py                 # 離線單元測試（responses 攔截，不需網路與 server）
     ├── test_local_api / test_local_scenario / test_local_roomcontrol   # 本地閉環（需 server 在線；離線自動 skip）
-    ├── test_roomcontrol / test_param_override / test_orchestrator 等   # 各模組離線規格比對
+    ├── test_roomcontrol / test_pbx / test_param_override / test_orchestrator 等   # 各模組離線規格比對
     ├── test_real_*.py                # 真實雲端（僅 ENV_SWITCH=REAL_* 執行，@skipif 防護）
     └── test_waferlock_liveam_pipeline.py  # 華豫寧門禁全管線測試
 ```
@@ -155,6 +160,7 @@ pytest tests_localFullStackClose/
 | 🦏 房務備品 | `amenity_bp` | `vendor_BR_AIELLO`（小美犀） |
 | 🔑 門禁製卡 | `keycard_bp` | `vendor_WAFERLOCK_LIVEAM`（華豫寧） |
 | 🌡️ 房控 | `roomcontrol_bp` | `vendor_A7_XML`（A7 公版 XML）＋ `vendor_MINXON`（民笙 81）、`vendor_CHAOFENG`（超烽 86） |
+| ☎️ 交換機晨喚 | `pbx_bp` | `vendor_PABX`（pbx_interface 公版 192-byte 記錄；PMS0210120 晨喚／電話設定） |
 
 ---
 
