@@ -144,6 +144,10 @@ def build_run_context(environment: str) -> RunContext:
         "pbx_ring": f"{server_base}/pbx/ring",
         "pbx_rms": f"{server_base}/pbx/rms",
         "pbx_anomalies": f"{server_base}/pbx/pms/mcall-anomalies",
+        # ☎️ M3:真檔案交換(HOST2PMS/PMS2HOST 四檔 + W/P cycle 輪替)
+        "pbx_file_ensure": f"{server_base}/pbx/file/ensure",
+        "pbx_file_cycle": f"{server_base}/pbx/file/run-cycle",
+        "pbx_file_state": f"{server_base}/pbx/file/state",
         # PAYTRONEX 專屬路由（/parktron/hpms/services/roomer/*）
         "paytronex_add": f"{server_base}/parktron/hpms/services/roomer/add",
         "paytronex_find": f"{server_base}/parktron/hpms/services/roomer/findByLicensePlate",

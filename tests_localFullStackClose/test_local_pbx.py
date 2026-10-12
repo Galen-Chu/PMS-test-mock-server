@@ -107,6 +107,34 @@ def _mcall_tim():
     return (datetime.now() + timedelta(minutes=40)).strftime("%H%M%S")
 
 
+def test_orchestrator_m3_file_exchange_via_runs(server_up):
+    """M3 閉環:真檔案交換三案經 /runs 編排(往返全鏈/環狀輪替/中文姓名政策)。"""
+    requests.post(RESET_URL)
+    requests.post(PMS_RESET_URL)
+    dat = datetime.now().strftime("%Y%m%d")
+    tim = (datetime.now() + timedelta(minutes=40)).strftime("%H%M%S")
+    results = _run_and_results({
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["pbx_file_roundtrip", "pbx_file_wraparound", "pbx_file_china_name"],
+        "overrides": {
+            "pbx_file_roundtrip": {"room_no": "0101", "mcall_dat": dat, "mcall_tim": tim},
+            "pbx_file_wraparound": {"room_no": "0102"},
+            "pbx_file_china_name": {"room_no": "0103"},
+        },
+    })
+    for cid, c in results.items():
+        assert c["status"] == "PASS", (cid, c.get("response_payload"))
+    rt = results["pbx_file_roundtrip"]["response_payload"]
+    assert rt["sw_tel_sta"] == "1" and rt["sw_mcall"]                  # 經檔案路徑落庫
+    wa = results["pbx_file_wraparound"]["response_payload"]
+    h2p = wa["file_state"]["host2pms"]
+    assert wa["mid2_host2pms"]["wcycle_typ"] == "B"                   # 第一圈繞完翻 B
+    assert h2p["wcycle_typ"] == "A" and h2p["pcycle_typ"] == "A"      # 第二圈繞回 A、讀方跟上
+    assert h2p["wseq_nos"] == 4 and wa["file_state"]["pms2host"]["wseq_nos"] == 4
+    cn = results["pbx_file_china_name"]["response_payload"]
+    assert cn["processed_chinese"]                                     # 中文政策兩段皆通
+
+
 def _run_and_results(payload):
     run = requests.post(f"{BASE}/runs", json=payload).json()
     assert run.get("run_id"), run

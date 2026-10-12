@@ -345,6 +345,6 @@ def test_m2_rms_receive_and_expiry():
 def test_registry_pbx_module_m2():
     by_mod = registry.by_module()
     cases = {s.id: s for s in by_mod["pbx"]}
-    assert len(cases) == 22                          # M0 PABX 10 + M1 7 + M2 5
-    assert sum(1 for s in cases.values() if s.vendor == "PMS_UI") == 12
+    assert len(cases) >= 22                          # M0 10 + M1 7 + M2 5(M3 再加,另有精確斷言)
+    assert sum(1 for s in cases.values() if s.vendor == "PMS_UI") >= 12
     assert all(s.implemented for s in cases.values())

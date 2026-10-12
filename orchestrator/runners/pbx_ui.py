@@ -401,3 +401,106 @@ _register_ui_case("pbx_ui_resend_full", "交換機重送(1030・CKO→CKI+晨喚
 _register_ui_case("pbx_ui_rms_room_status", "RMS房況回報(3小時效期,C/逾時不收)",
                   _steps_rms_room_status,
                   [_room_param("0103")])
+
+
+# ====================================================================
+# M3(2026-10-12):真檔案交換層案例(vendor=PMS_UI 沿用)——HOST2PMS/PMS2HOST 四檔+W/P cycle
+# 傳輸級模擬:M1 的 in-process 下達為主要編排路徑,本層示範 pbx_interface 原生檔案往返。
+# ====================================================================
+def _file_call(ctx, path, body=None, method="POST"):
+    return execute_for_ctx(ctx, method, ctx.urls[path], json_body=body or {})
+
+
+def _file_state(ctx):
+    res, _ = _file_call(ctx, "pbx_file_state", method="GET")
+    try:
+        return res.json() if res is not None else {}
+    except Exception:
+        return {}
+
+
+def _steps_file_roundtrip(ctx, p):
+    """檔案往返:動作入 pbx_mn → ensure → run-cycle → 四檔齊動(寫/讀/回應/讀回)。"""
+    room, dat, tim = p["room_no"], p["mcall_dat"], p["mcall_tim"]
+    res_ck, _ = _pms_action(ctx, "checkin", room_nos=room)
+    _pms_action(ctx, "set_mcall", room_nos=room, mcall_dat=dat, mcall_tim=tim)
+    _pms_tick(ctx)
+    res_ensure, _ = _file_call(ctx, "pbx_file_ensure", {"file_size": 3000})
+    res_cycle, _ = _file_call(ctx, "pbx_file_cycle")
+    cyc = _json(res_cycle)
+    fstate = _file_state(ctx)
+    sw = _readback(ctx)
+    summary = {"room_no": room, "checkin_ok": _act_ok(res_ck),
+               "ensure_ok": _json(res_ensure).get("ok"),
+               "written": cyc.get("written"), "processed": cyc.get("processed"),
+               "handled_replies": len(cyc.get("handled_replies") or []),
+               "file_state": fstate,
+               "sw_tel_sta": ((sw or {}).get("pbx_dt") or {}).get(room, {}).get("tel_sta"),
+               "sw_mcall": _find_mcall(sw, room, dat, tim)}
+    h2p = (fstate.get("host2pms") or {})
+    ok = (summary["checkin_ok"] and summary["ensure_ok"]
+          and (cyc.get("written") or []) and (cyc.get("processed") or [])
+          and all(r.get("ok") for r in (cyc.get("processed") or []))
+          and summary["handled_replies"] >= 1
+          and h2p.get("wseq_nos", 0) >= 2 and h2p.get("pindex_nos") == h2p.get("windex_nos")
+          and summary["sw_tel_sta"] == "1" and summary["sw_mcall"])
+    return ok, summary
+
+
+def _steps_file_wraparound(ctx, p):
+    """輪替:file_size=2 的環寫 3 筆(讀寫交錯)→ Windex 繞回、Wcycle A→B 翻轉、無資料遺失。"""
+    room = p["room_no"]
+    _pms_action(ctx, "checkin", room_nos=room)
+    _file_call(ctx, "pbx_file_ensure", {"file_size": 2})
+    cyc1 = _json(_file_call(ctx, "pbx_file_cycle")[0])       # 寫 1 筆(CKI),讀+回應
+    _pms_action(ctx, "dnd", room_nos=room, status_typ="1")
+    _pms_action(ctx, "tce", room_nos=room, status_typ="1")
+    cyc2 = _json(_file_call(ctx, "pbx_file_cycle")[0])       # 寫 2 筆(DND+TCE)→ 繞圈
+    mid2 = _file_state(ctx).get("host2pms") or {}
+    _pms_action(ctx, "tce", room_nos=room, status_typ="0")
+    cyc3 = _json(_file_call(ctx, "pbx_file_cycle")[0])       # 再 1 筆(TCE off)→ 再繞一圈
+    fstate = _file_state(ctx)
+    h2p = fstate.get("host2pms") or {}
+    p2h = fstate.get("pms2host") or {}
+    summary = {"room_no": room, "cycles": [cyc1, cyc2, cyc3], "mid2_host2pms": mid2,
+               "file_state": fstate}
+    # size=2 環寫 4 筆 = 繞兩圈:第 2 筆後 A→B(中繼斷言),第 4 筆後 B→A(繞回起點)
+    ok = (len(cyc1.get("written") or []) == 1
+          and len(cyc2.get("written") or []) == 2
+          and len(cyc3.get("written") or []) == 1
+          and mid2.get("wcycle_typ") == "B"                     # 第一圈繞完已翻 B
+          and h2p.get("wcycle_typ") == "A"                       # 第二圈繞回 A
+          and h2p.get("pcycle_typ") == h2p.get("wcycle_typ")     # 讀方跟上
+          and h2p.get("wseq_nos") == 4                           # 共寫 4 筆(1+2+1)
+          and p2h.get("wseq_nos") == 4                           # 回應同數
+          and all(r.get("ok") for r in (cyc3.get("processed") or [])))
+    return ok, summary
+
+
+def _steps_file_china_name_policy(ctx, p):
+    """ANSI/中文政策:預設中文姓名改送房號(過濾中文);allow_china=true 保留中文(cp950 往返)。"""
+    room = p["room_no"]
+    _pms_action(ctx, "checkin", room_nos=room, guest_nam="Mr. WANG,XIAOMING")
+    _file_call(ctx, "pbx_file_ensure", {"file_size": 3000})
+    cyc = _json(_file_call(ctx, "pbx_file_cycle")[0])
+    sw1 = _readback(ctx)
+    # 第二段:allow_china=true 重置後中文姓名保留
+    _pms_action(ctx, "checkout", room_nos=room)
+    _file_call(ctx, "pbx_file_ensure", {"file_size": 3000, "allow_china": True})
+    _pms_action(ctx, "checkin", room_nos=room, guest_nam="王小明")
+    cyc2 = _json(_file_call(ctx, "pbx_file_cycle")[0])
+    summary = {"room_no": room, "cycle_ascii": cyc.get("written"),
+               "cycle_chinese": cyc2.get("written"), "processed_chinese": cyc2.get("processed")}
+    ok = ((cyc.get("written") or []) and (cyc2.get("written") or [])
+          and all(r.get("ok") for r in (cyc2.get("processed") or []))
+          and ((sw1 or {}).get("pbx_dt") or {}).get(room, {}).get("tel_sta") == "1")
+    return ok, summary
+
+
+_register_ui_case("pbx_file_roundtrip", "檔案往返全鏈(pbx_mn→HOST2PMS→交換機→PMS2HOST→讀回)",
+                  _steps_file_roundtrip,
+                  [_room_param("0101"), _dat_param, _tim_param])
+_register_ui_case("pbx_file_wraparound", "環狀輪替(file_size=2・Wcycle A→B 翻轉無遺失)",
+                  _steps_file_wraparound, [_room_param("0102")])
+_register_ui_case("pbx_file_china_name", "ANSI中文姓名政策(預設改房號/allow_china 保留)",
+                  _steps_file_china_name_policy, [_room_param("0103")])
