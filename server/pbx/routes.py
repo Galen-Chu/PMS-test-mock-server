@@ -80,7 +80,10 @@ def _apply_checkin(rec, room):
 
 
 def _apply_checkout(rec, room):
-    """CKO/CIX:pbx_dt 全清 + 房況空房 + 未回應晨呼全數取消(mcall_sta='C' 關閉電話)。"""
+    """CKO/CIX:pbx_dt 全清 + 房況空房 + 未回應晨呼全數取消。
+
+    mcall_sta='C' 語意依交換機SA規格 = Close Account(關帳);PMS 側 CKO 僅將 NOT_TRANS 晨喚
+    改 'D'(宏興SD)。mock 於 CKO 將 TRANS 晨喚標 'C' = 模擬交換機清除晨呼的回報(計畫 Q5)。"""
     dt = mock_pbx_dt[room]
     dt.update({"tel_sta": "0", "lang_cod": "", "dnd_cod": "0",
                "mwl_cod": "0", "tce_cod": "0", "room_sta": "V"})
