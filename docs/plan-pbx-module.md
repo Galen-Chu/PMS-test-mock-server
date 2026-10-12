@@ -71,7 +71,9 @@ server/pbx/__init__.py            # pbx_bp 掛載(main.py 一行)
 server/pbx/routes.py              # mock 交換機側:POST /pbx/host-commands + 內部回讀/重置
 server/pbx/vendors/vendor_PABX.py # 192-byte 記錄編解碼(組裝/解析/排版鐵則)
 mock_pbx_dt / mock_pbx_mcall / mock_pbx_log   # 沙盒記憶體 DB(對齊 PMS0210120 表 3-5)
-orchestrator/runners/pbx.py       # module="pbx" 案例(發砲端=模擬德安 HOST)
+orchestrator/runners/pbx.py       # module="pbx" 案例(M0:發砲端=模擬德安 HOST)
+server/pbx/pms_side.py            # M1:PMS 側業務層(動作端點/排程 tick/內部回讀)
+orchestrator/runners/pbx_ui.py    # M1 案例(vendor=PMS_UI:模擬 PMS0210027 頁面動作全鏈)
 ```
 
 - **HTTP 承載決策**:runner 把 192-byte 記錄字串放進 `POST /pbx/host-commands` 的
@@ -104,7 +106,7 @@ orchestrator/runners/pbx.py       # module="pbx" 案例(發砲端=模擬德安 H
 
 | # | 問題 | 狀態 |
 |---|---|---|
-| Q1 | **PMS0210120 REST API SD**(1011-1027 的端點/func_id/schema/鑑別) | ⏳ M1 硬前提;PMS0210120 備註僅「宏興 API SD, func_id=」 |
+| Q1 | ~~PMS0210120 REST API SD~~ | ✅ **2026-10-12 結案(SD文件_PMS0210027_交換機.xlsx)**:交換機**無對外 REST 面**——網頁版按鈕(0200 新增/0300 刪除/1010 開關電話/1020 限撥/1030 勿擾)規則全指向「入 pbx_mn + 宏興SD」,經框架 func_id 直入 DB,不暴露雲端端點;值域表(trans_pbx_sta/mcall_sta)與本模組 M0 契約完全一致。**故 REAL 雲端發砲路不存在,M1 改為沙盒內 PMS 側業務層全鏈模擬(已完成)** |
 | Q2 | Msg_cod 值域 | 🔶 契約列舉 ROOM_NOT_FOUND/MSG_FORMAT/TIME_OUT/…;沙盒自擴 GUEST_NOT_IN/TEL_NOT_OPEN/MCALL_NOT_FOUND——待 SA 確認 |
 | Q3 | 刪晨喚的介面形狀 | 🔶 宏興SD 1.1.2:TRANS 時「直接 insert pbx_mn」但 inst_cod/Data_rmk 形狀未明載;M0 以 MCS+mcall_sta='D' 推測實作 |
 | Q4 | mcall_mn PK 定義分歧 | ⏳ PMS0210120:+INS_DAT;宏興SD:+IKEY |
@@ -121,7 +123,7 @@ orchestrator/runners/pbx.py       # module="pbx" 案例(發砲端=模擬德安 H
 | 期 | 內容 | 工作量 | 前提 | 狀態 |
 |---|---|---|---|---|
 | **M0** | 模組骨架 + 記錄編解碼 + mock 交換機狀態機 + 十案 + 雙層負面 + 內部回讀閉環 + 離線/閉環測試 + UI label | — | 無(三份文件) | ✅ **2026-10-12 完成**:離線 13 測試 + 閉環 3 測試全綠(全量 66 passed/0 failed);REAL 案例自動 SKIP |
-| **M1** | PMS REST API 發砲:1011/1012/1021-1027 正負面 + 通關種子(mcall/pbx_mn 狀態經 API 觸發) | 約 1 天 | Q1 API SD |
+| **M1** | ~~PMS REST API 發砲~~→ **PMS 側業務層模擬**(Q1 結案後改向):`server/pbx/pms_side.py` 動作端點(入住/退房/開關電話/限撥/勿擾/設刪晨喚/換房)+ 排程 tick(宏興SD 1.2 五規則)+ in-process 下達交換機側 + 七案(全鏈/取消已傳/退房連動/換房重送/過時 SKIP/負面二) | — | Q1 結案(SD 證實無 REST) | ✅ **2026-10-12 完成**:離線 9 測試 + 閉環 1 測試全綠 |
 | **M2** | 重送(1030)/換房深鏈/設定語言(CKO+CKI+重入晨呼)/晨喚異常生成與已處理/RMS 房況回報;MCS 回報 1-5 模擬(時間到觸發) | 約 1.5 天 | Q1/Q7 |
 | **M3** | 真檔案交換(HOST2PMS/PMS2HOST 四檔 + W/P cycle 輪替)或帳務面(MBT/PTX/GFT) | 視需求 | Q6/Q9 + 環境 |
 
