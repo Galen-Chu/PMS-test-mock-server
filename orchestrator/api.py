@@ -10,15 +10,26 @@
 
 本藍圖為「編排層」，與被測系統的 3 個 blueprint（parking/amenity/keycard）正交。
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 
 import config
 from .registry import registry, params_meta
 from . import engine
 from .classify import remediation, first_failure
 from .models import ParamSpec
+from .case_logs import CASE_HEADER, install_server_log_capture
 
 orchestrator_bp = Blueprint('orchestrator', __name__)
+
+# 雙端 Log（server 側攔截）：本藍圖掛到 app 即啟用——
+# 任何請求帶 X-Sandbox-Case-Id → 該請求處理期間路由 logger 的輸出收進對應案例。
+install_server_log_capture()
+
+
+@orchestrator_bp.before_app_request
+def _capture_case_header():
+    cid = request.headers.get(CASE_HEADER, "")
+    g._sandbox_case_id = cid or None
 
 
 @orchestrator_bp.route('/environments', methods=['GET'])
@@ -202,6 +213,8 @@ def _case_dict(c):
         "error_category": c.error_category,
         "resolved_params": c.resolved_params,              # 本次實際用的合併後參數（設計 §5，報告可追溯）
         "steps": c.steps,                                  # 逐步 HTTP 交易（HTTP 稽核）
+        "client_log": c.client_log,                        # 雙端 Log：編排發砲端（雙端 Log 檢視）
+        "server_log": c.server_log,                        # 雙端 Log：同 process 路由端（REAL 為空）
         "remediation": remediation(c.error_category),      # 錯誤除錯建議（錯誤分析）
         "failing_step": first_failure(c),                  # 第一個失敗的 step（錯誤分析）
     }

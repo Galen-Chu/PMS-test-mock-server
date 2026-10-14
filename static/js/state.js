@@ -15,7 +15,7 @@ export const state = {
   runId: null,
   resultsView: 'summary',
   selectedCase: null,      // 結果頁「案例檢視」選中的 case_id
-  caseDetailTab: 'http',   // 案例明細內部分頁:http / json / error / snapshot
+  caseDetailTab: 'http',   // 案例明細內部分頁:http / json / logs / error / snapshot
   pollTimer: null,
   launchMsg: null,
   summaryExpand: {},     // 摘要頁統計卡展開狀態(total/pass/fail/dur)

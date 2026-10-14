@@ -234,6 +234,13 @@ pre.json.error { color: var(--fail); }
 .json-bool { color: #c084fc; }
 .json-null { color: var(--text-dim); }
 
+/* 雙端 Log(Server/Client 分離並排):一行一事件,等寬對照兩端視角 */
+.log-box { padding: 8px 10px; border-radius: 6px; background: rgba(0,0,0,.3);
+  font: 11px/1.6 'JetBrains Mono'; white-space: pre-wrap; word-break: break-all;
+  max-height: 420px; overflow: auto; }
+.log-line { color: #c7cbd4; }
+.log-line:first-child { color: #7cbcff; }
+
 /* JSON 稽核並排 */
 .json-audit { display: flex; flex-direction: column; gap: 4px; }
 .json-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }

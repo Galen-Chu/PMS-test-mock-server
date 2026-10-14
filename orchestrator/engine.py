@@ -20,6 +20,7 @@ from .models import (
 from .registry import registry
 from . import expected as expected_mod
 from . import classify as classify_mod
+from . import case_logs
 
 # 全域 run 存放（程序記憶體；重啟即清）+ 並行安全鎖
 _RUNS = {}
@@ -239,6 +240,10 @@ def _execute_run(run, scenario_ids, ctx):
     run_id = run.run_id
     for sid in scenario_ids:
         ctx.recorder = []  # 逐步錄製槽每案重置（ctx 跨案例共用）
+        # 雙端 Log 逐案重置：案例鍵供 execute_for_ctx 帶 header（server 側收單用）
+        ctx.current_case = f"{run_id}:{sid}"
+        ctx.client_log = [case_logs.client_line("▶", f"案例開始 {sid}（環境 {ctx.environment}）")]
+        case_logs.begin_case(ctx.current_case)
         sc = registry.get(sid)
         rp = ctx.params.get(sid)  # 本案例合併後參數（設計 §5；未宣告參數者為 None）
         if sc is None:
@@ -272,6 +277,10 @@ def _execute_run(run, scenario_ids, ctx):
                     resolved_params=rp,
                 )
         cr.steps = list(ctx.recorder)  # 把本案例逐步 HTTP 交易錄進結果（UI「HTTP 稽核」來源）
+        # 雙端 Log 收單：client 補 END 框線；server 取回本案例關聯期間的路由日誌
+        ctx.client_log.append(case_logs.client_line("■", f"案例結束 {sid}・{cr.status}・{cr.duration_ms}ms"))
+        cr.client_log = list(ctx.client_log)
+        cr.server_log = case_logs.take_server_log(ctx.current_case)
         with _RUNS_LOCK:
             run.cases.append(cr)
             run.recompute()

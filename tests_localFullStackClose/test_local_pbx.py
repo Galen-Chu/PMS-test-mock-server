@@ -193,6 +193,27 @@ def _run_and_results(payload):
     return {c["case_id"]: c for c in results}
 
 
+def test_orchestrator_dual_log_capture(server_up):
+    """雙端 Log 閉環:/runs 編排 → client_log 有出發/回應行、server_log 收到路由 logger 行。"""
+    requests.post(RESET_URL)
+    requests.post(PMS_RESET_URL)
+    dat, tim = _mcall_dat(), _mcall_tim()
+    results = _run_and_results({
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["pbx_morning_call_set"],
+        "overrides": {"pbx_morning_call_set": {"room_no": "0102",
+                                               "mcall_dat": dat, "mcall_tim": tim}},
+    })
+    c = results["pbx_morning_call_set"]
+    assert c["status"] == "PASS", c.get("response_payload")
+    cl = c["client_log"]
+    assert any(ln.split("] ", 1)[1].startswith("→ POST") for ln in cl)      # 出發行
+    assert any(ln.split("] ", 1)[1].startswith("← HTTP 200") for ln in cl)  # 回應行
+    sl = c["server_log"]
+    # 同 process 相關:路由 logger(PbxSandbox)輸出依案例 header 收進對應案例
+    assert any("PbxSandbox" in ln and "指令" in ln for ln in sl), sl
+
+
 def test_direct_routes_closed_loop(server_up):
     """直打 mock 交換機:CKI → MCS → 回讀落庫;CKO → 清空+晨呼 C。"""
     requests.post(RESET_URL)

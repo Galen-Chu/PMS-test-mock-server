@@ -185,7 +185,7 @@ function renderCategory() {
 function renderCaseBrowser() {
   const selected = state.caseResults.find(c => c.case_id === state.selectedCase) || state.caseResults[0];
   state.selectedCase = selected.case_id;
-  const innerTabs = [['http', 'HTTP 稽核'], ['json', 'JSON 稽核'], ['error', '錯誤分析'], ['snapshot', '📥 快照']];
+  const innerTabs = [['http', 'HTTP 稽核'], ['json', 'JSON 稽核'], ['logs', '📜 雙端 Log'], ['error', '錯誤分析'], ['snapshot', '📥 快照']];
   const tabRow = el('div', { class: 'result-tabs sub' });
   for (const [id, label] of innerTabs) {
     tabRow.appendChild(el('div', {
@@ -216,6 +216,7 @@ function renderCaseBrowser() {
   );
   if (state.caseDetailTab === 'http') detail.appendChild(renderHttpAudit(selected));
   else if (state.caseDetailTab === 'json') detail.appendChild(renderJsonAudit(selected));
+  else if (state.caseDetailTab === 'logs') detail.appendChild(renderDualLogs(selected));
   else if (state.caseDetailTab === 'error') detail.appendChild(renderErrorAnalysis(selected));
   else detail.appendChild(renderSnapshot(selected));
   return el('div', { class: 'browser' }, list, detail);
@@ -274,6 +275,33 @@ function renderHttpAudit(c) {
     ));
   });
   return wrap;
+}
+
+// 雙端 Log:Client(編排發砲端)與 Server(沙盒 Flask 路由端)分離並排顯示。
+// 兩端各一行一事件、同款等寬版式,對照「客戶端發砲 ↔ 伺服器收料」兩端視角。
+function logColumn(title, lines, emptyText) {
+  const col = el('div', { class: 'json-col' },
+    el('div', { class: 'http-lbl', text: title + (lines.length ? `（${lines.length} 行）` : '') }));
+  if (!lines.length) {
+    col.appendChild(el('div', { class: 'nt-body', text: emptyText }));
+    return col;
+  }
+  const box = el('div', { class: 'log-box' });
+  for (const ln of lines) box.appendChild(el('div', { class: 'log-line', text: ln }));
+  col.appendChild(box);
+  return col;
+}
+
+function renderDualLogs(c) {
+  const cl = c.client_log || [];
+  const sl = c.server_log || [];
+  return el('div', { class: 'json-audit' },
+    el('div', { class: 'json-pair' },
+      logColumn('Client Log・編排發砲端', cl, '無客戶端日誌（案例未經 execute_for_ctx 出站）'),
+      logColumn('Server Log・沙盒路由端', sl,
+        '無伺服器端日誌（REAL 環境打遠端雲,伺服器 log 不在沙盒視野;LOCAL 案例無路由互動時亦為空）'),
+    ),
+  );
 }
 
 // JSON 稽核:請求/回應並排 + 期望值 + 欄位 Diff(§7 分級:參數覆寫=灰/真差異=紅/缺欄=琥珀)
@@ -373,6 +401,7 @@ function renderSnapshot(c) {
     resolved_params: c.resolved_params,
     request_payload: c.request_payload, response_payload: c.response_payload,
     expected_payload: c.expected_payload, diff: c.diff, steps: c.steps || [],
+    client_log: c.client_log || [], server_log: c.server_log || [],
   };
   return el('div', { class: 'list-stack' },
     el('div', { class: 'cat-box' },

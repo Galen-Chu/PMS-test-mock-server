@@ -106,7 +106,7 @@ def _safe_body(res, limit=8192):
 
 
 def execute_for_ctx(ctx, method, url, params=None, json_body=None, headers=None):
-    """編排層專用發射��擎：直接用 RunContext 的 headers/params，不碰模組全域變數。
+    """編排層專用發射引擎：直接用 RunContext 的 headers/params，不碰模組全域變數。
 
     與 execute_request 的差異：環境隔離（兩個並行 run 用不同環境不會互踩），
     並把 timeout 統一為 10s。headers 可覆寫（keycard 製卡路由需 LOCAL_TOKEN 鑑別）。
@@ -118,9 +118,19 @@ def execute_for_ctx(ctx, method, url, params=None, json_body=None, headers=None)
     if headers is None:
         headers = dict(getattr(ctx, "headers", {}) or {})
     rec = getattr(ctx, "recorder", None)
+    clog = getattr(ctx, "client_log", None)
+    # 雙端 Log：LOCAL 模式帶案例關聯 header，同 process 的路由 logger 據此收進 server log。
+    # REAL 模式不出站（不對雲端送沙盒內部欄位；遠端 log 本就不在沙盒視野）。
+    # （lazy import：case_logs 為葉模組，但避開模組載入期的 orchestrator 循環。）
+    from orchestrator.case_logs import CASE_HEADER, client_line
+    case_key = getattr(ctx, "current_case", "")
+    if case_key and not getattr(ctx, "use_real", False):
+        headers = {**headers, CASE_HEADER: case_key}
+    if clog is not None:
+        clog.append(client_line("→", f"{str(method).upper()} {url}"))
     step = {"method": str(method).upper(), "url": url,
             "request_params": params, "request_headers": headers, "request_body": json_body}
-    t0 = time.perf_counter() if rec is not None else None
+    t0 = time.perf_counter() if (rec is not None or clog is not None) else None
     try:
         m = str(method).upper()
         if m == "GET":
@@ -137,13 +147,18 @@ def execute_for_ctx(ctx, method, url, params=None, json_body=None, headers=None)
                 step["duration_ms"] = int((time.perf_counter() - t0) * 1000)
                 step["error"] = err
                 rec.append(step)
+            if clog is not None:
+                clog.append(client_line("✖", f"{m} {url}・{err}"))
             return None, err
+        dur = int((time.perf_counter() - t0) * 1000) if t0 is not None else None
         if rec is not None:
-            step["duration_ms"] = int((time.perf_counter() - t0) * 1000)
+            step["duration_ms"] = dur
             step["status_code"] = res.status_code
             step["response_headers"] = dict(res.headers)
             step["response_body"] = _safe_body(res)
             rec.append(step)
+        if clog is not None:
+            clog.append(client_line("←", f"HTTP {res.status_code}・{url}（{dur}ms）"))
         return res, None
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
@@ -151,6 +166,8 @@ def execute_for_ctx(ctx, method, url, params=None, json_body=None, headers=None)
             step["duration_ms"] = int((time.perf_counter() - t0) * 1000) if t0 is not None else 0
             step["error"] = err
             rec.append(step)
+        if clog is not None:
+            clog.append(client_line("✖", f"{str(method).upper()} {url}・{err}"))
         return None, err
 
 # ====================================================================

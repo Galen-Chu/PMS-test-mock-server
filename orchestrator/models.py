@@ -60,13 +60,18 @@ class RunContext:
     # 逐步 HTTP 交易錄製槽：execute_for_ctx 每發一筆就 append 一個 step dict。
     # engine 在每個案例執行前重置、執行後拷進 CaseResult.steps（ctx 跨案例共用故需重置）。
     recorder: list = field(default_factory=list)
+    # 目前執行中的案例鍵（"run_id:case_id"）：execute_for_ctx 據此在 LOCAL 模式
+    # 帶 X-Sandbox-Case-Id header，讓同 process 的路由 logger 收進該案例 server log。
+    current_case: str = ""
+    # Client log 逐案錄製槽（→ 出發 / ← 回應 / ✖ 失敗，engine 補 START/END 框線）。
+    client_log: list = field(default_factory=list)
 
 
 @dataclass
 class Scenario:
     """一個可被編排的測試案例中繼資料 + 執行器。
 
-    runner=None 表示該案例「已登錄但尚無執行器」��UNIMPLEMENTED），
+    runner=None 表示該案例「已登錄但尚無執行器」（UNIMPLEMENTED），
     /scenarios 會標記給 UI 顯示「待開發」，不阻塞其他案例。
     """
     id: str                          # 全域唯一，如 "amenity_charge"
@@ -101,6 +106,10 @@ class CaseResult:
     error_category: Optional[str] = None              # FIELD_MISMATCH / STATUS_CODE / TIMEOUT / UNIMPLEMENTED
     # 逐步 HTTP 交易紀錄（UI 的「HTTP 稽核」檢視來源）：每筆含 method/url/請求/回應/計時/錯誤。
     steps: list = field(default_factory=list)
+    # 雙端 Log（UI「雙端 Log」檢視來源）：client=編排發砲端逐筆交易敘事；
+    # server=同 process 路由 logger 於案例關聯請求期間的日誌（REAL 環境為空）。
+    client_log: list = field(default_factory=list)
+    server_log: list = field(default_factory=list)
     # 本次執行「實際用到」的合併後參數（設計 §5：報告可追溯哪次測試用了什麼資料）。
     resolved_params: Optional[dict] = None
 
