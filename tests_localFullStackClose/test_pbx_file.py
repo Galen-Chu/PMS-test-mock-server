@@ -176,6 +176,6 @@ def test_run_cycle_requires_ensure():
 def test_registry_pbx_module_m3():
     by_mod = registry.by_module()
     cases = {s.id: s for s in by_mod["pbx"]}
-    assert len(cases) == 25                              # M0 10 + M1 7 + M2 5 + M3 3
+    assert len(cases) == 32                              # M0 10 + M1 7 + M2 5 + M3 3 + M4 7
     for cid in ("pbx_file_roundtrip", "pbx_file_wraparound", "pbx_file_china_name"):
         assert cases[cid].implemented

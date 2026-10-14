@@ -16,6 +16,7 @@ from server.roomcontrol.routes import roomcontrol_bp
 from server.pbx.routes import pbx_bp
 from server.pbx.pms_side import pms_bp
 from server.pbx.file_exchange import file_bp
+from server.pbx.billing import billing_bp
 
 import logging
 
@@ -42,6 +43,7 @@ app.register_blueprint(roomcontrol_bp)    # 互動系統 4：房控(A7 公版 XM
 app.register_blueprint(pbx_bp)            # 互動系統 5：交換機晨喚(pbx_interface 檔案介面 HTTP 化)
 app.register_blueprint(pms_bp)            # 互動系統 5b：交換機 PMS 側業務層(M1 頁面動作/排程)
 app.register_blueprint(file_bp)           # 互動系統 5c：交換機真檔案交換層(M3 HOST2PMS/PMS2HOST)
+app.register_blueprint(billing_bp)        # 互動系統 5d：交換機帳務面(M4 PTX電話入帳/MBT Mini bar)
 
 
 # ====================================================================

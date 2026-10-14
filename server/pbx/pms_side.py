@@ -154,6 +154,11 @@ def _act_checkin(body):
     """入住(含 W/I):room_mn 住人 + pbx_dt 重置(宏興SD CKI) + 下達 CKI。"""
     room, guest = body["room_nos"], body.get("guest_nam", "Mr. TEST,GUEST")
     mock_pms_room[room] = {"room_sta": "O", "ikey": body.get("ikey", f"IK{room}")}
+    try:                                   # M4:guest_mn 視景(PTX 選客用;延遲 import 避循環)
+        from . import billing as _billing
+        _billing.note_checkin(room, mock_pms_room[room]["ikey"], guest)
+    except ImportError:
+        pass
     mock_pms_pbx_dt[room].update({"tel_sta": "1", "lang_cod": body.get("lang_cod", "001"),
                                   "dnd_cod": "0", "mwl_cod": "0", "tce_cod": "0"})
     summary, ok = _enqueue_and_send("CKI", {
@@ -168,6 +173,11 @@ def _act_checkout(body):
     """退房:未傳送晨喚取消(mcall_sta='D') + pbx_dt 清空 + 下達 CKO(宏興SD §6)。"""
     room = body["room_nos"]
     mock_pms_room[room] = {"room_sta": "V", "ikey": ""}
+    try:                                   # M4:住客改已結帳(C→PTX 改入現金帳)
+        from . import billing as _billing
+        _billing.note_checkout(room)
+    except ImportError:
+        pass
     mock_pms_pbx_dt[room].update({"tel_sta": "0", "lang_cod": "",
                                   "dnd_cod": "0", "mwl_cod": "0", "tce_cod": "0"})
     for key, mc in mock_pms_mcall_mn.items():
@@ -254,6 +264,11 @@ def _act_room_change(body):
     old, new = body["room_nos"], body["new_room_nos"]
     if not _guest_checked_in(old):
         return {"ok": False, "message": f"房號:{old} 無住人,不能換房"}
+    try:                                   # M4:在館住客跟著移房(PTX 選客用)
+        from . import billing as _billing
+        _billing.note_room_change(old, new)
+    except ImportError:
+        pass
     mock_pms_room[new] = mock_pms_room.pop(old)
     mock_pms_room[old] = {"room_sta": "V", "ikey": ""}
     mock_pms_pbx_dt[new].update(mock_pms_pbx_dt[old])
@@ -458,4 +473,9 @@ def pms_reset():
     mock_pms_pbx_mn.clear()
     mock_pms_pbx_err.clear()
     mock_pms_clean_sta.update({room: "D" for room in PBX_ROOMS})
+    try:                                   # M4:帳務層(參數/phone_rf/guest_mn/三帳表)一併重置
+        from . import billing as _billing
+        _billing._seed_defaults()
+    except ImportError:
+        pass
     return jsonify({"code": "2000", "message": "pbx pms-side state reset"}), 200

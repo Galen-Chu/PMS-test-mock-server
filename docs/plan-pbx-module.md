@@ -148,7 +148,7 @@ orchestrator/runners/pbx_ui.py    # M1 案例(vendor=PMS_UI:模擬 PMS0210027 �
 | **M1** | ~~PMS REST API 發砲~~→ **PMS 側業務層模擬**(Q1 結案後改向):`server/pbx/pms_side.py` 動作端點(入住/退房/開關電話/限撥/勿擾/設刪晨喚/換房)+ 排程 tick(宏興SD 1.2 五規則)+ in-process 下達交換機側 + 七案(全鏈/取消已傳/退房連動/換房重送/過時 SKIP/負面二) | — | Q1 結案(SD 證實無 REST) | ✅ **2026-10-12 完成**:離線 9 測試 + 閉環 1 測試全綠 |
 | **M2** | 重送(1030)/晨喚異常+已處理/MCS 回報 1-5 模擬(ring 觸發+SA 五規則+pbx_err)/RMS 房況(3hr 效期) | — | 文件已齊(④) | ✅ **2026-10-12 完成**:`POST /pbx/ring`(撥號回報→handle_mcs_response 五規則)、`GET /pbx/pms/mcall-anomalies`+`/ack`(當天+TRANS+sta∈{2,3,4,5}+未處理)、pbx_err(ERR/回應∉{0,1,3})、resend 動作(住人房 CKO→CKI+DND/TCE 重設+晨喚 NOT_TRANS 重送)、`POST /pbx/rms`(3hr+C/S/D/B 映射);五案+離線 6 測試+閉環 1 測試,全量 83 passed/0 failed |
 | **M3** | 真檔案交換:HOST2PMS/PMS2HOST 四檔 + W/P cycle 輪替(idx 192-byte、滿載守衛、cycle A↔B 翻轉、重啟還原)+ ANSI(cp950)+ 中文姓名政策(預設改送房號/allow_china)+ run-cycle 端點(模擬 C# 定時流程一輪) | — | Q6 已結(SA規格) | **✅ 2026-10-12 完成**:`server/pbx/file_exchange.py`(PbxFileChannel 環狀緩衝);三案(往返全鏈/環狀輪替/中文政策)+離線 7 測試+閉環 1 測試;全量:離線 76、在線 91 passed,0 failed |
-| **M4** | 帳務面(PTX 電話入帳/gutel_dt/smdr_dt/現金帳)+交換機主動面(MBT) | 視需求 | 與 amenity 入帳面交錯,待測試需求 |
+| **M4** | 帳務面(PTX 電話入帳/gutel_dt/smdr_dt/現金帳)+交換機主動面(MBT) | 視需求 | SA §7.2.1.1 + pbx_interface 佈局(自 transcript 重挖) | **✅ 2026-10-14 完成**:`server/pbx/billing.py`(SA 規則1-6 全落地:XXX skip/HALF_UP 四捨五入/秒數轉時分秒上限/PHONE_RF・ROOM_NOS/act_cod Y→guest_dt・N→smdr_dt/在館客選客 aci_sys_dat<=通話開始/K 關帳失敗入 pbx_err/C 已結帳改現金帳 v1.8 ikey=****/零元參數/gutel_dt 一律入檔;MBT 沙盒自定義入客帳不入 gutel);七案+離線 14 測試+閉環 1 測試;全量:離線 90、在線 106 passed,0 failed |
 
 ---
 

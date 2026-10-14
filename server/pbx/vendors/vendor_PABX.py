@@ -17,6 +17,7 @@ Data_rmk 佈局(區段內 1-based;對外絕對位置 = 29 + 區段位置):
 - RMC(換房):inst ophone X(6) nphone X(6)
 - MCS(晨呼,雙向):inst phone mcall_dat 9(8) mcall_tim 9(6) mcall_sta X(1)
 - DND/MWL/TCE/OOO:inst phone status_typ 9(1)('1'設定 '0'取消)
+- PTX(電話入帳,pms→host)/MBT(Mini bar):佈局見 HOST_INST_LAYOUTS 註記(M4 帳務面)
 """
 from datetime import datetime
 
@@ -40,6 +41,17 @@ HOST_INST_LAYOUTS = {
     "MWL": [("phone_nos", "X", 6), ("status_typ", "9", 1)],
     "TCE": [("phone_nos", "X", 6), ("status_typ", "9", 1)],
     "OOO": [("phone_nos", "X", 6), ("status_typ", "9", 1)],
+    # 帳務面(計費系統→德安;pbx_interface「Telephone/Mini bar (pms to host)」)
+    # PTX @絕對30-103:phone 33-38、tel_nos 39-58、trans_dat 59-66、trans_tim 67-72、
+    # trans_typ 73-75、sign_typ 76、trans_amt 77-83、start_dat 84-91、start_tim 92-97、
+    # talk_tim 98-103(記錄帶秒數,入帳時才轉時分秒)
+    "PTX": [("phone_nos", "X", 6), ("tel_nos", "X", 20), ("trans_dat", "9", 8),
+            ("trans_tim", "9", 6), ("trans_typ", "X", 3), ("sign_typ", "X", 1),
+            ("trans_amt", "9", 7), ("start_dat", "9", 8), ("start_tim", "9", 6),
+            ("talk_tim", "9", 6)],
+    # MBT @絕對30-60:phone 33-38、trans_dat 39-46、trans_tim 47-52、sign_typ 53、trans_amt 54-60
+    "MBT": [("phone_nos", "X", 6), ("trans_dat", "9", 8), ("trans_tim", "9", 6),
+            ("sign_typ", "X", 1), ("trans_amt", "9", 7)],
 }
 # 帶 Status_typ 的開關族(DND 勿擾/MWL 留言燈/TCE 限撥/OOO 修理房)
 STATUS_INSTS = {"DND", "MWL", "TCE", "OOO"}

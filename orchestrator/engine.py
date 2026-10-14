@@ -148,6 +148,14 @@ def build_run_context(environment: str) -> RunContext:
         "pbx_file_ensure": f"{server_base}/pbx/file/ensure",
         "pbx_file_cycle": f"{server_base}/pbx/file/run-cycle",
         "pbx_file_state": f"{server_base}/pbx/file/state",
+        # ☎️ 交換機帳務面(計費系統→德安;PTX/MBT 192-byte 記錄 HTTP 承載)+ 測試鈕/回讀
+        "pbx_bill_ptx": f"{server_base}/pbx/billing/ptx",
+        "pbx_bill_mbt": f"{server_base}/pbx/billing/mbt",
+        "pbx_bill_params": f"{server_base}/pbx/billing/params",
+        "pbx_bill_guests": f"{server_base}/pbx/billing/guests",
+        "pbx_bill_phone_rf": f"{server_base}/pbx/billing/phone-rf",
+        "pbx_bill_internal": f"{server_base}/pbx/billing/internal/state",
+        "pbx_bill_reset": f"{server_base}/pbx/billing/internal/reset",
         # PAYTRONEX 專屬路由（/parktron/hpms/services/roomer/*）
         "paytronex_add": f"{server_base}/parktron/hpms/services/roomer/add",
         "paytronex_find": f"{server_base}/parktron/hpms/services/roomer/findByLicensePlate",

@@ -21,6 +21,7 @@ COMMANDS_URL = f"{BASE}/pbx/host-commands"
 STATE_URL = f"{BASE}/pbx/internal/state"
 RESET_URL = f"{BASE}/pbx/internal/reset"
 PMS_RESET_URL = f"{BASE}/pbx/pms/internal/reset"
+BILL_RESET_URL = f"{BASE}/pbx/billing/internal/reset"
 
 
 def test_orchestrator_m1_full_chain_via_runs(server_up):
@@ -133,6 +134,51 @@ def test_orchestrator_m3_file_exchange_via_runs(server_up):
     assert h2p["wseq_nos"] == 4 and wa["file_state"]["pms2host"]["wseq_nos"] == 4
     cn = results["pbx_file_china_name"]["response_payload"]
     assert cn["processed_chinese"]                                     # 中文政策兩段皆通
+
+
+def test_orchestrator_m4_billing_via_runs(server_up):
+    """M4 閉環:帳務面六案經 /runs 編排(住客帳/類別路由/關帳失敗/現金帳/事務分機/MBT)。"""
+    requests.post(BILL_RESET_URL)
+    requests.post(RESET_URL)
+    requests.post(PMS_RESET_URL)
+    results = _run_and_results({
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["pbx_bill_ptx_guest_posting", "pbx_bill_ptx_typ_routing",
+                         "pbx_bill_ptx_closed_k", "pbx_bill_ptx_cash_after_checkout",
+                         "pbx_bill_ptx_smdr_office", "pbx_bill_mbt_minibar"],
+        "overrides": {
+            "pbx_bill_ptx_guest_posting": {"room_no": "0101", "amt": "12.25", "talk_sec": "130"},
+            "pbx_bill_ptx_typ_routing": {"room_no": "0102"},
+            "pbx_bill_ptx_closed_k": {"room_no": "0104"},
+            "pbx_bill_ptx_cash_after_checkout": {"room_no": "0105"},
+            "pbx_bill_mbt_minibar": {"room_no": "0106"},
+        },
+    })
+    for cid, c in results.items():
+        assert c["status"] == "PASS", (cid, c.get("response_payload"))
+    gp = results["pbx_bill_ptx_guest_posting"]["response_payload"]
+    assert gp["ptx"][0]["result"] == "GUEST" and gp["guest_dt"][0]["item_cod"] == "LOCAL"
+    assert gp["guest_dt"][0]["item_amt"] == 12.3 and gp["gutel"]["tel_sta"] == "HAD_TRANS"
+    tr = results["pbx_bill_ptx_typ_routing"]["response_payload"]
+    assert tr["results"] == ["SKIPPED_XXX", "GUEST", "GUEST"]
+    assert tr["guest_items"] == ["LOCAL", "INTL"]                    # LDC→市話/OSC→國際
+    ck = results["pbx_bill_ptx_closed_k"]["response_payload"]
+    assert ck["ptx"][0]["result"] == "FAIL_CLOSED_K"
+    assert ck["pbx_err_for_room"][-1]["error_cod"] == "住客為關帳"
+    assert ck["gutel"]["tel_sta"] == "NOT_TRANS" and ck["gutel"]["ikey"] == "IK0104"
+    ca = results["pbx_bill_ptx_cash_after_checkout"]["response_payload"]
+    assert ca["ptx"][0]["result"] == "CASH"
+    assert ca["gutel"]["ikey"] == "****" and ca["gutel"]["ikey_seq_nos"] == 0  # v1.8 現金帳
+    assert ca["guest_dt"]["remark3"].startswith("from 房號:0105")
+    assert ca["cash_guest"]["room_nos"] == "9999"                    # 自動開立現金帳
+    so = results["pbx_bill_ptx_smdr_office"]["response_payload"]
+    assert so["ptx_smdr"][0]["result"] == "SMDR" and so["ptx_smdr"][0]["cost_amt"] == 109.1
+    assert so["smdr"]["dept_cod"] == "FRONT"                          # round(120/1.1,1)
+    assert so["ptx_miss"][0]["result"] == "ERR_PHONE_NOT_FOUND"      # PHONE_RF 查無
+    assert so["pbx_err_8888"] and "分機" in so["pbx_err_8888"][-1]["error_cod"]
+    mb = results["pbx_bill_mbt_minibar"]["response_payload"]
+    assert mb["mbt"][0]["result"] == "GUEST" and mb["guest_dt"]["item_cod"] == "MB"
+    assert mb["gutel_before"] == mb["gutel_after"]                    # 非電話明細不入 gutel_dt
 
 
 def _run_and_results(payload):
