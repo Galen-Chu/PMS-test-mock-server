@@ -105,7 +105,7 @@ export function renderSetup() {
             style: `font:600 10.5px 'JetBrains Mono';padding:1px 8px;border-radius:9px;`
                  + (active ? 'background:rgba(255,138,61,.28);color:#ffd9b8' : 'background:rgba(255,255,255,.09);color:#b9bfca'),
             title: '已勾選案例數 / 該廠商案例數',
-            text: `${v.scenarios.filter(s => state.checked[s.id])}/${v.scenarios.length}`,
+            text: `${v.scenarios.filter(s => state.checked[s.id]).length}/${v.scenarios.length}`,
           }),
         ));
       }
