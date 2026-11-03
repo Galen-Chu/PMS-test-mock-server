@@ -5,6 +5,8 @@
 
 閉環鏈:廠商(編排端)──ROOM_STA 推送──► Mock PMS(落庫)──內部回讀──► 驗位元串一致
                 └──ROOM_INF 查詢──► Mock PMS ──住客列(ROOM_STA O/S/V)──► 斷言 sa10 A6 合約
+RC2.5(2026-11-03,sa11):房間主檔嚴格化(動態房號先 POST internal/rooms)、
+DESC={房號} Set、未知房 9999 / E 模擬房 1001、F 斷線三連動經 /runs 驗證。
 """
 import os
 import sys
@@ -19,6 +21,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BASE = "http://127.0.0.1:5000"
 IMPORT_URL = f"{BASE}/third-party/import-sync-files"
 STATE_URL = f"{BASE}/roomcontrol/internal/state"
+ROOMS_URL = f"{BASE}/roomcontrol/internal/rooms"
+
+
+def _register_room(room, sta="V"):
+    """RC2.5:房間主檔嚴格化——動態房號先登錄(沙盒自助端點),再推送。"""
+    r = requests.post(ROOMS_URL, json={"rooms": {room: sta}})
+    assert r.status_code == 200 and room in r.json()["room_mn"]
 
 
 def _import_body(xml_str, third="TT", fname="C001.xml", athena="16", hotel="01"):
@@ -53,13 +62,14 @@ def _room_inf_xml(room):
 def test_closed_loop_room_sta_push_and_readback(server_up):
     """閉環①:ROOM_STA 推送 → Mock PMS 落庫 → 內部回讀位元串一致 + "1112 Set" 回應。"""
     room = f"9{datetime.now().strftime('%H%M%S')}"          # 每輪唯一房號,避免狀態殘留干擾
+    _register_room(room)                                    # RC2.5:先入房間主檔
     bits = "010101011001"
     res = requests.post(IMPORT_URL, json=_import_body(_room_sta_xml(room, bits)))
     assert res.status_code == 200
     item = res.json()[0]
     assert item["procStatus"] is True
     assert "<RETN-CODE>0000</RETN-CODE>" in item["responseBody"]
-    assert f"1112 Set #ROOM_STA#{bits}#" in item["responseBody"]
+    assert f"{room} Set #ROOM_STA#{bits}#" in item["responseBody"]   # RC2.5:{房號} Set
 
     rb = requests.get(STATE_URL).json()["room_control_state"]
     assert rb[room]["status_bits"] == bits                  # 下命令 → 回讀一致(閉環斷言)
@@ -76,8 +86,11 @@ def test_closed_loop_room_inf_query_contract(server_up):
     assert "<ROOM_STA>O</ROOM_STA>" in body
     assert "<CI_SER>200605120002001</CI_SER>" in body
 
-    body2 = requests.post(IMPORT_URL, json=_import_body(_room_inf_xml("813"))).json()[0]["responseBody"]
+    body2 = requests.post(IMPORT_URL, json=_import_body(_room_inf_xml("2404"))).json()[0]["responseBody"]
     assert body2.count("<ROW>") == 1 and "<ROOM_STA>V</ROOM_STA>" in body2
+    # RC2.5:未登錄房號 → procStatus=false + RETN 9999(sa11 ROOM not found.)
+    nf = requests.post(IMPORT_URL, json=_import_body(_room_inf_xml("813"))).json()[0]
+    assert nf["procStatus"] is False and "<RETN-CODE>9999</RETN-CODE>" in nf["responseBody"]
 
 
 def test_mock_negative_gates(server_up):
@@ -91,6 +104,7 @@ def test_mock_negative_gates(server_up):
 def test_orchestrator_closed_loop_via_runs_api(server_up):
     """閉環③(編排端視角):/runs 帶覆寫跑雙廠商三案——推送落庫回讀 + 查詢合約 + 全房況,全 PASS。"""
     room = f"8{datetime.now().strftime('%H%M%S')}"
+    _register_room(room)                                    # RC2.5:先入房間主檔
     bits = "1000001100100000"
     payload = {
         "environment": "LOCAL_OFFLINE",
@@ -136,6 +150,7 @@ def _run_and_results(payload):
 def test_orchestrator_closed_loop_rc2_same_family(server_up):
     """閉環④(RC2):CLEAN→位元9 / RMTEMP→室溫 / KeyBox→位元2+卡片資訊,經 /runs 全 PASS。"""
     room = f"7{datetime.now().strftime('%H%M%S')}"
+    _register_room(room)                                    # RC2.5:先入房間主檔
     results = _run_and_results({
         "environment": "LOCAL_OFFLINE",
         "scenario_ids": ["rc_minxon_clean", "rc_chaofeng_rmtemp", "rc_minxon_keybox"],
@@ -170,3 +185,24 @@ def test_orchestrator_closed_loop_rc2_negatives(server_up):
     assert unknown["response_payload"]["procStatus"] is False
     assert unknown["response_payload"]["retn_code"] == "9999"
     assert missing["status"] == "PASS"
+
+
+def test_orchestrator_closed_loop_rc25_fidelity(server_up):
+    """閉環⑥(RC2.5):未知房 9999 / E 房 1001 / F 斷線三連動,經 /runs 全 PASS(反向+欄位級)。"""
+    results = _run_and_results({
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["rc_minxon_room_not_found", "rc_chaofeng_internal_error",
+                         "rc_minxon_room_sta_offline"],
+    })
+    nf, ie, off = (results["rc_minxon_room_not_found"],
+                   results["rc_chaofeng_internal_error"],
+                   results["rc_minxon_room_sta_offline"])
+    assert nf["status"] == "PASS"
+    assert nf["response_payload"]["procStatus"] is False
+    assert nf["response_payload"]["retn_code"] == "9999"
+    assert "ROOM not found" in nf["response_payload"]["retn_desc"]
+    assert ie["status"] == "PASS" and ie["response_payload"]["retn_code"] == "1001"
+    assert off["status"] == "PASS"
+    pbx = off["response_payload"]["state_readback_pbx_dt"]
+    assert pbx["RCU_ONLINE"] == "N" and pbx["SOS"] == "off"
+    assert pbx["CLEAN_ROOM"] == "2"                   # 斷線略過位 9 更新,保線上態舊值

@@ -18,3 +18,6 @@ ui-*.png
 pbx_exchange/
 # 各環境真實雲端 Token(本機注入用,嚴禁入庫)
 token_local.py
+
+# sa11 德安內部 SQL 文件(不可外流;origin 為公開鏡像)——僅存本機
+sa_docs/sa11_a7_roomcontrol_sql.txt

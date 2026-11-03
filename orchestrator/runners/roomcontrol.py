@@ -16,8 +16,9 @@ from .helpers import _p, _ok, _fail, _expect_417
 # ====================================================================
 # 🌡️ 房控(roomcontrol / A7 公版 XML 介面)— 對齊 sa_docs/sa10 V1.2
 # 方向:廠商→PMS(沙盒發砲端=模擬房控廠商;mock PMS 側在 server/roomcontrol/)。
-# 2026-09-03 起掛雙廠商:MINXON 民笙(thirdParty=81)、CHAOFENG 超烽(thirdParty=86),
-# 每家三案:B4 ROOM_STA 房況推送、A6 ROOM_INF 房況查詢、A10 RETURN 全部房況。
+# 2026-09-03 起掛雙廠商:MINXON 民笙(thirdParty=81)、CHAOFENG 超烽(thirdParty=86)。
+# RC2.5(2026-11-03,sa11 = A7 收到廠商 XML 的 SQL 處理文件)每家 +3 案:
+# 房況斷線推送(位8=F 三連動閉環)、不存在房號(RETN 9999)、內部錯誤模擬房(RETN 1001)。
 # 傳輸:POST /third-party/import-sync-files(sa8/sa9 REST 版;GET TxnData 閘門版見 sa10)。
 # ====================================================================
 _RC_VENDORS = [
@@ -75,7 +76,8 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
 
     RC0 三案:push(B4 ROOM_STA)/ room_inf(A6)/ return(A10);
     RC2(2026-09-04)六案:clean/rmtemp(B4 同族)、keybox(B5)、
-    bad_xml/unknown_action/missing_room_nos(負面,固定劇本不宣告 params)。
+    bad_xml/unknown_action/missing_room_nos(負面,固定劇本不宣告 params);
+    RC2.5(2026-11-03)三案:room_sta_offline(F 斷線閉環)、room_not_found/internal_error(負面)。
     REVE-CODE 依廠商代號組出(0300+代號+動作碼);third_party_code 預設帶實際代碼仍可覆寫
     (SIT/MAS 等環境代碼若不同,UI 直接改)。
     """
@@ -105,8 +107,14 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
             res_rb, _ = execute_for_ctx(ctx, "GET", ctx.urls["roomcontrol_internal"])
             if res_rb is not None and res_rb.status_code == 200:
                 state = (res_rb.json() or {}).get("room_control_state") or {}
-                summary["state_readback_bits"] = (state.get(p["room_no"]) or {}).get("status_bits")
-                ok = summary["state_readback_bits"] == p["status_bits"]
+                st = state.get(p["room_no"]) or {}
+                summary["state_readback_bits"] = st.get("status_bits")
+                # RC2.5:PBX_DT 欄位級解碼——位8 非 F → RCU_ONLINE=Y、F → N(sa11 三連動之一)
+                bits = p["status_bits"]
+                rcu_expected = "N" if len(bits) == 16 and bits[7] == "F" else "Y"
+                summary["state_readback_rcu_online"] = (st.get("pbx_dt") or {}).get("RCU_ONLINE")
+                ok = (summary["state_readback_bits"] == bits
+                      and summary["state_readback_rcu_online"] == rcu_expected)
         if ok:
             return _ok(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
         return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
@@ -210,15 +218,19 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
         retn = rows[0].get("RETN-CODE") if rows else None
         summary.update({"procStatus": item.get("procStatus"), "retn_code": retn,
                         "retn_desc": rows[0].get("RETN-CODE-DESC") if rows else None})
+        # RC2.5(sa11):Set 類 DESC =「{房號} Set {ACTION_COD}」
         ok = (res.status_code == 200 and item.get("procStatus") is True and retn == "0000"
-              and "1112 Set" in (summary["retn_desc"] or ""))
-        # LOCAL 閉環:室溫已落庫
+              and f"{p['room_no']} Set" in (summary["retn_desc"] or ""))
+        # LOCAL 閉環:室溫已落庫 + api='RCU' 標記(sa11)
         if ok and not ctx.use_real:
             res_rb, _ = execute_for_ctx(ctx, "GET", ctx.urls["roomcontrol_internal"])
             if res_rb is not None and res_rb.status_code == 200:
                 state = (res_rb.json() or {}).get("room_control_state") or {}
-                summary["state_readback_temperature"] = (state.get(p["room_no"]) or {}).get("temperature")
-                ok = summary["state_readback_temperature"] == p["temperature"]
+                st = state.get(p["room_no"]) or {}
+                summary["state_readback_temperature"] = st.get("temperature")
+                summary["state_readback_api"] = st.get("api")
+                ok = (summary["state_readback_temperature"] == p["temperature"]
+                      and summary["state_readback_api"] == "RCU")
         if ok:
             return _ok(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
         return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
@@ -317,6 +329,96 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
             return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload={"__error__": err})
         return _expect_417(case_id, scenario, dur, payload, res, "417")
 
+    # ---- RC2.5(2026-11-03,sa11):房間層負面 + F 斷線閉環 ----
+
+    def _room_not_found(ctx: RunContext) -> CaseResult:
+        import time as _t
+        case_id = f"rc_{slug}_room_not_found"
+        scenario = registry.get(case_id)
+        xml_str = build_room_inf_query("9999", vendor_code=tp_code)   # 未登錄房間主檔的房號
+        payload = _a7_import_payload(ctx, xml_str, tp_code, file_name="C002.xml")
+        t0 = _t.perf_counter()
+        res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
+        dur = int((_t.perf_counter() - t0) * 1000)
+        summary = {"room_no": "9999", "action_cod": "ROOM_INF"}
+        if err or res is None:
+            return _fail(case_id, "", scenario, dur, request_payload=payload,
+                         response_payload={"__error__": err or "no response"})
+        item, rows = _a7_first_response_item(res)
+        retn = rows[0].get("RETN-CODE") if rows else None
+        summary.update({"procStatus": item.get("procStatus"), "retn_code": retn,
+                        "retn_desc": rows[0].get("RETN-CODE-DESC") if rows else None})
+        # sa11 契約:不存在房號 → procStatus=false + RETN 9999「ROOM not found.」(反向斷言)
+        ok = (res.status_code == 200 and item.get("procStatus") is False
+              and retn == "9999" and "ROOM not found" in (summary["retn_desc"] or ""))
+        if ok:
+            return _ok(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+        return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+
+    def _internal_error(ctx: RunContext) -> CaseResult:
+        import time as _t
+        case_id = f"rc_{slug}_internal_error"
+        scenario = registry.get(case_id)
+        xml_str = build_room_inf_query("9901", vendor_code=tp_code)   # 沙盒模擬內部錯誤房(E)
+        payload = _a7_import_payload(ctx, xml_str, tp_code, file_name="C002.xml")
+        t0 = _t.perf_counter()
+        res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
+        dur = int((_t.perf_counter() - t0) * 1000)
+        summary = {"room_no": "9901", "action_cod": "ROOM_INF"}
+        if err or res is None:
+            return _fail(case_id, "", scenario, dur, request_payload=payload,
+                         response_payload={"__error__": err or "no response"})
+        item, rows = _a7_first_response_item(res)
+        retn = rows[0].get("RETN-CODE") if rows else None
+        summary.update({"procStatus": item.get("procStatus"), "retn_code": retn,
+                        "retn_desc": rows[0].get("RETN-CODE-DESC") if rows else None})
+        # sa11 契約:德安 DB 內部錯誤 → procStatus=false + RETN 1001(反向斷言)
+        ok = (res.status_code == 200 and item.get("procStatus") is False and retn == "1001")
+        if ok:
+            return _ok(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+        return _fail(case_id, "", scenario, dur, request_payload=payload, response_payload=summary)
+
+    def _room_sta_offline(ctx: RunContext) -> CaseResult:
+        """F 斷線三連動閉環(sa11 情境二):連線態推送(位9=2)→ F 斷線推送(位8=F)→
+        回讀 RCU_ONLINE=N、SOS=off、CLEAN_ROOM 保舊值 2(斷線略過位 9 更新)。"""
+        import time as _t
+        case_id = f"rc_{slug}_room_sta_offline"
+        scenario = registry.get(case_id)
+        p = _p(ctx, case_id)
+        t0 = _t.perf_counter()
+        summary = {"room_no": p["room_no"], "bits_online": "0101001120100000",
+                   "bits_offline": p["status_bits"]}
+        payload = _a7_import_payload(
+            ctx, build_room_sta_push(p["room_no"], "0101001120100000", vendor_code=tp_code),
+            p["third_party_code"])
+        res, err = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload)
+        if err or res is None:
+            return _fail(case_id, "", scenario, int((_t.perf_counter() - t0) * 1000),
+                         request_payload=payload, response_payload={"__error__": err or "no response"})
+        payload2 = _a7_import_payload(
+            ctx, build_room_sta_push(p["room_no"], p["status_bits"], vendor_code=tp_code),
+            p["third_party_code"])
+        res2, err2 = execute_for_ctx(ctx, "POST", ctx.urls["import_sync"], json_body=payload2)
+        dur = int((_t.perf_counter() - t0) * 1000)
+        item2, rows2 = _a7_first_response_item(res2) if res2 is not None else ({}, [])
+        retn2 = rows2[0].get("RETN-CODE") if rows2 else None
+        summary.update({"procStatus": item2.get("procStatus"), "retn_code": retn2,
+                        "retn_desc": rows2[0].get("RETN-CODE-DESC") if rows2 else None})
+        ok = (res2 is not None and res2.status_code == 200
+              and item2.get("procStatus") is True and retn2 == "0000")
+        # LOCAL 閉環:F 三連動回讀(RCU_ONLINE=N / SOS=off / CLEAN_ROOM 保舊值)
+        if ok and not ctx.use_real:
+            res_rb, _ = execute_for_ctx(ctx, "GET", ctx.urls["roomcontrol_internal"])
+            if res_rb is not None and res_rb.status_code == 200:
+                state = (res_rb.json() or {}).get("room_control_state") or {}
+                pbx = (state.get(p["room_no"]) or {}).get("pbx_dt") or {}
+                summary["state_readback_pbx_dt"] = pbx
+                ok = (pbx.get("RCU_ONLINE") == "N" and pbx.get("SOS") == "off"
+                      and pbx.get("CLEAN_ROOM") == "2")
+        if ok:
+            return _ok(case_id, "", scenario, dur, request_payload=payload2, response_payload=summary)
+        return _fail(case_id, "", scenario, dur, request_payload=payload2, response_payload=summary)
+
     bits_hint = ("16 位:1Keyhouse 2Keybox 3冷氣 4總電源 5鐵捲門 6一氧化碳 7防盜 "
                  "8緊急 9清潔(1請掃/2掃中/3待巡/4巡中/0完成) 10勿擾 11房門 12-16保留")
     registry.register(
@@ -335,7 +437,8 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
         name="房況查詢(A6・ROOM_INF)", endpoint="/third-party/import-sync-files",
         runner=_room_inf_query,
         params=[
-            ParamSpec("room_no", "房號", "str", "2403", hint="查無住客的房號會回 ROOM_STA=V(空房)單列"),
+            ParamSpec("room_no", "房號", "str", "2403",
+                      hint="需已登錄房間主檔:O 回每住客一列;V/R/S 回全空欄單列;未登錄 → RETN 9999"),
             ParamSpec("third_party_code", "廠商代碼", "str", tp_code,
                       hint=f"A7 公版 thirdParty 代碼;{vendor_label}={tp_code}"),
         ],
@@ -402,6 +505,30 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
         f"rc_{slug}_missing_room_nos", module="roomcontrol", vendor=vendor_id,
         name="缺房號欄位(417)", endpoint="/third-party/import-sync-files",
         runner=_missing_room_nos,
+    )
+    # ---- RC2.5(2026-11-03,sa11) ----
+    registry.register(
+        f"rc_{slug}_room_not_found", module="roomcontrol", vendor=vendor_id,
+        name="不存在房號(RETN・9999)", endpoint="/third-party/import-sync-files",
+        runner=_room_not_found,
+    )
+    registry.register(
+        f"rc_{slug}_internal_error", module="roomcontrol", vendor=vendor_id,
+        name="內部錯誤模擬房(RETN・1001)", endpoint="/third-party/import-sync-files",
+        runner=_internal_error,
+    )
+    registry.register(
+        f"rc_{slug}_room_sta_offline", module="roomcontrol", vendor=vendor_id,
+        name="房況斷線推送(B4・位8=F)", endpoint="/third-party/import-sync-files",
+        runner=_room_sta_offline,
+        params=[
+            ParamSpec("room_no", "房號", "str", "2403",
+                      hint="需已登錄於沙盒房間主檔(未登錄 → RETN 9999)"),
+            ParamSpec("status_bits", "斷線位元串", "str", "0101001F40100000",
+                      hint="位8=F 房間OFF_LINE:落庫後 SOS=off、RCU_ONLINE=N、位9清潔保舊值不更新"),
+            ParamSpec("third_party_code", "廠商代碼", "str", tp_code,
+                      hint=f"A7 公版 thirdParty 代碼;{vendor_label}={tp_code}"),
+        ],
     )
 
 

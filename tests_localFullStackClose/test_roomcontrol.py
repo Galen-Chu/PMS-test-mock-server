@@ -10,6 +10,9 @@
   未知 ACTION_COD → procStatus=false+RETN 9999、缺 ROOM_NOS/B5 必填 → 417
 - registry:roomcontrol 模組各案已實作且宣告 ParamSpec
 - runner 離線組裝(連線失敗仍錄製 request_body → 斷言 XML 內容與覆寫貫穿)
+- RC2.5(2026-11-03,sa11 = A7 SQL 處理文件):PBX_DT 欄位極性解碼、F 斷線三連動、
+  未知房號 9999 / E 模擬房 1001、MAIN_POWER 單值族極性反轉、A10 走房間主檔、
+  internal/rooms + internal/reset 自助端點
 """
 import os
 import sys
@@ -72,7 +75,7 @@ def test_mock_route_room_sta_push_lands_in_state():
     rows = parse_rowset_xml(item["responseBody"])
     assert rows[0]["SEND-CODE"] == "0300TT4190"
     assert rows[0]["RETN-CODE"] == "0000"
-    assert "1112 Set #ROOM_STA#010101011001#" in rows[0]["RETN-CODE-DESC"]
+    assert "2501 Set #ROOM_STA#010101011001#" in rows[0]["RETN-CODE-DESC"]  # RC2.5(sa11):{房號} Set
     # 落庫 + 內部回讀閉環
     assert mock_roomcontrol_state["2501"]["status_bits"] == "010101011001"
     rb = c.get("/roomcontrol/internal/state")
@@ -91,10 +94,14 @@ def test_mock_route_room_inf_guest_rows_and_vacant():
     assert rows[0]["CI_SER"] and rows[0]["ALT_NAM"]
     assert all(row["RETN-CODE"] == "0000" for row in rows)
 
-    # 查無住客房號 → 單列 ROOM_STA=V(空房)
-    r2 = c.post("/third-party/import-sync-files", json=_import_body(build_room_inf_query("9999")))
-    rows2 = parse_rowset_xml(r2.get_json()[0]["responseBody"])
-    assert len(rows2) == 1 and rows2[0]["ROOM_STA"] == "V" and rows2[0]["RETN-CODE"] == "0000"
+    # RC2.5(sa11):V/R/S 空房 → 單列全欄位空值(ADVBAL_AMT/CCARD_AMT 為 0)
+    for room, sta in (("2404", "V"), ("2405", "R"), ("2406", "S")):
+        r2 = c.post("/third-party/import-sync-files", json=_import_body(build_room_inf_query(room)))
+        rows2 = parse_rowset_xml(r2.get_json()[0]["responseBody"])
+        assert len(rows2) == 1 and rows2[0]["ROOM_STA"] == sta
+        assert rows2[0]["RETN-CODE"] == "0000"
+        assert rows2[0]["ROOM_SER"] == "" and rows2[0]["CI_SER"] == "" and rows2[0]["ALT_NAM"] == ""
+        assert rows2[0]["ADVBAL_AMT"] == "0" and rows2[0]["CCARD_AMT"] == "0"
 
 
 def test_mock_route_negative_paths():
@@ -181,8 +188,9 @@ def test_mock_route_rmtemp_updates_temperature():
     assert item["procStatus"] is True
     rows = parse_rowset_xml(item["responseBody"])
     assert rows[0]["RETN-CODE"] == "0000"
-    assert "1112 Set #RMTEMP#26C#" in rows[0]["RETN-CODE-DESC"]
+    assert "2702 Set #RMTEMP#26C#" in rows[0]["RETN-CODE-DESC"]
     assert mock_roomcontrol_state["2702"]["temperature"] == "26C"
+    assert mock_roomcontrol_state["2702"]["api"] == "RCU"         # sa11:RMTEMP 附 api 值 RCU
 
 
 def test_mock_route_keybox_updates_bit2():
@@ -239,11 +247,12 @@ def test_registry_roomcontrol_module():
     by_mod = registry.by_module()
     assert "roomcontrol" in by_mod
     cases = {s.id: s for s in by_mod["roomcontrol"]}
-    # RC0 三案 + RC2 六案,雙廠商:MINXON(81) / CHAOFENG(86)
+    # RC0 三案 + RC2 六案 + RC2.5 三案,雙廠商:MINXON(81) / CHAOFENG(86)
     expected = {f"rc_{v}_{a}" for v in ("minxon", "chaofeng")
                 for a in ("room_sta_push", "room_inf", "return",
                           "clean", "rmtemp", "keybox",
-                          "bad_xml", "unknown_action", "missing_room_nos")}
+                          "bad_xml", "unknown_action", "missing_room_nos",
+                          "room_not_found", "internal_error", "room_sta_offline")}
     assert expected == set(cases)
     assert all(s.implemented for s in by_mod["roomcontrol"])
     assert {s.vendor for s in by_mod["roomcontrol"]} == {"MINXON", "CHAOFENG"}
@@ -301,3 +310,112 @@ def test_run_context_has_roomcontrol_urls():
         ctx = engine.build_run_context(env)
         assert ctx.urls["import_sync"].endswith("/third-party/import-sync-files")
         assert ctx.urls["roomcontrol_internal"].endswith("/roomcontrol/internal/state")
+
+
+# ---- RC2.5(2026-11-03,sa11):PBX_DT 解碼 / F 斷線 / 房間層錯誤 / 自助端點 ------------
+
+def test_decode_status_bits_field_polarity():
+    """16 位房況字串 → PBX_DT 欄位極性(sa11 對照表逐一驗證)。"""
+    from server.roomcontrol.vendors.vendor_A7_XML import decode_status_bits
+    # 樣本:位1插卡 位2插卡 位3冷氣開 位4電源開 位5鐵捲關 位6一氧化碳無動作
+    #       位7防盜動作 位8緊急無動作 位9=2打掃中 位10勿擾無 位11房門關
+    d = decode_status_bits("0111000120100000")
+    assert d["KEY_HOUSE"] == "on" and d["KEY_BOX"] == "on"
+    assert d["AC_STA"] == "on" and d["MAIN_POWER"] == "on"
+    assert d["RSD"] == "off" and d["CO_ONE"] == "off"
+    assert d["BG_ALARM"] == "on"                    # 0=動作 → on
+    assert d["SOS"] == "off"                        # 1=無動作 → off
+    assert d["RCU_ONLINE"] == "Y"
+    assert d["CLEAN_ROOM"] == "2"                   # 直接帶入廠商值
+    assert d["DND"] == "off" and d["DOOR_STA"] == "off"   # 1=門關 → off
+    # 反向:防盜無動作(1)→off、緊急動作(0)→on
+    d2 = decode_status_bits("0000001000000000")
+    assert d2["BG_ALARM"] == "off" and d2["SOS"] == "on" and d2["RCU_ONLINE"] == "Y"
+
+
+def test_mock_route_room_sta_offline_f_semantics():
+    """F 斷線三連動(sa11 情境二):位8=F → SOS=off、RCU_ONLINE=N、CLEAN_ROOM 保舊值。"""
+    c = _client()
+    # 連線態:位9=2(打掃中)
+    r1 = c.post("/third-party/import-sync-files",
+                json=_import_body(build_room_sta_push("2701", "0111000120100000")))
+    assert r1.get_json()[0]["procStatus"] is True
+    st1 = mock_roomcontrol_state["2701"]
+    assert st1["pbx_dt"]["RCU_ONLINE"] == "Y" and st1["pbx_dt"]["CLEAN_ROOM"] == "2"
+    # 斷線態:位8=F、位9=4 —— CLEAN_ROOM 應保舊值 2(斷線略過位 9 更新)
+    r2 = c.post("/third-party/import-sync-files",
+                json=_import_body(build_room_sta_push("2701", "0101001F40100000")))
+    assert r2.get_json()[0]["procStatus"] is True
+    pbx = mock_roomcontrol_state["2701"]["pbx_dt"]
+    assert pbx["RCU_ONLINE"] == "N" and pbx["SOS"] == "off"
+    assert pbx["CLEAN_ROOM"] == "2"
+    assert mock_roomcontrol_state["2701"]["status_bits"] == "0101001F40100000"  # 原始字串如實落庫
+    assert mock_roomcontrol_state["2701"]["rmupd_dat"]              # sa11:RMUPD_DAT
+
+
+def test_mock_route_room_level_errors():
+    """RC2.5 負面:未知房號 → procStatus=false + RETN 9999;E 模擬房 → RETN 1001。"""
+    c = _client()
+    # ROOM_INF 查未登錄房號
+    r = c.post("/third-party/import-sync-files", json=_import_body(build_room_inf_query("8888")))
+    assert r.status_code == 200
+    item = r.get_json()[0]
+    assert item["procStatus"] is False
+    rows = parse_rowset_xml(item["responseBody"])
+    assert rows[0]["RETN-CODE"] == "9999" and rows[0]["RETN-CODE-DESC"] == "ROOM not found."
+    assert "ROOM_NOS" not in rows[0] and "ACTION_DAT" not in rows[0]   # sa11 失敗樣本形狀
+    # B4 推送未登錄房號 → 同 9999 信封,且不落庫
+    r2 = c.post("/third-party/import-sync-files",
+                json=_import_body(build_room_sta_push("8888", DEFAULT_STATUS_BITS)))
+    item2 = r2.get_json()[0]
+    assert item2["procStatus"] is False
+    assert parse_rowset_xml(item2["responseBody"])[0]["RETN-CODE"] == "9999"
+    assert "8888" not in mock_roomcontrol_state
+    # E 模擬房 → RETN 1001(德安 DB 內部錯誤)
+    r3 = c.post("/third-party/import-sync-files", json=_import_body(build_room_inf_query("9901")))
+    item3 = r3.get_json()[0]
+    assert item3["procStatus"] is False
+    rows3 = parse_rowset_xml(item3["responseBody"])
+    assert rows3[0]["RETN-CODE"] == "1001"
+    assert rows3[0]["RETN-CODE-DESC"] == "處理第三方廠商傳送的資料時發生錯誤"
+
+
+def test_mock_route_main_power_single_action_polarity():
+    """sa11 極性差:第一種 MAIN_POWER ACTION_STA 0=on/1=off,與位元串位 4(1=開)相反。"""
+    c = _client()
+    xml = build_rowset_xml({"REVE-CODE": REVE_ROOM_STA, "ROOM_NOS": "2702",
+                            "ACTION_COD": "MAIN_POWER", "ACTION_STA": "0",
+                            "ACTION_DAT": "2026/11/03 12:00:00"})
+    r = c.post("/third-party/import-sync-files", json=_import_body(xml))
+    assert r.get_json()[0]["procStatus"] is True
+    assert mock_roomcontrol_state["2702"]["pbx_dt"]["MAIN_POWER"] == "on"   # 0=on
+    assert mock_roomcontrol_state["2702"]["status_bits"][3] == "1"          # 位4 反轉為 1(開)
+
+
+def test_mock_route_return_reflects_room_mn_and_skips_error_room():
+    """A10 RETURN 走房間主檔:R/S 如實回報;E 模擬房不入回報。"""
+    c = _client()
+    r = c.post("/third-party/import-sync-files", json=_import_body(build_return_query()))
+    by_room = {row["ROOM_NOS"]: row for row in parse_rowset_xml(r.get_json()[0]["responseBody"])}
+    assert by_room["2405"]["ROOM_STA"] == "R" and by_room["2406"]["ROOM_STA"] == "S"
+    assert by_room["2403"]["ROOM_STA"] == "O"
+    assert "9901" not in by_room
+
+
+def test_internal_rooms_and_reset_endpoints():
+    """沙盒自助:登錄房間主檔(動態房號)→ 可推送;reset 還原種子。"""
+    c = _client()
+    r = c.post("/roomcontrol/internal/rooms", json={"rooms": {"91234": "V"}})
+    assert r.status_code == 200 and "91234" in r.get_json()["room_mn"]
+    rp = c.post("/third-party/import-sync-files",
+                json=_import_body(build_room_sta_push("91234", "010101011001")))
+    assert rp.get_json()[0]["procStatus"] is True
+    assert "91234 Set #ROOM_STA#010101011001#" in rp.get_json()[0]["responseBody"]
+    # 非法 ROOM_STA → 400;缺 rooms → 400
+    assert c.post("/roomcontrol/internal/rooms", json={"rooms": {"91235": "X"}}).status_code == 400
+    assert c.post("/roomcontrol/internal/rooms", json={}).status_code == 400
+    # reset:動態房消失、種子還原
+    assert c.post("/roomcontrol/internal/reset").status_code == 200
+    st = c.get("/roomcontrol/internal/state").get_json()
+    assert "91234" not in st["room_mn"] and "91234" not in st["room_control_state"]
+    assert st["room_mn"]["2403"] == "O" and st["room_mn"]["9901"] == "E"

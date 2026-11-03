@@ -18,6 +18,11 @@
    10 勿擾(1動作,0無)         11 房門(0開,1關)          12–16 保留
 - 傳輸:HTTP GET「德安網址?athena=&hotel=&thirdParty=TT&TxnData=<XML>&istom=1」(URL 內 # 需 %23),
   另有 REST 版 POST /third-party/import-sync-files(sa8/sa9 swagger);沙盒 RC0 實作後者。
+- RC2.5(2026-11-03)新增 sa11(A7 收到廠商 XML 的 SQL 處理文件)揭曉的契約:
+  (a) Set 類回應 DESC =「{房號} Set {ACTION_COD}」——sa10 樣本的「1112」其實是房號;
+  (b) 16 位房況字串 → PBX_DT 欄位級對照(decode_status_bits;位 8=F 斷線三連動);
+  (c) 失敗信封:RETN 9999「ROOM not found.」/ RETN 1001「處理第三方廠商傳送的資料時發生錯誤」,
+      失敗樣本無 ROOM_NOS/ACTION_DAT 欄。
 """
 from datetime import datetime
 from xml.etree import ElementTree as ET
@@ -190,7 +195,11 @@ def build_ack_response_xml(reve_code, action_cod, retn_desc=None, action_dat=Non
 
 
 def build_error_response_xml(reve_code, action_cod, retn_code, retn_desc) -> str:
-    """處理異常回應(非 0000;sa10:RETN-CODE 其他=資料處理異常)。"""
+    """處理異常回應(非 0000;sa10:RETN-CODE 其他=資料處理異常)。
+
+    sa11 失敗樣本(9999 ROOM not found / 1001 內部錯誤):無 ROOM_NOS、無 ACTION_DAT;
+    ACTION_COD 回映廠商帶入值(B5 訊息無 action → 傳 None 省 tag)。
+    """
     return build_rowset_xml({
         "SEND-CODE": reve_code,
         "ACTION_COD": action_cod,
@@ -198,5 +207,36 @@ def build_error_response_xml(reve_code, action_cod, retn_code, retn_desc) -> str
         "RETN-CODE-DESC": retn_desc,
         "MSG-ID": "0000",
         "MSG-DESC": MSG_DONE,
-        "ACTION_DAT": action_dat_now(),
     })
+
+
+# ---- PBX_DT 欄位級解碼(sa11「#ROOM_STA# 16 位 → PBX_DT」對照表) ------------------------
+def decode_status_bits(bits, prev_clean_room="0"):
+    """16 位房況字串 → PBX_DT 欄位視圖(sa11 對照表;位 8=F 斷線三連動)。
+
+    極性依 sa11 表(1 基位置 → PBX_DT 值):
+      1 KEY_HOUSE 1=拔卡→off・0=插卡→on   2 KEY_BOX 1=插卡→on・0=拔卡→off
+      3 AC_STA 1開on・0關off               4 MAIN_POWER 1開on・0關off
+      5 RSD 1開on・0關off                  6 CO_ONE 1動作on・0無off
+      7 BG_ALARM 0動作on・1無off           8 SOS 0動作on・1無off
+      9 CLEAN_ROOM 直接帶入廠商值(0-4)   10 DND 1動作on・0無off
+      11 DOOR_STA 0門開on・1門關off       12-16 保留(不解)
+    位 8 = F(房間 OFF_LINE)三連動:SOS=off、RCU_ONLINE=N、CLEAN_ROOM 保舊值不更新。
+    非 16 位字串 → 以預設房況解(防禦,不拋錯)。
+    """
+    b = str(bits) if len(str(bits)) == 16 else DEFAULT_STATUS_BITS
+    f = b[7] == "F"
+    return {
+        "KEY_HOUSE": "off" if b[0] == "1" else "on",
+        "KEY_BOX": "on" if b[1] == "1" else "off",
+        "AC_STA": "on" if b[2] == "1" else "off",
+        "MAIN_POWER": "on" if b[3] == "1" else "off",
+        "RSD": "on" if b[4] == "1" else "off",
+        "CO_ONE": "on" if b[5] == "1" else "off",
+        "BG_ALARM": "on" if b[6] == "0" else "off",
+        "SOS": "off" if f else ("on" if b[7] == "0" else "off"),
+        "RCU_ONLINE": "N" if f else "Y",
+        "CLEAN_ROOM": str(prev_clean_room) if f else b[8],
+        "DND": "on" if b[9] == "1" else "off",
+        "DOOR_STA": "on" if b[10] == "0" else "off",
+    }
