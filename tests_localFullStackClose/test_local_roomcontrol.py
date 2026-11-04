@@ -206,3 +206,23 @@ def test_orchestrator_closed_loop_rc25_fidelity(server_up):
     pbx = off["response_payload"]["state_readback_pbx_dt"]
     assert pbx["RCU_ONLINE"] == "N" and pbx["SOS"] == "off"
     assert pbx["CLEAN_ROOM"] == "2"                   # 斷線略過位 9 更新,保線上態舊值
+
+
+def test_orchestrator_iptv_display_name_cases(server_up):
+    """閉環⑦(RC4a):IPTV 雲朗(70)住客顯示名稱三案經 /runs 全 PASS(含選項覆寫貫穿)。"""
+    results = _run_and_results({
+        "environment": "LOCAL_OFFLINE",
+        "scenario_ids": ["rc_iptv_display_name", "rc_iptv_display_name_default",
+                         "rc_iptv_display_name_empty_custom"],
+        "overrides": {"rc_iptv_display_name": {"guest_display_name": "LAST_NAM"}},
+    })
+    opt = results["rc_iptv_display_name"]
+    dft = results["rc_iptv_display_name_default"]
+    emp = results["rc_iptv_display_name_empty_custom"]
+    assert opt["status"] == "PASS"
+    assert opt["resolved_params"]["guest_display_name"] == "LAST_NAM"
+    assert opt["response_payload"]["display_name"] == "王"      # 覆寫貫穿:姓
+    assert dft["status"] == "PASS"
+    assert dft["response_payload"]["display_name"] == "王小明"  # 無參數 → 預設 ALT_NAM
+    assert emp["status"] == "PASS"
+    assert emp["response_payload"]["display_name"] == ""        # USER_DEFINED 空值 → 送無資料

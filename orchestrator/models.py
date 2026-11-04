@@ -38,6 +38,7 @@ class ParamSpec:
     hint: str = ""           # SA 規格提示(格式、負面行為),UI tooltip
     required: bool = True
     echo_fields: tuple = ()  # 此參數會被回應/種子回映的欄位名(§7 diff 用)
+    choices: tuple = ()      # 單選選項(空=自由輸入);/scenarios 帶出 → UI 渲染下拉(sa11 參數表)
 
 
 @dataclass

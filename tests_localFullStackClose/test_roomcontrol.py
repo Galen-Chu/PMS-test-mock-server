@@ -25,7 +25,8 @@ import orchestrator  # 觸發 runners 註冊
 from orchestrator.registry import registry
 from orchestrator import engine
 from server.roomcontrol import roomcontrol_bp
-from server.roomcontrol.routes import mock_roomcontrol_state, mock_room_guest_db
+from server.roomcontrol.routes import (mock_roomcontrol_state, mock_room_guest_db,
+                                        mock_room_mn)
 from server.roomcontrol.vendors.vendor_A7_XML import (
     build_room_sta_push, build_room_inf_query, build_return_query,
     build_clean_push, build_rmtemp_push, build_keybox_push,
@@ -253,9 +254,12 @@ def test_registry_roomcontrol_module():
                           "clean", "rmtemp", "keybox",
                           "bad_xml", "unknown_action", "missing_room_nos",
                           "room_not_found", "internal_error", "room_sta_offline")}
+    # RC4a:IPTV 雲朗(70)住客顯示名稱參數三案
+    expected |= {"rc_iptv_display_name", "rc_iptv_display_name_default",
+                 "rc_iptv_display_name_empty_custom"}
     assert expected == set(cases)
     assert all(s.implemented for s in by_mod["roomcontrol"])
-    assert {s.vendor for s in by_mod["roomcontrol"]} == {"MINXON", "CHAOFENG"}
+    assert {s.vendor for s in by_mod["roomcontrol"]} == {"MINXON", "CHAOFENG", "IPTV"}
     push = cases["rc_minxon_room_sta_push"]
     assert {sp.key for sp in push.params} == {"room_no", "status_bits", "third_party_code"}
     # third_party_code 預設帶實際代碼(MINXON=81、CHAOFENG=86),仍可覆寫
@@ -419,3 +423,112 @@ def test_internal_rooms_and_reset_endpoints():
     st = c.get("/roomcontrol/internal/state").get_json()
     assert "91234" not in st["room_mn"] and "91234" not in st["room_control_state"]
     assert st["room_mn"]["2403"] == "O" and st["room_mn"]["9901"] == "E"
+
+
+# ---- RC4a(2026-11-04):IPTV 雲朗(70)sa11 住客顯示名稱參數 → CKI 出站姓名欄 ----
+
+def test_resolve_display_name_param_table():
+    """sa11 參數表逐項:六選項 + 預設值 + USER_DEFINED 空值如實傳送。"""
+    from server.roomcontrol.routes import (
+        resolve_display_name, DISPLAY_NAME_CHOICES, DEFAULT_DISPLAY_NAME,
+    )
+    guest = {"ALT_NAM": "王小明", "LAST_NAM": "王", "FIRST_NAM": "小明",
+             "GROUP_NOS": "GP2026A"}
+    assert DEFAULT_DISPLAY_NAME == "ALT_NAM"
+    assert resolve_display_name({}, guest, "2407") == "王小明"              # 無參數 → 預設
+    assert resolve_display_name({"guest_display_name": "ALT_NAM"}, guest, "2407") == "王小明"
+    assert resolve_display_name({"guest_display_name": "LAST_NAM"}, guest, "2407") == "王"
+    assert resolve_display_name({"guest_display_name": "FIRST_NAM"}, guest, "2407") == "小明"
+    assert resolve_display_name({"guest_display_name": "ROOM_NOS"}, guest, "2407") == "2407"
+    assert resolve_display_name({"guest_display_name": "GROUP_NOS"}, guest, "2407") == "GP2026A"
+    assert resolve_display_name({"guest_display_name": "USER_DEFINED",
+                                 "user_defined_display_name": "貴賓 王小明"}, guest, "2407") == "貴賓 王小明"
+    # sa11 明文:USER_DEFINED 不論有無值皆依參數內容傳送 → 空值 = 廠商收無資料
+    assert resolve_display_name({"guest_display_name": "USER_DEFINED"}, guest, "2407") == ""
+    assert resolve_display_name({"guest_display_name": "USER_DEFINED",
+                                 "user_defined_display_name": ""}, guest, "2407") == ""
+    # 非合法選項 → 回預設(沙盒不炸,對齊「讀取無資料依預設值」)
+    assert resolve_display_name({"guest_display_name": "NOSUCH"}, guest, "2407") == "王小明"
+    assert set(DISPLAY_NAME_CHOICES) == {"GROUP_NOS", "ROOM_NOS", "LAST_NAM",
+                                         "FIRST_NAM", "ALT_NAM", "USER_DEFINED"}
+
+
+def test_internal_thirdparty_conf_endpoint():
+    """THIRDPARTY_DT_CONF 端點:設定/讀取/清除/非法選項 400。"""
+    c = _client()
+    r = c.post("/roomcontrol/internal/thirdparty-conf",
+               json={"third_party_code": "70",
+                     "params": {"guest_display_name": "USER_DEFINED",
+                                "user_defined_display_name": "貴賓"}})
+    assert r.status_code == 200 and r.get_json()["params"]["guest_display_name"] == "USER_DEFINED"
+    assert c.get("/roomcontrol/internal/thirdparty-conf").get_json()["thirdparty_dt_conf"]["70"]["user_defined_display_name"] == "貴賓"
+    # 非法選項 → 400
+    rb = c.post("/roomcontrol/internal/thirdparty-conf",
+                json={"third_party_code": "70", "params": {"guest_display_name": "X"}})
+    assert rb.status_code == 400
+    # 值 None = 清除 → 回到無參數設定
+    rc = c.post("/roomcontrol/internal/thirdparty-conf",
+                json={"third_party_code": "70", "params": {"guest_display_name": None}})
+    assert rc.status_code == 200
+    assert "guest_display_name" not in rc.get_json()["params"]
+    # 缺欄 → 400
+    assert c.post("/roomcontrol/internal/thirdparty-conf", json={}).status_code == 400
+
+
+def test_internal_cki_trigger_and_display_name():
+    """CKI 出站:無參數 → 預設 ALT_NAM;各選項解析;USER_DEFINED 空值送無資料。"""
+    c = _client()
+    # 無參數(種子 conf 空)→ 姓名 = ALT_NAM;REVE 帶廠商代號 70
+    r = c.post("/roomcontrol/internal/cki", json={"room_no": "2407", "third_party_code": "70"})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["procStatus"] is True and body["display_name"] == "王小明"
+    rows = parse_rowset_xml(body["responseBody"])
+    assert rows[0]["REVE-CODE"] == "0300901070" and rows[0]["ACTION_COD"] == "CKI"
+    assert rows[0]["ALT_NAM"] == "王小明" and rows[0]["ROOM_NOS"] == "2407"
+    assert rows[0]["INFO_ISGROUP"] == "Y" and rows[0]["INFO_REMARK"] == "雲朗年度貴賓團"
+    # sa10 A1 無 GROUP_NOS 標籤——訂房名稱/團號僅作姓名欄來源(參數解析,上方已測)
+    assert mock_room_mn["2407"] == "O"                    # C/I → 房間主檔轉住人
+    # 各選項
+    for choice, expect in (("LAST_NAM", "王"), ("FIRST_NAM", "小明"),
+                           ("ROOM_NOS", "2407"), ("GROUP_NOS", "GP2026A")):
+        c.post("/roomcontrol/internal/thirdparty-conf",
+               json={"third_party_code": "70", "params": {"guest_display_name": choice}})
+        b = c.post("/roomcontrol/internal/cki",
+                   json={"room_no": "2407", "third_party_code": "70"}).get_json()
+        assert b["display_name"] == expect, choice
+    # USER_DEFINED 有值/空值
+    c.post("/roomcontrol/internal/thirdparty-conf",
+           json={"third_party_code": "70", "params": {"guest_display_name": "USER_DEFINED",
+                                                      "user_defined_display_name": "總統套房貴賓"}})
+    b2 = c.post("/roomcontrol/internal/cki",
+                json={"room_no": "2407", "third_party_code": "70"}).get_json()
+    assert b2["display_name"] == "總統套房貴賓"
+    c.post("/roomcontrol/internal/thirdparty-conf",
+           json={"third_party_code": "70", "params": {"user_defined_display_name": None}})
+    b3 = c.post("/roomcontrol/internal/cki",
+                json={"room_no": "2407", "third_party_code": "70"}).get_json()
+    assert b3["display_name"] == ""                        # 空值 → 廠商收無資料
+    assert parse_rowset_xml(b3["responseBody"])[0]["ALT_NAM"] == ""
+    # 負面:未知房號 9999 / E 房 1001 / 無住客資料
+    rn = c.post("/roomcontrol/internal/cki", json={"room_no": "8888", "third_party_code": "70"})
+    assert rn.status_code == 404 and rn.get_json()["code"] == "9999"
+    re_ = c.post("/roomcontrol/internal/cki", json={"room_no": "9901", "third_party_code": "70"})
+    assert re_.status_code == 500 and re_.get_json()["code"] == "1001"
+    rg = c.post("/roomcontrol/internal/cki", json={"room_no": "2404", "third_party_code": "70"})
+    assert rg.status_code == 400
+    # reset 還原:conf 清空、2407 回 V
+    c.post("/roomcontrol/internal/reset")
+    st = c.get("/roomcontrol/internal/state").get_json()
+    assert st["thirdparty_dt_conf"] == {} and st["room_mn"]["2407"] == "V"
+
+
+def test_params_meta_carries_choices():
+    """ParamSpec.choices → /scenarios 帶出(UI 下拉驅動;單選選項)。"""
+    from orchestrator.registry import params_meta, registry as reg
+    sc = reg.get("rc_iptv_display_name")
+    metas = {m["key"]: m for m in params_meta(sc)}
+    assert metas["guest_display_name"]["choices"] == [
+        "GROUP_NOS", "ROOM_NOS", "LAST_NAM", "FIRST_NAM", "ALT_NAM", "USER_DEFINED"]
+    assert metas["guest_display_name"]["default"] == "ALT_NAM"
+    assert metas["room_no"]["choices"] == []               # 自由輸入參數不帶選項

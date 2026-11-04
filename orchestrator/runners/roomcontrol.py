@@ -1,7 +1,7 @@
 # orchestrator/runners/roomcontrol.py
 """🌡️ 房控模組案例(roomcontrol / A7 公版 XML 介面)— 對齊 sa_docs/sa10 V1.2。"""
 from ..registry import registry
-from ..models import CaseResult, RunContext, ParamSpec
+from ..models import CaseResult, RunContext, ParamSpec, CASE_SKIP
 from hardware.simulate_speaker import execute_for_ctx
 from server.roomcontrol.vendors.vendor_A7_XML import (
     build_room_sta_push, build_room_inf_query, build_return_query,
@@ -9,7 +9,7 @@ from server.roomcontrol.vendors.vendor_A7_XML import (
     build_rowset_xml, action_dat_now, reve_room_sta, reve_room_inf,
     parse_rowset_xml, DEFAULT_STATUS_BITS,
 )
-from server.roomcontrol.vendors import vendor_MINXON, vendor_CHAOFENG
+from server.roomcontrol.vendors import vendor_MINXON, vendor_CHAOFENG, vendor_IPTV
 
 from .helpers import _p, _ok, _fail, _expect_417
 
@@ -19,6 +19,8 @@ from .helpers import _p, _ok, _fail, _expect_417
 # 2026-09-03 起掛雙廠商:MINXON 民笙(thirdParty=81)、CHAOFENG 超烽(thirdParty=86)。
 # RC2.5(2026-11-03,sa11 = A7 收到廠商 XML 的 SQL 處理文件)每家 +3 案:
 # 房況斷線推送(位8=F 三連動閉環)、不存在房號(RETN 9999)、內部錯誤模擬房(RETN 1001)。
+# RC4a(2026-11-04,廠商代號 70 確認=雲朗IPTV):sa11 THIRDPARTY_DT_CONF 住客顯示名稱
+# 參數(guest_display_name/user_defined_display_name)→ CKI 出站姓名欄解析,+1 廠商 3 案。
 # 傳輸:POST /third-party/import-sync-files(sa8/sa9 REST 版;GET TxnData 閘門版見 sa10)。
 # ====================================================================
 _RC_VENDORS = [
@@ -534,3 +536,134 @@ def _register_rc_vendor_cases(vendor_id, vendor_label, tp_code):
 
 for _vid, _vlabel, _tp in _RC_VENDORS:
     _register_rc_vendor_cases(_vid, _vlabel, _tp)
+
+
+# ====================================================================
+# 🌡️ RC4a:IPTV 雲朗(70)— sa11 THIRDPARTY_DT_CONF 住客顯示名稱參數(2026-11-04)
+# 方向:PMS→廠商(CKI 出站 XML 的 ALT_NAM 姓名欄依參數解析;沙盒以 internal/cki 觸發)。
+# 案例屬 LOCAL_ONLY:CKI 由 A7 端 C/I 動作觸發,REAL 雲端無法由沙盒端模擬 → SKIP。
+# ====================================================================
+_IPTV_TP = vendor_IPTV.THIRD_PARTY_CODE
+# 種子房 2407(預訂未入住)的期望值——runner 顯式持有,即參數表語意的可讀規格
+_IPTV_SEED_2407 = {"ALT_NAM": "王小明", "LAST_NAM": "王", "FIRST_NAM": "小明",
+                   "GROUP_NOS": "GP2026A"}
+_DISPLAY_NAME_CHOICES = ("GROUP_NOS", "ROOM_NOS", "LAST_NAM", "FIRST_NAM",
+                         "ALT_NAM", "USER_DEFINED")
+
+
+def _iptv_expected_display(room_no, choice, custom):
+    choice = choice or "ALT_NAM"                    # None = 無參數設定 → 預設 ALT_NAM
+    if choice == "USER_DEFINED":
+        return str(custom or "")                    # sa11:不論有無值皆如實傳送
+    if choice == "ROOM_NOS":
+        return str(room_no)
+    return _IPTV_SEED_2407[choice]
+
+
+def _iptv_skip(case_id, scenario):
+    return CaseResult(case_id=case_id, run_id="", module=scenario.module,
+                      vendor=scenario.vendor, scenario_name=scenario.name,
+                      endpoint=scenario.endpoint, status=CASE_SKIP,
+                      response_payload={"note": "LOCAL_ONLY:CKI 由 A7 端 C/I 觸發,"
+                                                "REAL 雲端無法由沙盒端模擬出站推送"})
+
+
+def _iptv_set_conf(ctx, tp, params):
+    """設定/清除 THIRDPARTY_DT_CONF(值 None=清除 → 無參數設定)。"""
+    return execute_for_ctx(ctx, "POST", ctx.urls["roomcontrol_conf"],
+                           json_body={"third_party_code": tp, "params": params})
+
+
+def _iptv_trigger_cki(ctx, room_no, tp):
+    return execute_for_ctx(ctx, "POST", ctx.urls["roomcontrol_cki"],
+                           json_body={"room_no": room_no, "third_party_code": tp})
+
+
+def _iptv_run_case(ctx, case_id, tp, room_no, choice, custom):
+    """共用流程:設參數 → 觸發 CKI → 斷言出站 XML 姓名欄 = 期望解析值。"""
+    import time as _t
+    scenario = registry.get(case_id)
+    t0 = _t.perf_counter()
+    if ctx.use_real:
+        return _iptv_skip(case_id, scenario)
+    conf_params = {"guest_display_name": choice}
+    if custom is not None:
+        conf_params["user_defined_display_name"] = custom
+    _iptv_set_conf(ctx, tp, conf_params)
+    res, err = _iptv_trigger_cki(ctx, room_no, tp)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    summary = {"room_no": room_no, "guest_display_name": choice,
+               "user_defined_display_name": custom}
+    if err or res is None:
+        return _fail(case_id, "", scenario, dur,
+                     response_payload={"__error__": err or "no response", **summary})
+    body = res.json() if res.status_code == 200 else {}
+    rows = parse_rowset_xml(body.get("responseBody", "")) if body else []
+    expected = _iptv_expected_display(room_no, choice, custom)
+    summary.update({"procStatus": body.get("procStatus"),
+                    "reve_code": rows[0].get("REVE-CODE") if rows else None,
+                    "display_name": body.get("display_name"),
+                    "expected_display_name": expected,
+                    "room_sta": body.get("room_sta")})
+    ok = (res.status_code == 200 and body.get("procStatus") is True
+          and body.get("display_name") == expected
+          and rows and rows[0].get("ALT_NAM") == expected
+          and rows[0].get("REVE-CODE") == f"03009010{tp}")
+    if ok:
+        return _ok(case_id, "", scenario, dur, response_payload=summary)
+    return _fail(case_id, "", scenario, dur, response_payload=summary)
+
+
+def _register_rc_iptv_cases():
+    vid, tp = vendor_IPTV.VENDOR_ID, vendor_IPTV.THIRD_PARTY_CODE
+
+    def _display_name(ctx: RunContext) -> CaseResult:
+        p = _p(ctx, "rc_iptv_display_name")
+        return _iptv_run_case(ctx, "rc_iptv_display_name", p["third_party_code"],
+                              p["room_no"], p["guest_display_name"],
+                              p.get("user_defined_display_name"))
+
+    def _display_name_default(ctx: RunContext) -> CaseResult:
+        # 無參數設定(先清除)→ 預設值 ALT_NAM(sa11 參數表)
+        _ = _iptv_set_conf(ctx, tp, {"guest_display_name": None,
+                                     "user_defined_display_name": None})
+        return _iptv_run_case(ctx, "rc_iptv_display_name_default", tp, "2407", None, None)
+
+    def _display_name_empty_custom(ctx: RunContext) -> CaseResult:
+        # USER_DEFINED + 自訂名稱空值 → 傳送廠商內容即無資料(sa11 明文)
+        return _iptv_run_case(ctx, "rc_iptv_display_name_empty_custom", tp, "2407",
+                              "USER_DEFINED", "")
+
+    registry.register(
+        "rc_iptv_display_name", module="roomcontrol", vendor=vid,
+        name="住客顯示名稱選項(CKI出站・sa11參數)", endpoint="/roomcontrol/internal/cki",
+        runner=_display_name,
+        params=[
+            ParamSpec("room_no", "房號", "str", "2407",
+                      hint="種子 2407=預訂未入住(含訂房/團體資料);未登錄 → 9999"),
+            ParamSpec("guest_display_name", "住客顯示名稱", "str", "ALT_NAM",
+                      choices=_DISPLAY_NAME_CHOICES,
+                      hint="sa11:GROUP_NOS訂房名稱團號/ROOM_NOS房號/LAST_NAM姓/"
+                           "FIRST_NAM名/ALT_NAM姓名/USER_DEFINED自訂;"
+                           "無參數設定或非合法值 → 預設 ALT_NAM"),
+            ParamSpec("user_defined_display_name", "自訂名稱", "str", "",
+                      required=False,
+                      hint="僅 guest_display_name=USER_DEFINED 時作用;"
+                           "不論有無值皆如實傳送(空值 → 廠商收無資料)"),
+            ParamSpec("third_party_code", "廠商代碼", "str", tp,
+                      hint=f"A7 公版 thirdParty 代碼;{vendor_IPTV.VENDOR_LABEL}={tp}"),
+        ],
+    )
+    registry.register(
+        "rc_iptv_display_name_default", module="roomcontrol", vendor=vid,
+        name="無參數→預設ALT_NAM(CKI出站)", endpoint="/roomcontrol/internal/cki",
+        runner=_display_name_default,
+    )
+    registry.register(
+        "rc_iptv_display_name_empty_custom", module="roomcontrol", vendor=vid,
+        name="自訂名稱空值→送無資料(CKI出站)", endpoint="/roomcontrol/internal/cki",
+        runner=_display_name_empty_custom,
+    )
+
+
+_register_rc_iptv_cases()

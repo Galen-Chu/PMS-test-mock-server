@@ -42,8 +42,9 @@ from .vendors.vendor_A7_XML import (
     build_rowset_xml, parse_rowset_xml,
     build_ack_response_xml, build_error_response_xml,
     DEFAULT_STATUS_BITS, MSG_DONE, B4_SINGLE_BIT_INDEX, is_b4_action, set_status_bit,
-    decode_status_bits,
+    decode_status_bits, action_dat_now,
 )
+from .vendors.vendor_IPTV import reve_cki
 
 roomcontrol_bp = Blueprint('roomcontrol', __name__)
 
@@ -60,6 +61,7 @@ mock_room_mn = {
     "2404": "V", "2405": "R", "2406": "S",                  # V/R/S 三態樣本房(ROOM_INF 空房形狀)
     "2501": "V", "2601": "V", "2602": "V",                  # 離線測試用房
     "2701": "V", "2702": "V", "2703": "V", "2704": "V", "2705": "V",
+    "2407": "V",                                            # CKI 樣本房:預訂未入住(住客資料在、ROOM_MN=V)
     "9901": "E",                                            # 模擬內部錯誤房(RETN 1001)
 }
 
@@ -79,11 +81,48 @@ mock_room_guest_db = {
          "ADVBAL_AMT": "-1200", "CCARD_AMT": "0", "LANG_COD": "zh_TW", "LANG_NAM": "中文",
          "VIP_STA": "1"},
     ],
+    # 2407:CKI 樣本住客(預訂未入住)——sa11 CKI SQL 全欄位來源(GROUP_NOS=訂房名稱/團號)
+    "2407": [
+        {"ROOM_SER": "1", "CI_SER": "202611040002001", "ALT_NAM": "王小明",
+         "SALUTE_NAM": "先生", "SALUTE_TYP": "1", "FIRST_NAM": "小明", "LAST_NAM": "王",
+         "GUEST_STA": "O", "CI_DAT": "2026/11/04", "CI_TIM": "14:00:12", "ECO_DAT": "2026/11/06",
+         "TEL_NOS": "0912345678", "BIRTH_DAT": "1990/05/15",
+         "ADVBAL_AMT": "0", "CCARD_AMT": "0", "LANG_COD": "zh_TW", "LANG_NAM": "中文",
+         "VIP_STA": "2", "GROUP_NOS": "GP2026A", "INFO_ISGROUP": "Y",
+         "INFO_REMARK": "雲朗年度貴賓團"},
+    ],
 }
+
+# 第三方廠商設定明細檔(sa11 THIRDPARTY_DT_CONF):{THIRDPARTY_COD: {PARAM_COD: PARAM_VAL}}
+# 種子為空 = 無參數設定 → 依預設值處理(guest_display_name 預設 ALT_NAM)
+mock_thirdparty_dt_conf = {}
+DISPLAY_NAME_CHOICES = ("GROUP_NOS", "ROOM_NOS", "LAST_NAM", "FIRST_NAM", "ALT_NAM", "USER_DEFINED")
+DEFAULT_DISPLAY_NAME = "ALT_NAM"   # sa11 參數表預設值
+
+
+def resolve_display_name(params, guest, room_no):
+    """sa11 guest_display_name:傳送廠商之住客姓名欄內容解析。
+
+    - 無參數設定/讀取無資料/值非合法選項 → 預設 ALT_NAM
+    - USER_DEFINED → user_defined_display_name 內容如實傳送(無值 → 廠商收無資料)
+    - 其餘選項 → 住客/訂房對應欄位(GROUP_NOS=訂房名稱團號、ROOM_NOS=房號)
+    """
+    params = params or {}
+    choice = params.get("guest_display_name") or DEFAULT_DISPLAY_NAME
+    if choice not in DISPLAY_NAME_CHOICES:
+        choice = DEFAULT_DISPLAY_NAME
+    if choice == "USER_DEFINED":
+        return str(params.get("user_defined_display_name") or "")
+    src = {"GROUP_NOS": guest.get("GROUP_NOS", ""), "ROOM_NOS": str(room_no),
+           "LAST_NAM": guest.get("LAST_NAM", ""), "FIRST_NAM": guest.get("FIRST_NAM", ""),
+           "ALT_NAM": guest.get("ALT_NAM", "")}
+    return str(src.get(choice) or "")
+
 
 # 種子快照(/roomcontrol/internal/reset 還原用)
 _SEED_ROOM_MN = dict(mock_room_mn)
 _SEED_GUESTS = copy.deepcopy(mock_room_guest_db)
+_SEED_CONF = {}
 
 
 def _room_error_xml(reve_code, action_cod, room):
@@ -283,7 +322,8 @@ def get_internal_state():
     """
     return jsonify({"room_control_state": mock_roomcontrol_state,
                     "room_guest_rooms": sorted(mock_room_guest_db.keys()),
-                    "room_mn": dict(mock_room_mn)}), 200
+                    "room_mn": dict(mock_room_mn),
+                    "thirdparty_dt_conf": {k: dict(v) for k, v in mock_thirdparty_dt_conf.items()}}), 200
 
 
 @roomcontrol_bp.route('/roomcontrol/internal/rooms', methods=['POST'])
@@ -312,4 +352,87 @@ def reset_state():
     mock_room_mn.update(_SEED_ROOM_MN)
     mock_room_guest_db.clear()
     mock_room_guest_db.update(copy.deepcopy(_SEED_GUESTS))
+    mock_thirdparty_dt_conf.clear()
+    mock_thirdparty_dt_conf.update(copy.deepcopy(_SEED_CONF))
     return jsonify({"ok": True}), 200
+
+
+# ---- sa11 THIRDPARTY_DT_CONF + CKI 出站(雲朗 IPTV=70,2026-11-04) ------------------
+
+@roomcontrol_bp.route('/roomcontrol/internal/thirdparty-conf', methods=['GET', 'POST'])
+def thirdparty_conf():
+    """第三方廠商參數設定(sa11 THIRDPARTY_DT_CONF 模擬;IPTV 顯示名稱參數用)。
+
+    POST body = {"third_party_code": "70", "params": {"guest_display_name": "USER_DEFINED",
+                                                       "user_defined_display_name": "貴賓"}}
+    值 None/空字串 = 清除該參數(回到無參數設定 → 預設值);guest_display_name 限合法選項。
+    """
+    if request.method == "GET":
+        return jsonify({"thirdparty_dt_conf":
+                        {k: dict(v) for k, v in mock_thirdparty_dt_conf.items()}}), 200
+    body = request.get_json(silent=True) or {}
+    tp = str(body.get("third_party_code") or "")
+    params = body.get("params")
+    if not tp or not isinstance(params, dict):
+        return jsonify({"code": "400",
+                        "message": "third_party_code and params are required"}), 400
+    slot = mock_thirdparty_dt_conf.setdefault(tp, {})
+    for k, v in params.items():
+        if v is None or v == "":
+            slot.pop(k, None)                     # 清除 → 無參數設定
+            continue
+        v = str(v)
+        if k == "guest_display_name" and v not in DISPLAY_NAME_CHOICES:
+            return jsonify({"code": "400",
+                            "message": f"guest_display_name must be one of {DISPLAY_NAME_CHOICES}"}), 400
+        if len(v) > 2000:                          # sa11 PARAM_VAL NVARCHAR2(2000)
+            return jsonify({"code": "400", "message": f"{k} exceeds 2000 chars"}), 400
+        slot[k] = v
+    return jsonify({"third_party_code": tp, "params": dict(slot)}), 200
+
+
+@roomcontrol_bp.route('/roomcontrol/internal/cki', methods=['POST'])
+def trigger_cki():
+    """模擬 A7 C/I 後組 CKI 出站 XML 推送廠商(sa10 A1 / sa11 CKI SQL;沙盒觸發版)。
+
+    body = {"room_no": "2407", "third_party_code": "70"}
+    行為:取該房最小 CI_SER 住客(訂房資料),依 THIRDPARTY_DT_CONF(該廠商)解析
+    住客姓名欄內容 → 組 CKI XML(REVE=03009010+廠商代號);房間主檔轉 O(入住)。
+    回傳 {"responseBody": <將送達廠商的 CKI XML>, "display_name": <解析後姓名欄>}。
+    """
+    body = request.get_json(silent=True) or {}
+    room = str(body.get("room_no") or "")
+    tp = str(body.get("third_party_code") or "70")
+    if not room:
+        return jsonify({"code": "400", "message": "room_no is required"}), 400
+    sta = mock_room_mn.get(room)
+    if sta is None:
+        return jsonify({"code": "9999", "message": "ROOM not found."}), 404
+    if sta == "E":
+        return jsonify({"code": "1001", "message": "處理第三方廠商傳送的資料時發生錯誤"}), 500
+    guests = mock_room_guest_db.get(room)
+    if not guests:
+        return jsonify({"code": "400", "message": f"no guest data for room {room}"}), 400
+    # sa11 CKI:取得第一個 & 最小入住的 CI_SER 帳務編號(一房間只送一筆住客)
+    guest = min(guests, key=lambda g: str(g.get("CI_SER", "")))
+    conf = mock_thirdparty_dt_conf.get(tp) or {}
+    display_name = resolve_display_name(conf, guest, room)
+    mock_room_mn[room] = "O"                        # C/I → 房間主檔轉住人
+    row = {
+        "REVE-CODE": reve_cki(tp), "ACTION_COD": "CKI", "ROOM_NOS": room,
+        "ROOM_SER": guest.get("ROOM_SER", "1"), "CI_SER": guest.get("CI_SER", ""),
+        "ALT_NAM": display_name,                    # sa11:住客姓名欄依顯示名稱參數解析
+        "SALUTE_NAM": guest.get("SALUTE_NAM", ""), "SALUTE_TYP": guest.get("SALUTE_TYP", ""),
+        "FIRST_NAM": guest.get("FIRST_NAM", ""), "LAST_NAM": guest.get("LAST_NAM", ""),
+        "CI_DAT": guest.get("CI_DAT", ""), "ECO_DAT": guest.get("ECO_DAT", ""),
+        "LANG_COD": guest.get("LANG_COD", ""), "LANG_NAM": guest.get("LANG_NAM", ""),
+        "VIP_STA": guest.get("VIP_STA", ""), "CI_TIM": guest.get("CI_TIM", ""),
+        "INFO_ISGROUP": guest.get("INFO_ISGROUP", "N"),
+        "INFO_REMARK": guest.get("INFO_REMARK", ""),
+        "ACTION_DAT": action_dat_now(),
+    }
+    xml_str = build_rowset_xml(row)
+    logger.info(f"📤 [房控沙盒] CKI 出站 ➔ 廠商{tp} 房號:{room} 姓名欄:{display_name!r}(參數解析)")
+    return jsonify({"procStatus": True, "responseBody": xml_str,
+                    "display_name": display_name, "room_sta": mock_room_mn[room],
+                    "conf": dict(conf)}), 200

@@ -173,23 +173,35 @@ function renderParamForm(s) {
   const edits = state.paramEdits[s.id] || {};
   for (const sp of s.params) {
     const isTouched = !!touched[sp.key];
-    const input = el('input', {
-      class: 'param-input' + (isTouched ? ' touched' : ''),
-      type: 'text',
-      value: isTouched ? String(edits[sp.key] ?? '') : '',
-      placeholder: sp.dynamic ? '自動(每次執行產生)' : (sp.default != null ? String(sp.default) : ''),
-      title: sp.hint || sp.label,
-    });
-    input.oninput = () => {
+    // 單選選項(ParamSpec.choices,sa11 參數表)→ 下拉;其餘 → 文字輸入
+    const cur = isTouched ? String(edits[sp.key] ?? '')
+      : (sp.choices && sp.choices.length && sp.default != null ? String(sp.default) : '');
+    const store = (v) => {
       state.paramEdits[s.id] = state.paramEdits[s.id] || {};
       state.paramTouched[s.id] = state.paramTouched[s.id] || {};
-      state.paramEdits[s.id][sp.key] = input.value;
+      state.paramEdits[s.id][sp.key] = v;
       state.paramTouched[s.id][sp.key] = true;   // 動過才進 overrides——保持請求乾淨
     };
+    let input;
+    if (sp.choices && sp.choices.length) {
+      input = el('select', { class: 'param-input' + (isTouched ? ' touched' : ''), title: sp.hint || sp.label });
+      for (const c of sp.choices) input.appendChild(el('option', { value: c, text: c }));
+      input.value = cur;
+      input.onchange = () => store(input.value);
+    } else {
+      input = el('input', {
+        class: 'param-input' + (isTouched ? ' touched' : ''),
+        type: 'text',
+        value: isTouched ? String(edits[sp.key] ?? '') : '',
+        placeholder: sp.dynamic ? '自動(每次執行產生)' : (sp.default != null ? String(sp.default) : ''),
+        title: sp.hint || sp.label,
+      });
+      input.oninput = () => store(input.value);
+    }
     box.appendChild(el('div', { class: 'param-row' },
       el('span', { class: 'param-label', text: sp.label + (sp.dynamic ? ' ⚡' : ''), title: sp.hint || '' }),
       input,
-      el('span', { class: 'param-type', text: sp.type }),
+      el('span', { class: 'param-type', text: sp.choices && sp.choices.length ? '單選' : sp.type }),
     ));
   }
   const n = paramTouchedCount(s.id);
