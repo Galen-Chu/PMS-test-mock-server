@@ -258,7 +258,8 @@ def test_registry_roomcontrol_module():
     expected |= {"rc_iptv_display_name", "rc_iptv_display_name_default",
                  "rc_iptv_display_name_empty_custom",
                  "rc_iptv_rmc_display_name", "rc_iptv_cox_display_name",
-                 "rc_iptv_roominf_display_name"}
+                 "rc_iptv_roominf_display_name", "rc_iptv_cko_checkout",
+                 "rc_iptv_cix_checkin_cancel"}
     assert expected == set(cases)
     assert all(s.implemented for s in by_mod["roomcontrol"])
     assert {s.vendor for s in by_mod["roomcontrol"]} == {"MINXON", "CHAOFENG", "IPTV"}
@@ -548,7 +549,7 @@ def test_internal_outbound_cki_and_display_name():
     rg = _ob(c, room_no="2404")
     assert rg.status_code == 400
     rbad = _ob(c, action_cod="QUERY")
-    assert rbad.status_code == 400                         # 出站觸發僅 CKI/RMC/COX
+    assert rbad.status_code == 400                         # 出站觸發僅 CKI/CKO/RMC/CIX/COX
     # reset 還原:conf 清空、2407 回 V
     c.post("/roomcontrol/internal/reset")
     st = c.get("/roomcontrol/internal/state").get_json()
@@ -598,6 +599,39 @@ def test_internal_outbound_cox_restore():
     assert rows[0]["FIRST_NAM"] == "小明" and rows[0]["LAST_NAM"] == "王"   # 原值欄不動
     assert rows[0]["CI_SER"] == "202611040002001"
     assert mock_room_mn["2407"] == "O"                     # C/O 還原 → 住人
+    c.post("/roomcontrol/internal/reset")
+
+
+def test_internal_outbound_cko_cix():
+    """CKO(退房)/CIX(C.I還原)出站(sa10 A2/A4):四欄形狀、無住客姓名欄、房況轉 V。"""
+    c = _client()
+    # 種子 2407=V(未入住)→ 退房/C.I還原皆應拒絕(需已入住)
+    assert _ob(c, action_cod="CKO").status_code == 400
+    assert _ob(c, action_cod="CIX").status_code == 400
+    # 兩步:CKI 入住(V→O)→ CKO 退房(O→V)
+    _ob(c)                                                 # CKI:2407 → O
+    r = _ob(c, action_cod="CKO")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["display_name"] is None                    # 無住客姓名欄 → 不解析參數
+    assert body["conf"] == {}
+    rows = parse_rowset_xml(body["responseBody"])
+    assert rows[0]["REVE-CODE"] == "0300902070" and rows[0]["ACTION_COD"] == "CKO"
+    assert rows[0]["ROOM_NOS"] == "2407" and rows[0]["ACTION_DAT"]
+    assert set(rows[0].keys()) == {"REVE-CODE", "ACTION_COD", "ROOM_NOS", "ACTION_DAT"}
+    assert body["room_sta"] == "V" and mock_room_mn["2407"] == "V"
+    # 再兩步:CKI → CIX C.I還原(O→V;sa10 A4 客製「不改髒房」)
+    _ob(c)
+    r2 = _ob(c, action_cod="CIX")
+    assert r2.status_code == 200
+    b2 = r2.get_json()
+    assert b2["display_name"] is None
+    rows2 = parse_rowset_xml(b2["responseBody"])
+    assert rows2[0]["REVE-CODE"] == "0300901170" and rows2[0]["ACTION_COD"] == "CIX"
+    assert set(rows2[0].keys()) == {"REVE-CODE", "ACTION_COD", "ROOM_NOS", "ACTION_DAT"}
+    assert b2["room_sta"] == "V" and mock_room_mn["2407"] == "V"
+    # 住客資料不因退房/還原被刪(訂房仍在,可再 C/I —— 案例可重複執行的前提)
+    assert mock_room_guest_db.get("2407")
     c.post("/roomcontrol/internal/reset")
 
 

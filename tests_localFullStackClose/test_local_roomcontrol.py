@@ -208,6 +208,25 @@ def test_orchestrator_closed_loop_rc25_fidelity(server_up):
     assert pbx["CLEAN_ROOM"] == "2"                   # 斷線略過位 9 更新,保線上態舊值
 
 
+def test_orchestrator_iptv_cko_cix_cases(server_up):
+    """閉環(RC4c):CKO/CIX 出站兩案經 /runs 全 PASS,且連跑兩輪皆綠(自我還原種子)。"""
+    for _round in (1, 2):
+        results = _run_and_results({
+            "environment": "LOCAL_OFFLINE",
+            "scenario_ids": ["rc_iptv_cko_checkout", "rc_iptv_cix_checkin_cancel"],
+        })
+        cko = results["rc_iptv_cko_checkout"]
+        cix = results["rc_iptv_cix_checkin_cancel"]
+        assert cko["status"] == "PASS", (cko, _round)          # 兩步 C/I→C/O,房況回 V
+        assert cko["response_payload"]["reve_code"] == "0300902070"
+        assert cko["response_payload"]["room_sta"] == "V"
+        assert cko["response_payload"]["fields"] == ["ACTION_COD", "ACTION_DAT",
+                                                     "REVE-CODE", "ROOM_NOS"]
+        assert cix["status"] == "PASS", (cix, _round)          # 兩步 C/I→C.I還原,房況回 V
+        assert cix["response_payload"]["reve_code"] == "0300901170"
+        assert cix["response_payload"]["room_sta"] == "V"
+
+
 def test_orchestrator_iptv_display_name_cases(server_up):
     """閉環⑦(RC4a/RC4b):IPTV 雲朗(70)住客顯示名稱六案經 /runs 全 PASS(含覆寫貫穿)。"""
     results = _run_and_results({

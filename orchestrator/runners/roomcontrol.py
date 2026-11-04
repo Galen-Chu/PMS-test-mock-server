@@ -637,6 +637,44 @@ def _iptv_run_case(ctx, case_id, tp, action, room_no, choice, custom, to_room=No
     return _fail(case_id, "", scenario, dur, response_payload=summary)
 
 
+def _iptv_run_simple_case(ctx, case_id, tp, action, room_no):
+    """CKO(退房)/CIX(C.I還原)出站(sa10 A2/A4):兩步 C/I → 退房/還原。
+
+    步驟1 CKI 入住(V→O)→ 步驟2 觸發 CKO/CIX(O→V);斷言四欄形狀
+    (REVE/ACTION_COD/ROOM_NOS/ACTION_DAT,無住客姓名欄)、display_name=None、
+    房況回 V。結束後房間回到種子狀態(自我還原,可重複執行不互汙)。
+    """
+    import time as _t
+    scenario = registry.get(case_id)
+    t0 = _t.perf_counter()
+    if ctx.use_real:
+        return _iptv_skip(case_id, scenario)
+    _iptv_trigger_outbound(ctx, "CKI", room_no, tp)            # 步驟1:C/I 入住(V→O)
+    res, err = _iptv_trigger_outbound(ctx, action, room_no, tp)  # 步驟2:退房/C.I還原(O→V)
+    dur = int((_t.perf_counter() - t0) * 1000)
+    summary = {"action_cod": action, "room_no": room_no}
+    if err or res is None:
+        return _fail(case_id, "", scenario, dur,
+                     response_payload={"__error__": err or "no response", **summary})
+    body = res.json() if res.status_code == 200 else {}
+    rows = parse_rowset_xml(body.get("responseBody", "")) if body else []
+    row = rows[0] if rows else {}
+    summary.update({"procStatus": body.get("procStatus"),
+                    "reve_code": row.get("REVE-CODE"),
+                    "room_sta": body.get("room_sta"),
+                    "fields": sorted(row.keys())})
+    ok = (res.status_code == 200 and body.get("procStatus") is True
+          and body.get("display_name") is None
+          and row.get("REVE-CODE") == vendor_IPTV.reve_outbound(action, tp)
+          and row.get("ACTION_COD") == action
+          and row.get("ROOM_NOS") == room_no
+          and "ALT_NAM" not in row and "FIRST_NAM" not in row
+          and body.get("room_sta") == "V")
+    if ok:
+        return _ok(case_id, "", scenario, dur, response_payload=summary)
+    return _fail(case_id, "", scenario, dur, response_payload=summary)
+
+
 def _iptv_run_roominf_case(ctx, case_id, tp, room_no, choice, custom):
     """ROOM_INF(A6):廠商查房 → PMS 回應的 ALT_NAM 依「ROOM_INF action」參數解析。
 
@@ -723,6 +761,18 @@ def _register_rc_iptv_cases():
                                       p["guest_display_name"],
                                       p.get("user_defined_display_name"))
 
+    def _cko_checkout(ctx: RunContext) -> CaseResult:
+        # sa10 A2 退房:兩步 C/I→C/O,出站僅四欄、無住客姓名欄(QA 參數表無 CKO 列)
+        p = _p(ctx, "rc_iptv_cko_checkout")
+        return _iptv_run_simple_case(ctx, "rc_iptv_cko_checkout",
+                                     p["third_party_code"], "CKO", p["room_no"])
+
+    def _cix_checkin_cancel(ctx: RunContext) -> CaseResult:
+        # sa10 A4 C/I還原(客製):入住改不入住、不改髒房;出站同四欄形狀
+        p = _p(ctx, "rc_iptv_cix_checkin_cancel")
+        return _iptv_run_simple_case(ctx, "rc_iptv_cix_checkin_cancel",
+                                     p["third_party_code"], "CIX", p["room_no"])
+
     _params_display = lambda defaults: [
         ParamSpec("room_no", "房號", "str", defaults.get("room_no", "2407"),
                   hint="種子 2407=預訂未入住(含訂房/團體資料);未登錄 → 9999"),
@@ -778,6 +828,25 @@ def _register_rc_iptv_cases():
                       hint="換房目標房(種子 2408=空房;案例結束會反向換回還原種子)"),
             *_params_display({})[1:],
         ],
+    )
+    # sa10 A2/A4:補齊 QA THIRDPARTY_DT(廠商70)6 API 的最後兩個出站
+    _params_simple = lambda: [
+        ParamSpec("room_no", "房號", "str", "2407",
+                  hint="兩步案例:先 C/I 入住再觸發退房/C.I還原;結束回種子 V"),
+        ParamSpec("third_party_code", "廠商代碼", "str", tp,
+                  hint=f"A7 公版 thirdParty 代碼;{vendor_IPTV.VENDOR_LABEL}={tp}"),
+    ]
+    registry.register(
+        "rc_iptv_cko_checkout", module="roomcontrol", vendor=vid,
+        name="退房CKO出站(sa10 A2・6API)", endpoint=ep,
+        runner=_cko_checkout,
+        params=_params_simple(),
+    )
+    registry.register(
+        "rc_iptv_cix_checkin_cancel", module="roomcontrol", vendor=vid,
+        name="C/I還原CIX出站(sa10 A4・6API)", endpoint=ep,
+        runner=_cix_checkin_cancel,
+        params=_params_simple(),
     )
 
 

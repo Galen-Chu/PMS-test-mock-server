@@ -410,12 +410,13 @@ def thirdparty_conf():
 
 @roomcontrol_bp.route('/roomcontrol/internal/outbound', methods=['POST'])
 def trigger_outbound():
-    """模擬 A7 出站 XML 推送廠商(sa10 A1 CKI / A3 RMC / A5 COX;sa11 參數解析;沙盒觸發版)。
+    """模擬 A7 出站 XML 推送廠商(sa10 A1 CKI / A2 CKO / A3 RMC / A4 CIX / A5 COX;沙盒觸發版)。
 
     body = {"action_cod": "CKI", "room_no": "2407", "third_party_code": "70"}
            RMC 另帶 "to_room_no": "2408"(換房:舊房清空變空房、新房變住人)
     行為:取該房最小 CI_SER 住客,依「該廠商×該 action」THIRDPARTY_DT_CONF 解析
-    住客姓名欄 → 組出站 XML(REVE=訊息樣板+廠商代號);CKI/COX 房間轉 O、RMC 搬移住客。
+    住客姓名欄 → 組出站 XML(REVE=訊息樣板+廠商代號);CKI/COX 房間轉 O、RMC 搬移住客、
+    CKO(退房)/CIX(C.I還原)房間轉 V(出站僅四欄、無住客姓名欄,display_name=None)。
     回傳 {"responseBody": <將送達廠商的 XML>, "display_name": <解析後姓名欄>, "room_sta"}。
     """
     body = request.get_json(silent=True) or {}
@@ -447,8 +448,20 @@ def trigger_outbound():
     # sa11:取得第一個 & 最小入住的 CI_SER 帳務編號(一房間只送一筆住客)
     guest = min(guests, key=lambda g: str(g.get("CI_SER", "")))
     conf = (mock_thirdparty_dt_conf.get(tp) or {}).get(action) or {}
-    display_name = resolve_display_name(conf, guest, room)
-    if action == "RMC":
+    display_name = None if action in ("CKO", "CIX") else resolve_display_name(conf, guest, room)
+    if action in ("CKO", "CIX"):
+        # sa10 A2/A4:退房/C.I還原出站僅 REVE/ACTION_COD/ROOM_NOS/ACTION_DAT 四欄;
+        # 無住客姓名欄 → 不適用顯示名稱參數(QA 參數表僅 CKI/RMC/COX/ROOM_INF);
+        # 房間轉空房(CIX 客製重點「不改髒房」,mock 房況值域無髒房 → 同回 V)
+        if sta != "O":
+            return jsonify({"code": "400",
+                            "message": f"room {room} is not check-in (sta={sta}); "
+                                       f"{action} requires an in-house room"}), 400
+        mock_room_mn[room] = "V"
+        room_sta = mock_room_mn[room]
+        row = {"REVE-CODE": reve_outbound(action, tp), "ACTION_COD": action,
+               "ROOM_NOS": room, "ACTION_DAT": action_dat_now()}
+    elif action == "RMC":
         # sa10 A3:換房——舊房清空變未入住、新房住人;廠商須將舊房資訊改設到新房
         mock_room_guest_db[to_room] = mock_room_guest_db.pop(room)
         mock_room_mn[room] = "V"
@@ -485,7 +498,8 @@ def trigger_outbound():
     xml_str = build_rowset_xml(row)
     logger.info(f"📤 [房控沙盒] {action} 出站 ➔ 廠商{tp} 房號:{room}"
                 + (f"→{to_room}" if action == "RMC" else "")
-                + f" 姓名欄:{display_name!r}(參數解析)")
+                + (f" 姓名欄:{display_name!r}(參數解析)" if display_name is not None
+                   else " (sa10 A2/A4 四欄出站,無住客姓名欄)"))
     return jsonify({"procStatus": True, "responseBody": xml_str, "action_cod": action,
                     "display_name": display_name, "room_sta": room_sta,
                     "conf": dict(conf)}), 200
