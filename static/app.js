@@ -13,11 +13,8 @@ async function init() {
   state.environments = envs;
   state.modules = mods;
   state.env = envs[0]?.id || 'LOCAL_OFFLINE';
-  // 預設勾選所有已實作案例(遍歷模組→廠商→案例);每模組預設選第一個廠商
-  for (const m of mods) {
-    state.activeVendor[m.module] = m.vendors[0]?.id;
-    for (const v of m.vendors) for (const s of v.scenarios) if (s.implemented) state.checked[s.id] = true;
-  }
+  // 預設全不勾選(2026-11-04 UX:案例由使用者自行圈選,避免誤跑非目標模組);每模組預設選第一個廠商
+  for (const m of mods) state.activeVendor[m.module] = m.vendors[0]?.id;
   render();
   // 對外隧道狀態非同步補載(失敗不影響主控台)
   api.getTunnelStatus().then(t => { state.tunnel = t; render(); }).catch(() => {});
