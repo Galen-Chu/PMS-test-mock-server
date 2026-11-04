@@ -44,7 +44,9 @@ from .vendors.vendor_A7_XML import (
     DEFAULT_STATUS_BITS, MSG_DONE, B4_SINGLE_BIT_INDEX, is_b4_action, set_status_bit,
     decode_status_bits, action_dat_now,
 )
-from .vendors.vendor_IPTV import reve_cki
+from .vendors.vendor_IPTV import (CONF_ACTIONS, OUTBOUND_REVE_PREFIX,
+                                   PARAM_DISPLAY_NAME, PARAM_USER_DEFINED,
+                                   reve_outbound)
 
 roomcontrol_bp = Blueprint('roomcontrol', __name__)
 
@@ -62,6 +64,7 @@ mock_room_mn = {
     "2501": "V", "2601": "V", "2602": "V",                  # 離線測試用房
     "2701": "V", "2702": "V", "2703": "V", "2704": "V", "2705": "V",
     "2407": "V",                                            # CKI 樣本房:預訂未入住(住客資料在、ROOM_MN=V)
+    "2408": "V",                                            # RMC 換房目標房(sa10 A3:舊房清空、新房住人)
     "9901": "E",                                            # 模擬內部錯誤房(RETN 1001)
 }
 
@@ -93,8 +96,10 @@ mock_room_guest_db = {
     ],
 }
 
-# 第三方廠商設定明細檔(sa11 THIRDPARTY_DT_CONF):{THIRDPARTY_COD: {PARAM_COD: PARAM_VAL}}
-# 種子為空 = 無參數設定 → 依預設值處理(guest_display_name 預設 ALT_NAM)
+# 第三方廠商設定明細檔(sa11 THIRDPARTY_DT_CONF;PK 含 THIRDPARTY_ACTION_COD):
+# {THIRDPARTY_COD: {ACTION_COD: {PARAM_COD: PARAM_VAL}}}(QA DB 70 已見 CKI/RMC/COX/ROOM_INF)
+# PARAM_COD 與 QA DB 逐字一致(guest.display.name / user.defined.display.name)。
+# 種子為空 = 無參數設定 → 依預設值處理(guest.display.name 預設 ALT_NAM)
 mock_thirdparty_dt_conf = {}
 DISPLAY_NAME_CHOICES = ("GROUP_NOS", "ROOM_NOS", "LAST_NAM", "FIRST_NAM", "ALT_NAM", "USER_DEFINED")
 DEFAULT_DISPLAY_NAME = "ALT_NAM"   # sa11 參數表預設值
@@ -104,15 +109,15 @@ def resolve_display_name(params, guest, room_no):
     """sa11 guest_display_name:傳送廠商之住客姓名欄內容解析。
 
     - 無參數設定/讀取無資料/值非合法選項 → 預設 ALT_NAM
-    - USER_DEFINED → user_defined_display_name 內容如實傳送(無值 → 廠商收無資料)
+    - USER_DEFINED → user.defined.display.name 內容如實傳送(無值 → 廠商收無資料)
     - 其餘選項 → 住客/訂房對應欄位(GROUP_NOS=訂房名稱團號、ROOM_NOS=房號)
     """
     params = params or {}
-    choice = params.get("guest_display_name") or DEFAULT_DISPLAY_NAME
+    choice = params.get(PARAM_DISPLAY_NAME) or DEFAULT_DISPLAY_NAME
     if choice not in DISPLAY_NAME_CHOICES:
         choice = DEFAULT_DISPLAY_NAME
     if choice == "USER_DEFINED":
-        return str(params.get("user_defined_display_name") or "")
+        return str(params.get(PARAM_USER_DEFINED) or "")
     src = {"GROUP_NOS": guest.get("GROUP_NOS", ""), "ROOM_NOS": str(room_no),
            "LAST_NAM": guest.get("LAST_NAM", ""), "FIRST_NAM": guest.get("FIRST_NAM", ""),
            "ALT_NAM": guest.get("ALT_NAM", "")}
@@ -152,19 +157,23 @@ def _room_inf_vacant_row(room_nos, reve_code, room_sta):
             "LANG_NAM": "", "VIP_STA": "", **_retn_tail()}
 
 
-def _room_inf_rows(room_nos, reve_code):
+def _room_inf_rows(room_nos, reve_code, tp_code=""):
     """組 ROOM_INF 回應 ROW(依 ROOM_MN:O → 每住客一 ROW;V/R/S → 全空欄單列)。
 
+    RC4b:ALT_NAM 依「該廠商 ROOM_INF action」的 THIRDPARTY_DT_CONF 參數解析
+    (QA DB 截圖:ROOM_INF 亦掛 guest.display.name;FIRST_NAM/LAST_NAM 維持原值)。
     呼叫端已先擋未知房號(9999)與 E 房(1001);防禦:O 房無住客種子 → O 空欄單列。
     """
     sta = mock_room_mn.get(room_nos, "V")
     guests = mock_room_guest_db.get(room_nos)
     if sta != "O" or not guests:
         return [_room_inf_vacant_row(room_nos, reve_code, sta)]
+    conf = (mock_thirdparty_dt_conf.get(tp_code) or {}).get("ROOM_INF") or {}
     rows = []
     for gst in guests:
+        row = {**gst, "ALT_NAM": resolve_display_name(conf, gst, room_nos)}
         rows.append({"SEND-CODE": reve_code, "ACTION_COD": "ROOM_INF", "ROOM_NOS": room_nos,
-                     "ROOM_STA": "O", **gst, **_retn_tail()})
+                     "ROOM_STA": "O", **row, **_retn_tail()})
     return rows
 
 
@@ -298,7 +307,7 @@ def import_sync_files():
                                 "message": "CARD_TYP and ACTION_STA are required for B5"}), 417
             resp_xml, proc = _apply_keybox_push(row)
         elif action_cod == "ROOM_INF":
-            resp_xml = build_rowset_xml(_room_inf_rows(room, reve))
+            resp_xml = build_rowset_xml(_room_inf_rows(room, reve, str(body.get("thirdPartyCode") or "")))
             proc = True
         elif action_cod == "RETURN":
             resp_xml = build_rowset_xml(_return_rows(reve))
@@ -323,7 +332,8 @@ def get_internal_state():
     return jsonify({"room_control_state": mock_roomcontrol_state,
                     "room_guest_rooms": sorted(mock_room_guest_db.keys()),
                     "room_mn": dict(mock_room_mn),
-                    "thirdparty_dt_conf": {k: dict(v) for k, v in mock_thirdparty_dt_conf.items()}}), 200
+                    "thirdparty_dt_conf": {tp: {a: dict(p) for a, p in acts.items()}
+                                           for tp, acts in mock_thirdparty_dt_conf.items()}}), 200
 
 
 @roomcontrol_bp.route('/roomcontrol/internal/rooms', methods=['POST'])
@@ -357,82 +367,125 @@ def reset_state():
     return jsonify({"ok": True}), 200
 
 
-# ---- sa11 THIRDPARTY_DT_CONF + CKI 出站(雲朗 IPTV=70,2026-11-04) ------------------
+# ---- sa11 THIRDPARTY_DT_CONF + PMS→廠商出站(雲朗 IPTV=70;RC4a 2026-11-04 / RC4b 補齊 action_cod) --
 
 @roomcontrol_bp.route('/roomcontrol/internal/thirdparty-conf', methods=['GET', 'POST'])
 def thirdparty_conf():
-    """第三方廠商參數設定(sa11 THIRDPARTY_DT_CONF 模擬;IPTV 顯示名稱參數用)。
+    """第三方廠商參數設定(sa11 THIRDPARTY_DT_CONF 模擬;PK 含 ACTION_COD)。
 
-    POST body = {"third_party_code": "70", "params": {"guest_display_name": "USER_DEFINED",
-                                                       "user_defined_display_name": "貴賓"}}
-    值 None/空字串 = 清除該參數(回到無參數設定 → 預設值);guest_display_name 限合法選項。
+    POST body = {"third_party_code": "70", "action_cod": "RMC",
+                 "params": {"guest.display.name": "USER_DEFINED",
+                            "user.defined.display.name": "貴賓"}}
+    action_cod 限 CONF_ACTIONS(QA DB 70 已見 CKI/RMC/COX/ROOM_INF);參數鍵 = QA PARAM_COD。
+    值 None/空字串 = 清除該參數(回到無參數設定 → 預設值);guest.display.name 限合法選項。
     """
     if request.method == "GET":
         return jsonify({"thirdparty_dt_conf":
-                        {k: dict(v) for k, v in mock_thirdparty_dt_conf.items()}}), 200
+                        {tp: {a: dict(p) for a, p in acts.items()}
+                         for tp, acts in mock_thirdparty_dt_conf.items()}}), 200
     body = request.get_json(silent=True) or {}
     tp = str(body.get("third_party_code") or "")
+    action = str(body.get("action_cod") or "CKI").upper()
     params = body.get("params")
     if not tp or not isinstance(params, dict):
         return jsonify({"code": "400",
                         "message": "third_party_code and params are required"}), 400
-    slot = mock_thirdparty_dt_conf.setdefault(tp, {})
+    if action not in CONF_ACTIONS:
+        return jsonify({"code": "400",
+                        "message": f"action_cod must be one of {CONF_ACTIONS}"}), 400
+    slot = mock_thirdparty_dt_conf.setdefault(tp, {}).setdefault(action, {})
     for k, v in params.items():
         if v is None or v == "":
             slot.pop(k, None)                     # 清除 → 無參數設定
             continue
         v = str(v)
-        if k == "guest_display_name" and v not in DISPLAY_NAME_CHOICES:
+        if k == PARAM_DISPLAY_NAME and v not in DISPLAY_NAME_CHOICES:
             return jsonify({"code": "400",
-                            "message": f"guest_display_name must be one of {DISPLAY_NAME_CHOICES}"}), 400
+                            "message": f"{PARAM_DISPLAY_NAME} must be one of {DISPLAY_NAME_CHOICES}"}), 400
         if len(v) > 2000:                          # sa11 PARAM_VAL NVARCHAR2(2000)
             return jsonify({"code": "400", "message": f"{k} exceeds 2000 chars"}), 400
         slot[k] = v
-    return jsonify({"third_party_code": tp, "params": dict(slot)}), 200
+    return jsonify({"third_party_code": tp, "action_cod": action, "params": dict(slot)}), 200
 
 
-@roomcontrol_bp.route('/roomcontrol/internal/cki', methods=['POST'])
-def trigger_cki():
-    """模擬 A7 C/I 後組 CKI 出站 XML 推送廠商(sa10 A1 / sa11 CKI SQL;沙盒觸發版)。
+@roomcontrol_bp.route('/roomcontrol/internal/outbound', methods=['POST'])
+def trigger_outbound():
+    """模擬 A7 出站 XML 推送廠商(sa10 A1 CKI / A3 RMC / A5 COX;sa11 參數解析;沙盒觸發版)。
 
-    body = {"room_no": "2407", "third_party_code": "70"}
-    行為:取該房最小 CI_SER 住客(訂房資料),依 THIRDPARTY_DT_CONF(該廠商)解析
-    住客姓名欄內容 → 組 CKI XML(REVE=03009010+廠商代號);房間主檔轉 O(入住)。
-    回傳 {"responseBody": <將送達廠商的 CKI XML>, "display_name": <解析後姓名欄>}。
+    body = {"action_cod": "CKI", "room_no": "2407", "third_party_code": "70"}
+           RMC 另帶 "to_room_no": "2408"(換房:舊房清空變空房、新房變住人)
+    行為:取該房最小 CI_SER 住客,依「該廠商×該 action」THIRDPARTY_DT_CONF 解析
+    住客姓名欄 → 組出站 XML(REVE=訊息樣板+廠商代號);CKI/COX 房間轉 O、RMC 搬移住客。
+    回傳 {"responseBody": <將送達廠商的 XML>, "display_name": <解析後姓名欄>, "room_sta"}。
     """
     body = request.get_json(silent=True) or {}
+    action = str(body.get("action_cod") or "CKI").upper()
     room = str(body.get("room_no") or "")
+    to_room = str(body.get("to_room_no") or "")
     tp = str(body.get("third_party_code") or "70")
+    if action not in OUTBOUND_REVE_PREFIX:
+        return jsonify({"code": "400",
+                        "message": f"action_cod must be one of {tuple(OUTBOUND_REVE_PREFIX)}"}), 400
     if not room:
         return jsonify({"code": "400", "message": "room_no is required"}), 400
+    if action == "RMC" and not to_room:
+        return jsonify({"code": "400", "message": "to_room_no is required for RMC"}), 400
     sta = mock_room_mn.get(room)
     if sta is None:
         return jsonify({"code": "9999", "message": "ROOM not found."}), 404
     if sta == "E":
         return jsonify({"code": "1001", "message": "處理第三方廠商傳送的資料時發生錯誤"}), 500
+    if action == "RMC":
+        to_sta = mock_room_mn.get(to_room)
+        if to_sta is None:
+            return jsonify({"code": "9999", "message": f"ROOM not found: {to_room}"}), 404
+        if to_sta == "E":
+            return jsonify({"code": "1001", "message": "處理第三方廠商傳送的資料時發生錯誤"}), 500
     guests = mock_room_guest_db.get(room)
     if not guests:
         return jsonify({"code": "400", "message": f"no guest data for room {room}"}), 400
-    # sa11 CKI:取得第一個 & 最小入住的 CI_SER 帳務編號(一房間只送一筆住客)
+    # sa11:取得第一個 & 最小入住的 CI_SER 帳務編號(一房間只送一筆住客)
     guest = min(guests, key=lambda g: str(g.get("CI_SER", "")))
-    conf = mock_thirdparty_dt_conf.get(tp) or {}
+    conf = (mock_thirdparty_dt_conf.get(tp) or {}).get(action) or {}
     display_name = resolve_display_name(conf, guest, room)
-    mock_room_mn[room] = "O"                        # C/I → 房間主檔轉住人
-    row = {
-        "REVE-CODE": reve_cki(tp), "ACTION_COD": "CKI", "ROOM_NOS": room,
-        "ROOM_SER": guest.get("ROOM_SER", "1"), "CI_SER": guest.get("CI_SER", ""),
-        "ALT_NAM": display_name,                    # sa11:住客姓名欄依顯示名稱參數解析
-        "SALUTE_NAM": guest.get("SALUTE_NAM", ""), "SALUTE_TYP": guest.get("SALUTE_TYP", ""),
-        "FIRST_NAM": guest.get("FIRST_NAM", ""), "LAST_NAM": guest.get("LAST_NAM", ""),
-        "CI_DAT": guest.get("CI_DAT", ""), "ECO_DAT": guest.get("ECO_DAT", ""),
-        "LANG_COD": guest.get("LANG_COD", ""), "LANG_NAM": guest.get("LANG_NAM", ""),
-        "VIP_STA": guest.get("VIP_STA", ""), "CI_TIM": guest.get("CI_TIM", ""),
-        "INFO_ISGROUP": guest.get("INFO_ISGROUP", "N"),
-        "INFO_REMARK": guest.get("INFO_REMARK", ""),
-        "ACTION_DAT": action_dat_now(),
-    }
+    if action == "RMC":
+        # sa10 A3:換房——舊房清空變未入住、新房住人;廠商須將舊房資訊改設到新房
+        mock_room_guest_db[to_room] = mock_room_guest_db.pop(room)
+        mock_room_mn[room] = "V"
+        mock_room_mn[to_room] = "O"
+        room_sta = {"old": mock_room_mn[room], "new": mock_room_mn[to_room]}
+        row = {
+            "REVE-CODE": reve_outbound(action, tp), "ACTION_COD": action,
+            "OROOM_NOS": room, "NROOM_NOS": to_room,
+            "ROOM_SER": guest.get("ROOM_SER", "1"), "CI_SER": guest.get("CI_SER", ""),
+            "ALT_NAM": display_name,                # sa11:住客姓名欄依顯示名稱參數解析
+            "SALUTE_NAM": guest.get("SALUTE_NAM", ""), "SALUTE_TYP": guest.get("SALUTE_TYP", ""),
+            "CI_DAT": guest.get("CI_DAT", ""), "ECO_DAT": guest.get("ECO_DAT", ""),
+            "LANG_COD": guest.get("LANG_COD", ""), "LANG_NAM": guest.get("LANG_NAM", ""),
+            "VIP_STA": guest.get("VIP_STA", ""), "CI_TIM": guest.get("CI_TIM", ""),
+            "ACTION_DAT": action_dat_now(),
+        }
+    else:
+        # CKI(C/I)與 COX(C/O 還原)欄位形狀同 sa10 A1/A5 樣本;房間主檔皆為住人
+        mock_room_mn[room] = "O"
+        room_sta = mock_room_mn[room]
+        row = {
+            "REVE-CODE": reve_outbound(action, tp), "ACTION_COD": action, "ROOM_NOS": room,
+            "ROOM_SER": guest.get("ROOM_SER", "1"), "CI_SER": guest.get("CI_SER", ""),
+            "ALT_NAM": display_name,                # sa11:住客姓名欄依顯示名稱參數解析
+            "SALUTE_NAM": guest.get("SALUTE_NAM", ""), "SALUTE_TYP": guest.get("SALUTE_TYP", ""),
+            "FIRST_NAM": guest.get("FIRST_NAM", ""), "LAST_NAM": guest.get("LAST_NAM", ""),
+            "CI_DAT": guest.get("CI_DAT", ""), "ECO_DAT": guest.get("ECO_DAT", ""),
+            "LANG_COD": guest.get("LANG_COD", ""), "LANG_NAM": guest.get("LANG_NAM", ""),
+            "VIP_STA": guest.get("VIP_STA", ""), "CI_TIM": guest.get("CI_TIM", ""),
+            "INFO_ISGROUP": guest.get("INFO_ISGROUP", "N"),
+            "INFO_REMARK": guest.get("INFO_REMARK", ""),
+            "ACTION_DAT": action_dat_now(),
+        }
     xml_str = build_rowset_xml(row)
-    logger.info(f"📤 [房控沙盒] CKI 出站 ➔ 廠商{tp} 房號:{room} 姓名欄:{display_name!r}(參數解析)")
-    return jsonify({"procStatus": True, "responseBody": xml_str,
-                    "display_name": display_name, "room_sta": mock_room_mn[room],
+    logger.info(f"📤 [房控沙盒] {action} 出站 ➔ 廠商{tp} 房號:{room}"
+                + (f"→{to_room}" if action == "RMC" else "")
+                + f" 姓名欄:{display_name!r}(參數解析)")
+    return jsonify({"procStatus": True, "responseBody": xml_str, "action_cod": action,
+                    "display_name": display_name, "room_sta": room_sta,
                     "conf": dict(conf)}), 200

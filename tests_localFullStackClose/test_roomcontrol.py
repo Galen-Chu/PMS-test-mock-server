@@ -254,9 +254,11 @@ def test_registry_roomcontrol_module():
                           "clean", "rmtemp", "keybox",
                           "bad_xml", "unknown_action", "missing_room_nos",
                           "room_not_found", "internal_error", "room_sta_offline")}
-    # RC4a:IPTV 雲朗(70)住客顯示名稱參數三案
+    # RC4a/RC4b:IPTV 雲朗(70)住客顯示名稱參數六案(CKI 三案 + RMC/COX/ROOM_INF)
     expected |= {"rc_iptv_display_name", "rc_iptv_display_name_default",
-                 "rc_iptv_display_name_empty_custom"}
+                 "rc_iptv_display_name_empty_custom",
+                 "rc_iptv_rmc_display_name", "rc_iptv_cox_display_name",
+                 "rc_iptv_roominf_display_name"}
     assert expected == set(cases)
     assert all(s.implemented for s in by_mod["roomcontrol"])
     assert {s.vendor for s in by_mod["roomcontrol"]} == {"MINXON", "CHAOFENG", "IPTV"}
@@ -436,50 +438,84 @@ def test_resolve_display_name_param_table():
              "GROUP_NOS": "GP2026A"}
     assert DEFAULT_DISPLAY_NAME == "ALT_NAM"
     assert resolve_display_name({}, guest, "2407") == "王小明"              # 無參數 → 預設
-    assert resolve_display_name({"guest_display_name": "ALT_NAM"}, guest, "2407") == "王小明"
-    assert resolve_display_name({"guest_display_name": "LAST_NAM"}, guest, "2407") == "王"
-    assert resolve_display_name({"guest_display_name": "FIRST_NAM"}, guest, "2407") == "小明"
-    assert resolve_display_name({"guest_display_name": "ROOM_NOS"}, guest, "2407") == "2407"
-    assert resolve_display_name({"guest_display_name": "GROUP_NOS"}, guest, "2407") == "GP2026A"
-    assert resolve_display_name({"guest_display_name": "USER_DEFINED",
-                                 "user_defined_display_name": "貴賓 王小明"}, guest, "2407") == "貴賓 王小明"
+    # 參數鍵 = QA DB PARAM_COD(guest.display.name / user.defined.display.name)
+    assert resolve_display_name({"guest.display.name": "ALT_NAM"}, guest, "2407") == "王小明"
+    assert resolve_display_name({"guest.display.name": "LAST_NAM"}, guest, "2407") == "王"
+    assert resolve_display_name({"guest.display.name": "FIRST_NAM"}, guest, "2407") == "小明"
+    assert resolve_display_name({"guest.display.name": "ROOM_NOS"}, guest, "2407") == "2407"
+    assert resolve_display_name({"guest.display.name": "GROUP_NOS"}, guest, "2407") == "GP2026A"
+    assert resolve_display_name({"guest.display.name": "USER_DEFINED",
+                                 "user.defined.display.name": "貴賓 王小明"}, guest, "2407") == "貴賓 王小明"
     # sa11 明文:USER_DEFINED 不論有無值皆依參數內容傳送 → 空值 = 廠商收無資料
-    assert resolve_display_name({"guest_display_name": "USER_DEFINED"}, guest, "2407") == ""
-    assert resolve_display_name({"guest_display_name": "USER_DEFINED",
-                                 "user_defined_display_name": ""}, guest, "2407") == ""
+    assert resolve_display_name({"guest.display.name": "USER_DEFINED"}, guest, "2407") == ""
+    assert resolve_display_name({"guest.display.name": "USER_DEFINED",
+                                 "user.defined.display.name": ""}, guest, "2407") == ""
     # 非合法選項 → 回預設(沙盒不炸,對齊「讀取無資料依預設值」)
-    assert resolve_display_name({"guest_display_name": "NOSUCH"}, guest, "2407") == "王小明"
+    assert resolve_display_name({"guest.display.name": "NOSUCH"}, guest, "2407") == "王小明"
     assert set(DISPLAY_NAME_CHOICES) == {"GROUP_NOS", "ROOM_NOS", "LAST_NAM",
                                          "FIRST_NAM", "ALT_NAM", "USER_DEFINED"}
 
 
 def test_internal_thirdparty_conf_endpoint():
-    """THIRDPARTY_DT_CONF 端點:設定/讀取/清除/非法選項 400。"""
+    """THIRDPARTY_DT_CONF 端點:per-action 設定/讀取/清除/非法選項與 action 400。
+
+    PK 含 THIRDPARTY_ACTION_COD(QA DB 70 已見 CKI/RMC/COX/ROOM_INF),
+    參數鍵 = QA PARAM_COD(guest.display.name 等)。
+    """
     c = _client()
     r = c.post("/roomcontrol/internal/thirdparty-conf",
-               json={"third_party_code": "70",
-                     "params": {"guest_display_name": "USER_DEFINED",
-                                "user_defined_display_name": "貴賓"}})
-    assert r.status_code == 200 and r.get_json()["params"]["guest_display_name"] == "USER_DEFINED"
-    assert c.get("/roomcontrol/internal/thirdparty-conf").get_json()["thirdparty_dt_conf"]["70"]["user_defined_display_name"] == "貴賓"
-    # 非法選項 → 400
+               json={"third_party_code": "70", "action_cod": "RMC",
+                     "params": {"guest.display.name": "USER_DEFINED",
+                                "user.defined.display.name": "貴賓"}})
+    assert r.status_code == 200
+    assert r.get_json()["action_cod"] == "RMC"
+    assert r.get_json()["params"]["guest.display.name"] == "USER_DEFINED"
+    conf = c.get("/roomcontrol/internal/thirdparty-conf").get_json()["thirdparty_dt_conf"]
+    assert conf["70"]["RMC"]["user.defined.display.name"] == "貴賓"
+    assert conf["70"].get("CKI", {}) == {}            # 各 action 參數獨立(未設=無參數)
+    # 缺 action_cod → 預設 CKI(RC4a 相容)
+    r2 = c.post("/roomcontrol/internal/thirdparty-conf",
+                json={"third_party_code": "70",
+                      "params": {"guest.display.name": "LAST_NAM"}})
+    assert r2.status_code == 200 and r2.get_json()["action_cod"] == "CKI"
+    assert c.get("/roomcontrol/internal/thirdparty-conf").get_json()[
+        "thirdparty_dt_conf"]["70"]["CKI"]["guest.display.name"] == "LAST_NAM"
+    # 非法選項 / 非法 action_cod → 400
     rb = c.post("/roomcontrol/internal/thirdparty-conf",
-                json={"third_party_code": "70", "params": {"guest_display_name": "X"}})
+                json={"third_party_code": "70",
+                      "params": {"guest.display.name": "X"}})
     assert rb.status_code == 400
+    rbad = c.post("/roomcontrol/internal/thirdparty-conf",
+                  json={"third_party_code": "70", "action_cod": "CKO",
+                        "params": {"guest.display.name": "ALT_NAM"}})
+    assert rbad.status_code == 400                    # CKO 未見於 QA 參數(CONF_ACTIONS 外)
     # 值 None = 清除 → 回到無參數設定
     rc = c.post("/roomcontrol/internal/thirdparty-conf",
-                json={"third_party_code": "70", "params": {"guest_display_name": None}})
+                json={"third_party_code": "70",
+                      "params": {"guest.display.name": None}})
     assert rc.status_code == 200
-    assert "guest_display_name" not in rc.get_json()["params"]
+    assert "guest.display.name" not in rc.get_json()["params"]
     # 缺欄 → 400
     assert c.post("/roomcontrol/internal/thirdparty-conf", json={}).status_code == 400
 
 
-def test_internal_cki_trigger_and_display_name():
+def _ob(c, **kw):
+    """internal/outbound 快捷(預設 CKI×70×2407)。"""
+    body = {"action_cod": "CKI", "room_no": "2407", "third_party_code": "70"}
+    body.update(kw)
+    return c.post("/roomcontrol/internal/outbound", json=body)
+
+
+def _setconf(c, action, **params):
+    return c.post("/roomcontrol/internal/thirdparty-conf",
+                  json={"third_party_code": "70", "action_cod": action, "params": params})
+
+
+def test_internal_outbound_cki_and_display_name():
     """CKI 出站:無參數 → 預設 ALT_NAM;各選項解析;USER_DEFINED 空值送無資料。"""
     c = _client()
     # 無參數(種子 conf 空)→ 姓名 = ALT_NAM;REVE 帶廠商代號 70
-    r = c.post("/roomcontrol/internal/cki", json={"room_no": "2407", "third_party_code": "70"})
+    r = _ob(c)
     assert r.status_code == 200
     body = r.get_json()
     assert body["procStatus"] is True and body["display_name"] == "王小明"
@@ -492,35 +528,112 @@ def test_internal_cki_trigger_and_display_name():
     # 各選項
     for choice, expect in (("LAST_NAM", "王"), ("FIRST_NAM", "小明"),
                            ("ROOM_NOS", "2407"), ("GROUP_NOS", "GP2026A")):
-        c.post("/roomcontrol/internal/thirdparty-conf",
-               json={"third_party_code": "70", "params": {"guest_display_name": choice}})
-        b = c.post("/roomcontrol/internal/cki",
-                   json={"room_no": "2407", "third_party_code": "70"}).get_json()
+        _setconf(c, "CKI", **{"guest.display.name": choice})
+        b = _ob(c).get_json()
         assert b["display_name"] == expect, choice
     # USER_DEFINED 有值/空值
-    c.post("/roomcontrol/internal/thirdparty-conf",
-           json={"third_party_code": "70", "params": {"guest_display_name": "USER_DEFINED",
-                                                      "user_defined_display_name": "總統套房貴賓"}})
-    b2 = c.post("/roomcontrol/internal/cki",
-                json={"room_no": "2407", "third_party_code": "70"}).get_json()
+    _setconf(c, "CKI", **{"guest.display.name": "USER_DEFINED",
+                          "user.defined.display.name": "總統套房貴賓"})
+    b2 = _ob(c).get_json()
     assert b2["display_name"] == "總統套房貴賓"
-    c.post("/roomcontrol/internal/thirdparty-conf",
-           json={"third_party_code": "70", "params": {"user_defined_display_name": None}})
-    b3 = c.post("/roomcontrol/internal/cki",
-                json={"room_no": "2407", "third_party_code": "70"}).get_json()
+    _setconf(c, "CKI", **{"user.defined.display.name": None})
+    b3 = _ob(c).get_json()
     assert b3["display_name"] == ""                        # 空值 → 廠商收無資料
     assert parse_rowset_xml(b3["responseBody"])[0]["ALT_NAM"] == ""
-    # 負面:未知房號 9999 / E 房 1001 / 無住客資料
-    rn = c.post("/roomcontrol/internal/cki", json={"room_no": "8888", "third_party_code": "70"})
+    # 負面:未知房號 9999 / E 房 1001 / 無住客資料 / 非法 action_cod
+    rn = _ob(c, room_no="8888")
     assert rn.status_code == 404 and rn.get_json()["code"] == "9999"
-    re_ = c.post("/roomcontrol/internal/cki", json={"room_no": "9901", "third_party_code": "70"})
+    re_ = _ob(c, room_no="9901")
     assert re_.status_code == 500 and re_.get_json()["code"] == "1001"
-    rg = c.post("/roomcontrol/internal/cki", json={"room_no": "2404", "third_party_code": "70"})
+    rg = _ob(c, room_no="2404")
     assert rg.status_code == 400
+    rbad = _ob(c, action_cod="QUERY")
+    assert rbad.status_code == 400                         # 出站觸發僅 CKI/RMC/COX
     # reset 還原:conf 清空、2407 回 V
     c.post("/roomcontrol/internal/reset")
     st = c.get("/roomcontrol/internal/state").get_json()
     assert st["thirdparty_dt_conf"] == {} and st["room_mn"]["2407"] == "V"
+
+
+def test_internal_outbound_rmc_room_move():
+    """RMC 換房出站(sa10 A3):OROOM/NROOM、舊房清空新房住人、姓名依 RMC 參數解析。"""
+    c = _client()
+    _setconf(c, "RMC", **{"guest.display.name": "GROUP_NOS"})
+    r = _ob(c, action_cod="RMC", room_no="2407", to_room_no="2408")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["display_name"] == "GP2026A"               # RMC action 參數獨立解析
+    assert body["room_sta"] == {"old": "V", "new": "O"}
+    rows = parse_rowset_xml(body["responseBody"])
+    assert rows[0]["REVE-CODE"] == "0300903070" and rows[0]["ACTION_COD"] == "RMC"
+    assert rows[0]["OROOM_NOS"] == "2407" and rows[0]["NROOM_NOS"] == "2408"
+    assert rows[0]["ALT_NAM"] == "GP2026A"
+    assert "FIRST_NAM" not in rows[0]                      # sa10 A3 欄位表無 FIRST/LAST_NAM
+    assert mock_room_mn["2407"] == "V" and mock_room_mn["2408"] == "O"
+    assert mock_room_guest_db.get("2407") is None and mock_room_guest_db.get("2408")
+    # 反向換房(還原)可用 → RMC 2408→2407
+    r2 = _ob(c, action_cod="RMC", room_no="2408", to_room_no="2407")
+    assert r2.status_code == 200 and mock_room_mn["2407"] == "O"
+    assert mock_room_guest_db.get("2407") and mock_room_guest_db.get("2408") is None
+    # 負面:缺 to_room_no → 400;目標房未知 → 9999;目標房 E → 1001
+    assert _ob(c, action_cod="RMC", room_no="2407").status_code == 400
+    rt = _ob(c, action_cod="RMC", room_no="2407", to_room_no="7777")
+    assert rt.status_code == 404 and rt.get_json()["code"] == "9999"
+    rte = _ob(c, action_cod="RMC", room_no="2407", to_room_no="9901")
+    assert rte.status_code == 500 and rte.get_json()["code"] == "1001"
+    c.post("/roomcontrol/internal/reset")
+
+
+def test_internal_outbound_cox_restore():
+    """COX C/O 還原出站(sa10 A5):欄位同 CKI 形、姓名依 COX 參數解析、房間轉住人。"""
+    c = _client()
+    _setconf(c, "COX", **{"guest.display.name": "LAST_NAM"})
+    r = _ob(c, action_cod="COX", room_no="2407")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["display_name"] == "王"
+    rows = parse_rowset_xml(body["responseBody"])
+    assert rows[0]["REVE-CODE"] == "0300902170" and rows[0]["ACTION_COD"] == "COX"
+    assert rows[0]["ALT_NAM"] == "王" and rows[0]["ROOM_NOS"] == "2407"
+    assert rows[0]["FIRST_NAM"] == "小明" and rows[0]["LAST_NAM"] == "王"   # 原值欄不動
+    assert rows[0]["CI_SER"] == "202611040002001"
+    assert mock_room_mn["2407"] == "O"                     # C/O 還原 → 住人
+    c.post("/roomcontrol/internal/reset")
+
+
+def test_room_inf_response_display_name():
+    """ROOM_INF(A6)回應:ALT_NAM 依「ROOM_INF action」參數解析;CKI 參數不污染;
+    FIRST_NAM/LAST_NAM 維持原值。"""
+    from server.roomcontrol.vendors.vendor_A7_XML import build_room_inf_query
+
+    def _ask(c, room):
+        xml = build_room_inf_query(room, vendor_code="70")
+        return c.post("/third-party/import-sync-files",
+                      json={"athenaId": "ATH", "hotelCode": "01", "thirdPartyCode": "70",
+                            "requestDataList": [{"requestBody": xml, "fileName": "C002.xml"}]})
+
+    c = _client()
+    # CKI 參數設 LAST_NAM、ROOM_INF 參數設 GROUP_NOS → 回應應走 ROOM_INF 參數
+    _setconf(c, "CKI", **{"guest.display.name": "LAST_NAM"})
+    _setconf(c, "ROOM_INF", **{"guest.display.name": "GROUP_NOS"})
+    _ob(c)                                                 # 2407 V→O(種子住客在房)
+    r = _ask(c, "2407")
+    assert r.status_code == 200
+    rows = parse_rowset_xml(r.get_json()[0]["responseBody"])
+    assert rows[0]["ROOM_STA"] == "O"
+    assert rows[0]["ALT_NAM"] == "GP2026A"                 # ROOM_INF 參數(非 CKI 的「王」)
+    assert rows[0]["FIRST_NAM"] == "小明" and rows[0]["LAST_NAM"] == "王"
+    assert rows[0]["RETN-CODE"] == "0000"
+    # 清除 ROOM_INF 參數 → 回預設 ALT_NAM
+    _setconf(c, "ROOM_INF", **{"guest.display.name": None})
+    rows2 = parse_rowset_xml(_ask(c, "2407").get_json()[0]["responseBody"])
+    assert rows2[0]["ALT_NAM"] == "王小明"
+    # USER_DEFINED 空值 → 回應姓名欄無資料
+    _setconf(c, "ROOM_INF", **{"guest.display.name": "USER_DEFINED",
+                               "user.defined.display.name": ""})
+    rows3 = parse_rowset_xml(_ask(c, "2407").get_json()[0]["responseBody"])
+    assert rows3[0]["ALT_NAM"] == ""
+    c.post("/roomcontrol/internal/reset")
 
 
 def test_params_meta_carries_choices():

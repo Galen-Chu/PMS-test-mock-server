@@ -134,7 +134,7 @@ def build_run_context(environment: str) -> RunContext:
         # 🌡️ 房控 A7 公版 XML 介面(廠商→PMS,sa8/sa9 REST 端點)+ 沙盒內部回讀(LOCAL 閉環用)
         "import_sync": f"{server_base}/third-party/import-sync-files",
         "roomcontrol_internal": f"{server_base}/roomcontrol/internal/state",
-        "roomcontrol_cki": f"{server_base}/roomcontrol/internal/cki",
+        "roomcontrol_outbound": f"{server_base}/roomcontrol/internal/outbound",
         "roomcontrol_conf": f"{server_base}/roomcontrol/internal/thirdparty-conf",
         # ☎️ 交換機 mock(德安 HOST→交換機方向;pbx_interface 檔案介面以 HTTP 承載)+ 內部回讀
         "pbx_commands": f"{server_base}/pbx/host-commands",

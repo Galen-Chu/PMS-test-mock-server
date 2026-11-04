@@ -11,10 +11,24 @@ VENDOR_ID = "IPTV"
 VENDOR_LABEL = "雲朗IPTV"
 THIRD_PARTY_CODE = "70"
 
-# sa10 A1:PMS→廠商 C/I 出站訊息代碼(TT 樣板;實際帶廠商代號)
+# sa10 出站訊息代碼樣板(PMS→廠商):CKI=A1 / RMC=A3 / COX=A5(TT 帶實際廠商代號)
+OUTBOUND_REVE_PREFIX = {"CKI": "03009010", "RMC": "03009030", "COX": "03009021"}
 REVE_CKI_TT = "03009010TT"
+
+# QA 端 THIRDPARTY_DT_CONF(廠商70)已見參數的 THIRDPARTY_ACTION_COD
+# (2026-11-04 QA DB 截圖:CKI/RMC/COX/ROOM_INF 各掛兩參數,THIRDPARTY_VERSION=DEFAULT XML)
+CONF_ACTIONS = ("CKI", "RMC", "COX", "ROOM_INF")
+
+# sa11/QA 參數代碼(PARAM_COD,與 QA DB 逐字一致)
+PARAM_DISPLAY_NAME = "guest.display.name"
+PARAM_USER_DEFINED = "user.defined.display.name"
+
+
+def reve_outbound(action_cod: str, vendor_code: str) -> str:
+    """出站 REVE-CODE:訊息樣板前綴 + 廠商代號(如 RMC×70 → 0300903070)。"""
+    return f"{OUTBOUND_REVE_PREFIX[action_cod]}{vendor_code}"
 
 
 def reve_cki(vendor_code: str) -> str:
     """CKI 出站 REVE-CODE:03009010 + 廠商代號(雲朗 IPTV=70 → 0300901070)。"""
-    return f"03009010{vendor_code}"
+    return reve_outbound("CKI", vendor_code)

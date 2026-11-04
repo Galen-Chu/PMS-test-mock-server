@@ -209,12 +209,16 @@ def test_orchestrator_closed_loop_rc25_fidelity(server_up):
 
 
 def test_orchestrator_iptv_display_name_cases(server_up):
-    """閉環⑦(RC4a):IPTV 雲朗(70)住客顯示名稱三案經 /runs 全 PASS(含選項覆寫貫穿)。"""
+    """閉環⑦(RC4a/RC4b):IPTV 雲朗(70)住客顯示名稱六案經 /runs 全 PASS(含覆寫貫穿)。"""
     results = _run_and_results({
         "environment": "LOCAL_OFFLINE",
         "scenario_ids": ["rc_iptv_display_name", "rc_iptv_display_name_default",
-                         "rc_iptv_display_name_empty_custom"],
-        "overrides": {"rc_iptv_display_name": {"guest_display_name": "LAST_NAM"}},
+                         "rc_iptv_display_name_empty_custom",
+                         "rc_iptv_cox_display_name", "rc_iptv_roominf_display_name",
+                         "rc_iptv_rmc_display_name"],
+        "overrides": {"rc_iptv_display_name": {"guest_display_name": "LAST_NAM"},
+                      "rc_iptv_rmc_display_name": {"guest_display_name": "ROOM_NOS"},
+                      "rc_iptv_roominf_display_name": {"guest_display_name": "GROUP_NOS"}},
     })
     opt = results["rc_iptv_display_name"]
     dft = results["rc_iptv_display_name_default"]
@@ -226,3 +230,16 @@ def test_orchestrator_iptv_display_name_cases(server_up):
     assert dft["response_payload"]["display_name"] == "王小明"  # 無參數 → 預設 ALT_NAM
     assert emp["status"] == "PASS"
     assert emp["response_payload"]["display_name"] == ""        # USER_DEFINED 空值 → 送無資料
+    cox = results["rc_iptv_cox_display_name"]
+    rmc = results["rc_iptv_rmc_display_name"]
+    inf = results["rc_iptv_roominf_display_name"]
+    assert cox["status"] == "PASS"                              # COX 預設 ALT_NAM
+    assert cox["response_payload"]["reve_code"] == "0300902170"
+    assert cox["response_payload"]["display_name"] == "王小明"
+    assert rmc["status"] == "PASS"                              # RMC 覆寫 ROOM_NOS → 舊房號
+    assert rmc["response_payload"]["reve_code"] == "0300903070"
+    assert rmc["response_payload"]["display_name"] == "2407"
+    assert rmc["response_payload"]["room_sta"] == {"old": "V", "new": "O"}
+    assert inf["status"] == "PASS"                              # ROOM_INF 覆寫 GROUP_NOS → 團號
+    assert inf["response_payload"]["display_name"] == "GP2026A"
+    assert inf["response_payload"]["room_sta"] == "O"
