@@ -117,7 +117,9 @@ def test_qa_return_all_rooms(vid, vlabel, code):
 # - ROOM_INF 缺 ROOM_NOS:200 + procStatus=false + RETN 9999 + 「Room configuration not found…Room null」
 # mock 維持 sa10 契約(417 / 9999 XML);下方 PASS 測試=QA 現況守護,xfail=待 SA 修復項。
 # ====================================================================
-QA_PUSH_ROOM = os.environ.get("A7_PUSH_ROOM_NO", "9901")   # RC2 推送用隔離房號,避免動 QA 既有房況
+# 2026-11-05 實測翻轉:QA DB 無 9901 房——RC2 以來的「隔離房」前提失效,
+# 當年 CLEAN/RMTEMP 9999「ADD item」實為房號不存在所致;改用 QA 既有種子房 101。
+QA_PUSH_ROOM = os.environ.get("A7_PUSH_ROOM_NO", "101")
 
 
 def _envelope_items(res, action_label):
@@ -134,10 +136,7 @@ def _envelope_items(res, action_label):
 
 @_QA_ONLY
 @pytest.mark.parametrize("vid,vlabel,code", VENDORS, ids=[v[0] for v in VENDORS])
-@pytest.mark.xfail(reason="QA 2026-09-04 實測:CLEAN 推送回 procStatus=false + RETN 9999「ADD item」(雙廠)——"
-                          "支援方式待 SA 確認(Q5);修復後轉 XPASS 即可移除",
-                   strict=False)
-def test_qa_clean_push(vid, vlabel, code):
+def test_qa_clean_push(vid, vlabel, code):   # 2026-11-05 房101 實測翻轉:RETN 0000 → 轉正式守護
     """RC2 B4 CLEAN:{vlabel} 推清掃狀態(ACTION_STA=1 請打掃)至隔離房。"""
     res = _post_qa(build_clean_push(QA_PUSH_ROOM, "1", vendor_code=code), code, "C001.xml")
     rb = _assert_query_response(res, f"QA CLEAN {vlabel}({code}) 房{QA_PUSH_ROOM}")
@@ -146,10 +145,7 @@ def test_qa_clean_push(vid, vlabel, code):
 
 @_QA_ONLY
 @pytest.mark.parametrize("vid,vlabel,code", VENDORS, ids=[v[0] for v in VENDORS])
-@pytest.mark.xfail(reason="QA 2026-09-04 實測:#RMTEMP# 推送回 procStatus=false + RETN 9999「ADD item」(雙廠)——"
-                          "支援方式待 SA 確認(Q5);修復後轉 XPASS 即可移除",
-                   strict=False)
-def test_qa_rmtemp_push(vid, vlabel, code):
+def test_qa_rmtemp_push(vid, vlabel, code):  # 2026-11-05 房101 實測翻轉:RETN 0000 → 轉正式守護
     """RC2 B4 RMTEMP:{vlabel} 推室溫 26C 至隔離房。"""
     res = _post_qa(build_rmtemp_push(QA_PUSH_ROOM, "26C", vendor_code=code), code, "C001.xml")
     rb = _assert_query_response(res, f"QA RMTEMP {vlabel}({code}) 房{QA_PUSH_ROOM}")
