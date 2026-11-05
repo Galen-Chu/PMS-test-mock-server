@@ -52,6 +52,8 @@ export function renderTunnelCard() {
       ['博辰 PAYTRONEX（base，PMS 拼 /roomer/*）', t.register_urls.PAYTRONEX],
       ['華豫寧 LIVEAM（base，PMS 拼 /api/*）', t.register_urls.LIVEAM],
     ];
+    if (t.register_urls.IPTV_70) rows.push(
+      ['雲朗 IPTV・房控廠商 70（A7 出站 XML 接收）', t.register_urls.IPTV_70]);
     const box = el('div', { class: 'list-stack' });
     for (const [who, u] of rows) {
       box.appendChild(el('div', { class: 'reg-row' },

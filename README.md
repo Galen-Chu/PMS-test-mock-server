@@ -241,6 +241,7 @@ UI 表單預填 SA 合法預設值、測試者改一個欄位即可重發；**�
 | 博辰 PAYTRONEX | `{URL}`（PMS 拼 `/parktron/hpms/services/roomer/*`） | add / findByLicensePlate / update |
 | 華豫寧 LIVEAM | `{URL}`（PMS 拼 `/api/*`） | Auth/login、Order、OrderCard… |
 | 小美犀 BR | **不需登錄 inbound URL** | 方向為我方主動呼叫 PMS |
+| 雲朗 IPTV（房控廠商 70） | `{URL}/third-party/outbound-receive` | A7 出站 XML（CKI/CKO/RMC/CIX/COX）接收端；填入 QA DB `THIRDPARTY_DT.THIRDPARTY_URL`（六列共填同一 URL 即可） |
 
 > 💡 PMS 的公開 API 沒有「寫入第三方廠商 URL 設定」的端點，登錄動作須由後台/資料庫手動完成（一次性）。
 

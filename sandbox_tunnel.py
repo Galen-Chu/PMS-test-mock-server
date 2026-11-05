@@ -51,6 +51,7 @@ def _register_urls(public_url):
         "SHIN_YEONG": f"{public_url}/parking/sync",                  # SA v1.2 公版單一端點
         "PAYTRONEX": f"{public_url}/parktron/hpms/services/roomer",  # PMS 拼 add/findByLicensePlate/update
         "LIVEAM": public_url,                                        # PMS 拼 /api/Auth/login、/api/Order…
+        "IPTV_70": f"{public_url}/third-party/outbound-receive",     # A7 出站 XML(PMS→廠商;QA THIRDPARTY_DT.THIRDPARTY_URL)
     }
 
 

@@ -29,14 +29,21 @@ RC2.5(2026-11-03,sa11 = A7 收到廠商 XML 的 SQL 處理文件)支援擴充:
 - Set 類回應 DESC =「{房號} Set {ACTION_COD}」(sa10 樣本「1112」即房號)
 - 單值族 MAIN_POWER 之 ACTION_STA 極性(0=on、1=off)與位元串位 4(1=開)相反 → 寫入前反轉
 
+RC5(2026-11-05)A7 出站接收端 `/third-party/outbound-receive`:沙盒兼扮演廠商側,
+  收 A7 出站 XML(QA THIRDPARTY_DT.THIRDPARTY_URL 填此路徑,TRANS_TYP=URL);
+  形狀未定義 → GET ?TxnData=(istom 1/4)/POST raw/JSON/multipart 全相容,記錄+回 ACK(RETN 0000),
+  回讀 /roomcontrol/internal/outbound-received。
+
 另提供沙盒內部回讀端點(LOCAL 閉環驗證用,前例:parking /parking/internal/whitelist)
 與自助端點:POST /roomcontrol/internal/rooms(登錄房間)、POST /roomcontrol/internal/reset(還原種子)。
 """
+import base64
 import copy
 import logging
 from datetime import datetime
+from urllib.parse import parse_qsl
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, Response, request, jsonify
 
 from .vendors.vendor_A7_XML import (
     build_rowset_xml, parse_rowset_xml,
@@ -321,6 +328,93 @@ def import_sync_files():
         results.append({"procStatus": proc, "responseBody": resp_xml, "fileName": file_name})
 
     return jsonify(results), 200
+
+
+# ---- A7 出站接收端(PMS→廠商)---------------------------------------------
+# sa10:「廠商須提供一個 URL,接收德安傳送的入住、退房、換房資訊」——沙盒兼扮演廠商側
+# (如 IPTV 廠商 70)收 A7 出站 XML(CKI/CKO/RMC/CIX/COX…),記錄供閉環驗證。
+# 出站傳輸形狀 sa10 未定義 → GET ?TxnData=(istom 1/4)/POST raw/JSON/multipart 全形狀相容。
+outbound_received = []
+
+
+def _extract_push_xml():
+    """從任意傳輸形狀抽取 A7 出站 XML 字串;抽不到回 None(仍記錄原樣供稽核)。
+
+    - GET 查詢參數 TxnData(istom=1 URLEncode / 4 Base64;sa10 呼叫德安同款參數)
+    - POST JSON:requestBody 或 requestDataList[].requestBody(import-sync-files 同款)
+    - POST multipart:任一 file 內容;POST form:TxnData / requestBody 欄位
+    - 其餘:raw body(urlencoded 型 body 再解一層 TxnData)
+    """
+    txn = request.args.get("TxnData")
+    if txn:
+        if request.args.get("istom") == "4":
+            try:
+                txn = base64.b64decode(txn).decode("utf-8", "replace")
+            except Exception:
+                pass
+        return txn.strip() or None
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        data_list = body.get("requestDataList") or []
+        return (body.get("requestBody")
+                or (data_list[0].get("requestBody") if data_list else None))
+    if request.files:
+        for f in request.files.values():
+            raw = f.read().decode("utf-8", "replace").strip()
+            if raw:
+                return raw
+    form = request.form.get("TxnData") or request.form.get("requestBody")
+    if form:
+        return form.strip()
+    raw = (request.get_data(cache=True, as_text=True) or "").strip()
+    if raw and not raw.startswith("<"):
+        for k, v in parse_qsl(raw):
+            if k == "TxnData" and v.strip():
+                return v.strip()
+    return raw or None
+
+
+@roomcontrol_bp.route('/third-party/outbound-receive', methods=['GET', 'POST'],
+                      defaults={'subpath': ''})
+@roomcontrol_bp.route('/third-party/outbound-receive/<path:subpath>',
+                      methods=['GET', 'POST'])
+def outbound_receive(subpath):
+    """A7 出站接收端:QA THIRDPARTY_DT.THIRDPARTY_URL(TRANS_TYP=URL)填入本路徑。
+
+    沙盒 = 廠商側:收 A7 於 C/I、C/O、換房等時機推送的出站 XML,記入 outbound_received;
+    回 sa10 ACK XML(SEND-CODE 回映 REVE、RETN 0000);帶任意後綴路徑亦收(保險:A7 自行拼子路徑)。
+    """
+    raw = _extract_push_xml()
+    entry = {"received_at": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
+             "method": request.method, "path": request.path,
+             "args": {k: v for k, v in request.args.items() if k != "TxnData"},
+             "raw_xml": raw, "fields": {}, "parse_ok": False}
+    if raw:
+        try:
+            entry["fields"] = parse_rowset_xml(raw)[0]
+            entry["parse_ok"] = True
+        except Exception as e:
+            entry["parse_error"] = str(e)
+    outbound_received.append(entry)
+    f = entry["fields"]
+    if entry["parse_ok"]:
+        logger.info(f"📤 [房控沙盒] A7 出站接收 ➔ REVE-CODE:【{f.get('REVE-CODE', '')}】"
+                    f"ACTION_COD:【{f.get('ACTION_COD', '')}】房號:【{f.get('ROOM_NOS', '')}】")
+        xml = build_ack_response_xml(f.get("REVE-CODE", ""), f.get("ACTION_COD", ""))
+    else:
+        logger.warning(f"📤 [房控沙盒] A7 出站接收未解析({entry.get('parse_error', '空內容')})")
+        xml = build_error_response_xml("", "", "9999",
+                                       f"A7 outbound parse error: {entry.get('parse_error', 'empty payload')}")
+    return Response(xml, mimetype="application/xml; charset=utf-8")
+
+
+@roomcontrol_bp.route('/roomcontrol/internal/outbound-received', methods=['GET'])
+def get_outbound_received():
+    """A7 出站接收記錄回讀(LOCAL 驗證用;?clear=1 讀後清空)。"""
+    out = list(outbound_received)
+    if request.args.get("clear"):
+        outbound_received.clear()
+    return jsonify({"count": len(out), "received": out})
 
 
 @roomcontrol_bp.route('/roomcontrol/internal/state', methods=['GET'])

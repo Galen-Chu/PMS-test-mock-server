@@ -679,3 +679,49 @@ def test_params_meta_carries_choices():
         "GROUP_NOS", "ROOM_NOS", "LAST_NAM", "FIRST_NAM", "ALT_NAM", "USER_DEFINED"]
     assert metas["guest_display_name"]["default"] == "ALT_NAM"
     assert metas["room_no"]["choices"] == []               # 自由輸入參數不帶選項
+
+
+def test_outbound_receive_endpoint_all_shapes():
+    """RC5:A7 出站接收端(/third-party/outbound-receive)— 四種傳輸形狀全收、ACK、回讀。"""
+    import base64 as b64
+    from urllib.parse import quote
+
+    c = _client()
+    c.get("/roomcontrol/internal/outbound-received?clear=1")
+    xml = ("<ROWSET><ROW><REVE-CODE>0300901070</REVE-CODE><ACTION_COD>CKI</ACTION_COD>"
+           "<ROOM_NOS>650</ROOM_NOS><ALT_NAM>張梅稜</ALT_NAM></ROW></ROWSET>")
+
+    # ① POST raw XML(A7 以 POST 推出站)
+    r = c.post("/third-party/outbound-receive", data=xml,
+               content_type="text/xml; charset=utf-8")
+    assert r.status_code == 200
+    rows = parse_rowset_xml(r.get_data(as_text=True))
+    assert rows[0]["SEND-CODE"] == "0300901070" and rows[0]["ACTION_COD"] == "CKI"
+    assert rows[0]["RETN-CODE"] == "0000"
+
+    # ② GET ?TxnData=URLEncode(istom=1;sa10 呼叫德安同款參數)
+    r = c.get(f"/third-party/outbound-receive?TxnData={quote(xml)}"
+              "&istom=1&athena=16&hotel=01&thirdParty=70")
+    assert parse_rowset_xml(r.get_data(as_text=True))[0]["RETN-CODE"] == "0000"
+
+    # ③ GET ?TxnData=Base64(istom=4)
+    r = c.get(f"/third-party/outbound-receive?TxnData={quote(b64.b64encode(xml.encode()).decode())}&istom=4")
+    assert parse_rowset_xml(r.get_data(as_text=True))[0]["RETN-CODE"] == "0000"
+
+    # ④ POST JSON requestBody(import-sync-files 同款信封)
+    r = c.post("/third-party/outbound-receive",
+               json={"requestBody": xml, "fileName": "C001.xml"})
+    assert parse_rowset_xml(r.get_data(as_text=True))[0]["SEND-CODE"] == "0300901070"
+
+    # ⑤ 後綴路徑亦收(保險:A7 自行拼子路徑)+ 壞 XML → RETN 9999 但仍記錄
+    r = c.post("/third-party/outbound-receive/any/sub", data="not-xml")
+    assert parse_rowset_xml(r.get_data(as_text=True))[0]["RETN-CODE"] == "9999"
+
+    # 回讀:5 筆全記錄;前 4 筆解析成功且欄位/查詢參數如實保存
+    j = c.get("/roomcontrol/internal/outbound-received").get_json()
+    assert j["count"] == 5
+    assert all(e["parse_ok"] for e in j["received"][:4])
+    assert j["received"][0]["fields"]["ALT_NAM"] == "張梅稜"
+    assert j["received"][1]["args"] == {"istom": "1", "athena": "16",
+                                        "hotel": "01", "thirdParty": "70"}
+    assert j["received"][4]["parse_ok"] is False
