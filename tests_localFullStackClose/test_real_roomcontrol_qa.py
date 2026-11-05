@@ -17,7 +17,9 @@ thirdParty 代碼;TT 佔位時 responseBody=null。本檔以正式代碼 81/86 �
 開始回實料,斷言自動升級為 RETN-CODE 0000 檢查;仍 null 則記錄現況待 SA(Q5)。
 ROOM_STA 推送(會改 PMS 房控狀態)不在此自動測試——經主控台 REAL_QA 手動執行。
 
-可調環境變數:A7_ROOM_NO(ROOM_INF 查詢房號,預設 101,QA 歷史種子房)。
+可調環境變數:A7_ROOM_NO(ROOM_INF 查詢房號,預設 650)。
+QA 專用測試房(2026-11-05 使用者指示):room_num 650~659、room_typ=SAS——
+發砲/查詢一律限縮此區段,勿動其他房。
 """
 import os
 import sys
@@ -42,7 +44,7 @@ _QA_ONLY = pytest.mark.skipif(
 )
 
 QA_IMPORT_URL = f"{config.ENV_MATRIX['REAL_QA']['PMS_URL']}/third-party/import-sync-files"
-A7_ROOM_NO = os.environ.get("A7_ROOM_NO", "101")
+A7_ROOM_NO = os.environ.get("A7_ROOM_NO", "650")   # QA 專用測試房 650~659(SAS)
 
 VENDORS = [
     (vendor_MINXON.VENDOR_ID, vendor_MINXON.VENDOR_LABEL, vendor_MINXON.THIRD_PARTY_CODE),
@@ -118,8 +120,9 @@ def test_qa_return_all_rooms(vid, vlabel, code):
 # mock 維持 sa10 契約(417 / 9999 XML);下方 PASS 測試=QA 現況守護,xfail=待 SA 修復項。
 # ====================================================================
 # 2026-11-05 實測翻轉:QA DB 無 9901 房——RC2 以來的「隔離房」前提失效,
-# 當年 CLEAN/RMTEMP 9999「ADD item」實為房號不存在所致;改用 QA 既有種子房 101。
-QA_PUSH_ROOM = os.environ.get("A7_PUSH_ROOM_NO", "101")
+# 當年 CLEAN/RMTEMP 9999「ADD item」實為房號不存在所致。
+# 同日使用者指示:QA 測試房限縮 room_num 650~659(room_typ=SAS),發砲一律用此區段。
+QA_PUSH_ROOM = os.environ.get("A7_PUSH_ROOM_NO", "650")
 
 
 def _envelope_items(res, action_label):
