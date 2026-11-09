@@ -725,3 +725,34 @@ def test_outbound_receive_endpoint_all_shapes():
     assert j["received"][1]["args"] == {"istom": "1", "athena": "16",
                                         "hotel": "01", "thirdParty": "70"}
     assert j["received"][4]["parse_ok"] is False
+
+
+def test_outbound_root_interception():
+    """RC5b(2026-11-09 QA 實測):A7 出站 GET 打 host 根路徑 ?TxnData= — 全域攔截進接收器。
+
+    實測背景:QA A7 推 CKI 不用 THIRDPARTY_URL 的路徑部分,一律 GET /?TxnData=<XML>
+    (不帶 istom/athena 參數;REVE 實例 0300901086=CHAOFENG)→ main.py 掛
+    app.before_request 攔截;本測試在測試 app 同款掛載驗證攔截與零誤傷。
+    """
+    from urllib.parse import quote
+
+    from server.roomcontrol.routes import intercept_a7_outbound
+
+    app = Flask(__name__)
+    app.register_blueprint(roomcontrol_bp)
+    app.before_request(intercept_a7_outbound)          # ← main.py 同款掛載
+    c = app.test_client()
+    c.get("/roomcontrol/internal/outbound-received?clear=1")   # 模組級狀態跨測試共享
+    xml = ("<ROWSET><ROW><REVE-CODE>0300901086</REVE-CODE><ACTION_COD>CKI</ACTION_COD>"
+           "<ROOM_NOS>651</ROOM_NOS><ALT_NAM>Galen_888</ALT_NAM></ROW></ROWSET>")
+
+    # 根路徑 + 僅 TxnData(A7 實測形狀)→ 攔截、ACK、記錄
+    r = c.get(f"/?TxnData={quote(xml)}")
+    assert r.status_code == 200
+    rows = parse_rowset_xml(r.get_data(as_text=True))
+    assert rows[0]["SEND-CODE"] == "0300901086" and rows[0]["RETN-CODE"] == "0000"
+    j = c.get("/roomcontrol/internal/outbound-received").get_json()
+    assert j["count"] == 1 and j["received"][0]["fields"]["ROOM_NOS"] == "651"
+
+    # 不帶 TxnData 的根路徑請求不受攔截(本測試 app 無 / 路由 → 404,證明閘門未短路)
+    assert c.get("/").status_code == 404

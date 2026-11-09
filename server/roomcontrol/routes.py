@@ -374,16 +374,8 @@ def _extract_push_xml():
     return raw or None
 
 
-@roomcontrol_bp.route('/third-party/outbound-receive', methods=['GET', 'POST'],
-                      defaults={'subpath': ''})
-@roomcontrol_bp.route('/third-party/outbound-receive/<path:subpath>',
-                      methods=['GET', 'POST'])
-def outbound_receive(subpath):
-    """A7 出站接收端:QA THIRDPARTY_DT.THIRDPARTY_URL(TRANS_TYP=URL)填入本路徑。
-
-    沙盒 = 廠商側:收 A7 於 C/I、C/O、換房等時機推送的出站 XML,記入 outbound_received;
-    回 sa10 ACK XML(SEND-CODE 回映 REVE、RETN 0000);帶任意後綴路徑亦收(保險:A7 自行拼子路徑)。
-    """
+def record_outbound_and_ack():
+    """A7 出站共通處理:抽取 XML → 記錄 outbound_received → 回 sa10 ACK XML 響應。"""
     raw = _extract_push_xml()
     entry = {"received_at": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
              "method": request.method, "path": request.path,
@@ -406,6 +398,32 @@ def outbound_receive(subpath):
         xml = build_error_response_xml("", "", "9999",
                                        f"A7 outbound parse error: {entry.get('parse_error', 'empty payload')}")
     return Response(xml, mimetype="application/xml; charset=utf-8")
+
+
+def intercept_a7_outbound():
+    """全域 TxnData 攔截(main.py 掛 app.before_request;2026-11-09 QA 實測補)。
+
+    實測:A7 出站不用 THIRDPARTY_URL 的路徑部分,一律 GET host 根路徑 ?TxnData=<XML>
+    (不帶 istom/athena… 參數)→ 原本落在 SPA index.html(200 HTML,A7 拿不到 XML ACK)。
+    內部端點/UI 皆不用 TxnData 查詢參數,零誤傷。
+    """
+    if "TxnData" in request.args:
+        return record_outbound_and_ack()
+    return None
+
+
+@roomcontrol_bp.route('/third-party/outbound-receive', methods=['GET', 'POST'],
+                      defaults={'subpath': ''})
+@roomcontrol_bp.route('/third-party/outbound-receive/<path:subpath>',
+                      methods=['GET', 'POST'])
+def outbound_receive(subpath):
+    """A7 出站接收端:QA THIRDPARTY_DT.THIRDPARTY_URL(TRANS_TYP=URL)填入本路徑。
+
+    沙盒 = 廠商側:收 A7 於 C/I、C/O、換房等時機推送的出站 XML,記入 outbound_received;
+    回 sa10 ACK XML(SEND-CODE 回映 REVE、RETN 0000);帶任意後綴路徑亦收(保險:A7 自行拼子路徑)。
+    2026-11-09 實測:A7 只打根路徑 → 真正入口是 main.py 的 intercept_a7_outbound 閘門。
+    """
+    return record_outbound_and_ack()
 
 
 @roomcontrol_bp.route('/roomcontrol/internal/outbound-received', methods=['GET'])

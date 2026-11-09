@@ -12,7 +12,7 @@ from sandbox_tunnel import tunnel_bp
 from server.parking.routes import parking_bp
 from server.amenity.routes import amenity_bp
 from server.keycard.routes import keycard_bp
-from server.roomcontrol.routes import roomcontrol_bp
+from server.roomcontrol.routes import roomcontrol_bp, intercept_a7_outbound
 from server.pbx.routes import pbx_bp
 from server.pbx.pms_side import pms_bp
 from server.pbx.file_exchange import file_bp
@@ -44,6 +44,11 @@ app.register_blueprint(pbx_bp)            # 互動系統 5：交換機晨喚(pbx
 app.register_blueprint(pms_bp)            # 互動系統 5b：交換機 PMS 側業務層(M1 頁面動作/排程)
 app.register_blueprint(file_bp)           # 互動系統 5c：交換機真檔案交換層(M3 HOST2PMS/PMS2HOST)
 app.register_blueprint(billing_bp)        # 互動系統 5d：交換機帳務面(M4 PTX電話入帳/MBT Mini bar)
+
+# 📤 A7 出站根路徑攔截(2026-11-09 QA 實測):A7 的 CKI 等 XML 出站打在 THIRDPARTY_URL
+# 的 host 根路徑(GET /?TxnData=<XML>,不用路徑部分)→ 全域閘門轉送房控接收器,
+# 回 sa10 ACK XML(原落點 SPA index.html 回 200 HTML,A7 拿不到 ACK)。
+app.before_request(intercept_a7_outbound)
 
 
 # ====================================================================
